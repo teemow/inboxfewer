@@ -269,7 +269,7 @@ func (id githubPull) IsStale() (bool, error) {
 	return pull.State == "closed", nil
 }
 
-var githubIssueID = regexp.MustCompile(`^<([\w-]+/[\w-]+)/issues/(\d+).*@github\.com>$`)
+var githubIssueID = regexp.MustCompile(`^<([\w-]+/[\w-]+)/issues?/(\d+).*@github\.com>$`)
 var githubPullID = regexp.MustCompile(`^<([\w-]+/[\w-]+)/pull/(\d+).*@github\.com>$`)
 
 func (c *FewerClient) ClassifyThread(t *gmail.Thread) threadType {
@@ -288,9 +288,9 @@ func (c *FewerClient) ClassifyThread(t *gmail.Thread) threadType {
 					Server: v,
 				}
 			}
-			// <golang/go/issues/3665/100642466@github.com>
+			// <golang/go/issue/3665/100642466@github.com>
 			if mph.Name == "Message-ID" &&
-				strings.Contains(mph.Value, "/issues/") &&
+				(strings.Contains(mph.Value, "/issues/") || strings.Contains(mph.Value, "/issue/")) &&
 				strings.Contains(mph.Value, "@github.com>") {
 				m := githubIssueID.FindStringSubmatch(mph.Value)
 				if m != nil {
