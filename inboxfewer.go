@@ -240,7 +240,37 @@ func (id githubIssue) IsStale() (bool, error) {
 	return issue.State == "closed", nil
 }
 
+type githubPull struct {
+	repo string // "golang/go"
+	n    string // "123"
+}
+
+func (id githubPull) IsStale() (bool, error) {
+	pullURL := "https://api.github.com/repos/" + id.repo + "/pulls/" + id.n
+	req, _ := http.NewRequest("GET", pullURL, nil)
+	req.SetBasicAuth(githubUser, githubToken)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, nil
+	}
+	defer res.Body.Close()
+	if res.StatusCode == 404 {
+		return true, nil
+	}
+	if res.StatusCode != 200 {
+		return false, fmt.Errorf("fetching %v, http status %s", pullURL, res.Status)
+	}
+	var pull struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&pull); err != nil {
+		return false, err
+	}
+	return pull.State == "closed", nil
+}
+
 var githubIssueID = regexp.MustCompile(`^<([\w-]+/[\w-]+)/issues/(\d+).*@github\.com>$`)
+var githubPullID = regexp.MustCompile(`^<([\w-]+/[\w-]+)/pull/(\d+).*@github\.com>$`)
 
 func (c *FewerClient) ClassifyThread(t *gmail.Thread) threadType {
 	for _, m := range t.Messages {
@@ -265,6 +295,14 @@ func (c *FewerClient) ClassifyThread(t *gmail.Thread) threadType {
 				m := githubIssueID.FindStringSubmatch(mph.Value)
 				if m != nil {
 					return githubIssue{repo: m[1], n: m[2]}
+				}
+			}
+			if mph.Name == "Message-ID" &&
+				strings.Contains(mph.Value, "/pull/") &&
+				strings.Contains(mph.Value, "@github.com>") {
+				m := githubPullID.FindStringSubmatch(mph.Value)
+				if m != nil {
+					return githubPull{repo: m[1], n: m[2]}
 				}
 			}
 		}
