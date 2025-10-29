@@ -1,0 +1,70 @@
+---
+# .goreleaser.yaml
+# Make sure to check the documentation at https://goreleaser.com
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: inboxfewer
+    main: .
+    binary: inboxfewer
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_ {{- title .Os }}_ {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    wrap_in_directory: true
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+      - goos: darwin
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  algorithm: sha256
+  name_template: '{{ .ProjectName }}_checksums.txt'
+
+changelog:
+  use: github-native
+
+release:
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} v{{.Version}}"
+  extra_files:
+    - glob: ./dist/inboxfewer_darwin_amd64*/inboxfewer
+      name_template: inboxfewer_darwin_amd64
+    - glob: ./dist/inboxfewer_darwin_arm64*/inboxfewer
+      name_template: inboxfewer_darwin_arm64
+    - glob: ./dist/inboxfewer_linux_amd64*/inboxfewer
+      name_template: inboxfewer_linux_amd64
+    - glob: ./dist/inboxfewer_linux_arm64*/inboxfewer
+      name_template: inboxfewer_linux_arm64
+    - glob: ./dist/inboxfewer_windows_amd64*/inboxfewer.exe
+      name_template: inboxfewer_windows_amd64.exe
+    - glob: ./dist/inboxfewer_windows_arm64*/inboxfewer.exe
+      name_template: inboxfewer_windows_arm64.exe

@@ -1,0 +1,23 @@
+# Binaries
+inboxfewer
+inboxfewer-*
+*.exe
+
+# Build artifacts
+dist/
+bin-dist/
+
+# Test coverage
+coverage.out
+coverage.html
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
