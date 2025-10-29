@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/server"
 )
 
@@ -60,6 +61,22 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 
 	s.AddTool(getMessageBodyTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return handleGetMessageBody(ctx, request, sc)
+	})
+
+	// Extract doc links tool
+	extractDocLinksTool := mcp.NewTool("gmail_extract_doc_links",
+		mcp.WithDescription("Extract Google Docs/Drive links from a Gmail message"),
+		mcp.WithString("messageId",
+			mcp.Required(),
+			mcp.Description("The ID of the Gmail message"),
+		),
+		mcp.WithString("format",
+			mcp.Description("Body format to search: 'text' (default) or 'html'"),
+		),
+	)
+
+	s.AddTool(extractDocLinksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleExtractDocLinks(ctx, request, sc)
 	})
 
 	return nil
@@ -177,6 +194,42 @@ func handleGetMessageBody(ctx context.Context, request mcp.CallToolRequest, sc *
 	}
 
 	result := fmt.Sprintf("Message body (%s, %d bytes):\n%s", format, len(body), body)
+	return mcp.NewToolResultText(result), nil
+}
+
+func handleExtractDocLinks(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	messageID, ok := args["messageId"].(string)
+	if !ok || messageID == "" {
+		return mcp.NewToolResultError("messageId is required"), nil
+	}
+
+	format := "text"
+	if formatVal, ok := args["format"].(string); ok && formatVal != "" {
+		format = formatVal
+	}
+
+	client := sc.GmailClient()
+	body, err := client.GetMessageBody(messageID, format)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get message body: %v", err)), nil
+	}
+
+	// Extract doc links from the body
+	docLinks := gmail.ExtractDocLinks(body)
+
+	if len(docLinks) == 0 {
+		return mcp.NewToolResultText("No Google Docs/Drive links found in message"), nil
+	}
+
+	// Convert to JSON for structured output
+	jsonBytes, err := json.MarshalIndent(docLinks, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to format output: %v", err)), nil
+	}
+
+	result := fmt.Sprintf("Found %d Google Docs/Drive link(s):\n%s", len(docLinks), string(jsonBytes))
 	return mcp.NewToolResultText(result), nil
 }
 

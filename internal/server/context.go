@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/teemow/inboxfewer/internal/docs"
 	"github.com/teemow/inboxfewer/internal/gmail"
 )
 
@@ -13,6 +14,7 @@ type ServerContext struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	gmailClient *gmail.Client
+	docsClient  *docs.Client
 	githubUser  string
 	githubToken string
 	mu          sync.RWMutex
@@ -50,6 +52,20 @@ func (sc *ServerContext) GmailClient() *gmail.Client {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
 	return sc.gmailClient
+}
+
+// DocsClient returns the Docs client (lazy initialization)
+func (sc *ServerContext) DocsClient() *docs.Client {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.docsClient
+}
+
+// SetDocsClient sets the Docs client
+func (sc *ServerContext) SetDocsClient(client *docs.Client) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.docsClient = client
 }
 
 // GithubUser returns the GitHub username

@@ -5,6 +5,7 @@ Archives Gmail threads for closed GitHub issues and pull requests.
 ## Features
 
 - **Gmail Integration**: Automatically archives emails related to closed GitHub issues and PRs
+- **Google Docs Integration**: Extract and retrieve Google Docs content from email messages
 - **MCP Server**: Provides Model Context Protocol server for AI assistant integration
 - **Multiple Transports**: Supports stdio, SSE, and streamable HTTP transports
 - **Flexible Usage**: Can run as a CLI tool or as an MCP server
@@ -30,6 +31,13 @@ On first run, you'll be prompted to authenticate with Gmail. The OAuth token wil
 - Linux/Unix: `~/.cache/inboxfewer/gmail.token`
 - macOS: `~/Library/Caches/inboxfewer/gmail.token`
 - Windows: `%TEMP%/inboxfewer/gmail.token`
+
+### Google Docs OAuth
+
+When first using Google Docs tools, you'll be prompted to authenticate with Google Docs API. The OAuth token will be cached at:
+- Linux/Unix: `~/.cache/inboxfewer/docs.token`
+- macOS: `~/Library/Caches/inboxfewer/docs.token`
+- Windows: `%TEMP%/inboxfewer/docs.token`
 
 ## Usage
 
@@ -150,6 +158,57 @@ Extract text or HTML body from a Gmail message.
 **Returns:** Message body content in the specified format.
 
 **Use Case:** Useful for extracting Google Docs/Drive links from email bodies, since Google Meet notes are typically shared as links rather than attachments.
+
+#### `gmail_extract_doc_links`
+Extract Google Docs/Drive links from a Gmail message.
+
+**Arguments:**
+- `messageId` (required): The ID of the Gmail message
+- `format` (optional): Body format to search - 'text' (default) or 'html'
+
+**Returns:** JSON array of Google Docs/Drive links found in the message, including documentId, url, and type (document, spreadsheet, presentation, or drive).
+
+**Use Case:** Extracts Google Docs, Sheets, Slides, and Drive file links from email bodies. Particularly useful for finding meeting notes shared via Google Docs links.
+
+### Google Docs Tools
+
+#### `docs_get_document`
+Get Google Docs content by document ID.
+
+**Arguments:**
+- `documentId` (required): The ID of the Google Doc (extracted from URL)
+- `format` (optional): Output format - 'markdown' (default), 'text', or 'json'
+
+**Returns:** Document content in the specified format. Markdown format preserves headings, lists, formatting, and links.
+
+**OAuth:** On first use, you'll be prompted to authenticate with Google Docs API. The OAuth token will be cached at `~/.cache/inboxfewer/docs.token`.
+
+**Use Case:** Retrieve the actual content of Google Meet notes, shared documents, or any Google Doc accessible to your account.
+
+#### `docs_get_document_metadata`
+Get metadata about a Google Doc or Drive file.
+
+**Arguments:**
+- `documentId` (required): The ID of the Google Doc or Drive file
+
+**Returns:** JSON with document metadata including id, name, mimeType, createdTime, modifiedTime, size, and owners.
+
+**Use Case:** Get information about a document without downloading its full content.
+
+### Workflow Example: Extracting Meeting Notes
+
+```bash
+# 1. Find emails with Google Docs links
+gmail_list_threads(query: "meeting notes")
+
+# 2. Extract doc links from an email
+gmail_extract_doc_links(messageId: "msg123")
+# Returns: [{"documentId": "1ABC...", "url": "https://docs.google.com/...", "type": "document"}]
+
+# 3. Fetch the document content
+docs_get_document(documentId: "1ABC...", format: "markdown")
+# Returns the meeting notes in Markdown format
+```
 
 ## MCP Server Configuration
 
@@ -276,15 +335,24 @@ inboxfewer/
 │   ├── gmail/             # Gmail client and utilities
 │   │   ├── client.go      # Gmail API client
 │   │   ├── attachments.go # Attachment retrieval
+│   │   ├── doc_links.go   # Google Docs URL extraction
 │   │   ├── classifier.go  # Thread classification
 │   │   └── types.go       # GitHub issue/PR types
+│   ├── docs/              # Google Docs client and utilities
+│   │   ├── client.go      # Google Docs API client
+│   │   ├── converter.go   # Document to Markdown/text conversion
+│   │   ├── types.go       # Document metadata types
+│   │   └── doc.go         # Package documentation
 │   ├── server/            # MCP server context
 │   │   └── context.go     # Server context management
 │   └── tools/             # MCP tool implementations
-│       └── gmail_tools/   # Gmail-related MCP tools
-│           ├── tools.go           # Thread tools
-│           ├── attachment_tools.go # Attachment tools
-│           └── doc.go             # Package documentation
+│       ├── gmail_tools/   # Gmail-related MCP tools
+│       │   ├── tools.go           # Thread tools
+│       │   ├── attachment_tools.go # Attachment tools
+│       │   └── doc.go             # Package documentation
+│       └── docs_tools/    # Google Docs MCP tools
+│           ├── tools.go   # Docs retrieval tools
+│           └── doc.go     # Package documentation
 ├── main.go                # Application entry point
 ├── go.mod                 # Go module definition
 └── README.md              # This file

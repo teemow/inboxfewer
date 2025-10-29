@@ -13,6 +13,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/docs_tools"
 	"github.com/teemow/inboxfewer/internal/tools/gmail_tools"
 )
 
@@ -77,6 +78,11 @@ func runServe(transport string, debugMode bool, httpAddr string) error {
 	// Register Gmail tools
 	if err := gmail_tools.RegisterGmailTools(mcpSrv, serverContext); err != nil {
 		return fmt.Errorf("failed to register Gmail tools: %w", err)
+	}
+
+	// Register Docs tools
+	if err := docs_tools.RegisterDocsTools(mcpSrv, serverContext); err != nil {
+		return fmt.Errorf("failed to register Docs tools: %w", err)
 	}
 
 	// Start the appropriate server based on transport type
