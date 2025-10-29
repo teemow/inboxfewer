@@ -17,6 +17,7 @@ coverage.html
 *.swp
 *.swo
 *~
+.cursor/mcp.json
 
 # OS
 .DS_Store
