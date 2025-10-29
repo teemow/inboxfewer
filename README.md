@@ -160,6 +160,25 @@ make test
 make help
 ```
 
+### Debugging
+
+To debug the MCP server with [mcp-debug](https://github.com/giantswarm/mcp-debug):
+
+```bash
+# Start the server
+./scripts/start-mcp-server.sh
+
+# In another terminal, use mcp-debug
+mcp-debug --repl --endpoint http://localhost:8080/mcp
+```
+
+For development workflow (rebuild and restart):
+```bash
+./scripts/start-mcp-server.sh --restart
+```
+
+See [docs/debugging.md](docs/debugging.md) for details.
+
 ### Makefile Targets
 
 The project includes a comprehensive Makefile with the following targets:
