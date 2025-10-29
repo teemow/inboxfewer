@@ -118,6 +118,39 @@ Archive all Gmail threads in inbox that are related to closed GitHub issues/PRs.
 **Arguments:**
 - `query` (optional): Gmail search query (default: 'in:inbox')
 
+#### `gmail_list_attachments`
+List all attachments in a Gmail message.
+
+**Arguments:**
+- `messageId` (required): The ID of the Gmail message
+
+**Returns:** JSON array of attachment metadata including attachmentId, filename, mimeType, size, and human-readable size.
+
+#### `gmail_get_attachment`
+Get the content of an attachment from a Gmail message.
+
+**Arguments:**
+- `messageId` (required): The ID of the Gmail message
+- `attachmentId` (required): The ID of the attachment
+- `encoding` (optional): Encoding format - 'base64' (default) or 'text'
+
+**Returns:** Attachment content in the specified encoding.
+
+**Note:** Use 'text' encoding for text-based attachments (.txt, .ics, .csv, etc.) and 'base64' for binary files (.pdf, .png, .zip, etc.).
+
+**Security:** Attachments are limited to 25MB in size.
+
+#### `gmail_get_message_body`
+Extract text or HTML body from a Gmail message.
+
+**Arguments:**
+- `messageId` (required): The ID of the Gmail message
+- `format` (optional): Body format - 'text' (default) or 'html'
+
+**Returns:** Message body content in the specified format.
+
+**Use Case:** Useful for extracting Google Docs/Drive links from email bodies, since Google Meet notes are typically shared as links rather than attachments.
+
 ## MCP Server Configuration
 
 ### Using with Claude Desktop
@@ -242,13 +275,16 @@ inboxfewer/
 ├── internal/
 │   ├── gmail/             # Gmail client and utilities
 │   │   ├── client.go      # Gmail API client
+│   │   ├── attachments.go # Attachment retrieval
 │   │   ├── classifier.go  # Thread classification
 │   │   └── types.go       # GitHub issue/PR types
 │   ├── server/            # MCP server context
 │   │   └── context.go     # Server context management
 │   └── tools/             # MCP tool implementations
 │       └── gmail_tools/   # Gmail-related MCP tools
-│           └── tools.go
+│           ├── tools.go           # Thread tools
+│           ├── attachment_tools.go # Attachment tools
+│           └── doc.go             # Package documentation
 ├── main.go                # Application entry point
 ├── go.mod                 # Go module definition
 └── README.md              # This file

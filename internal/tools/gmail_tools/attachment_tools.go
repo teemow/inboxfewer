@@ -1,0 +1,201 @@
+package gmail_tools
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+
+	"github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/teemow/inboxfewer/internal/server"
+)
+
+// RegisterAttachmentTools registers attachment-related tools with the MCP server
+func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
+	// List attachments tool
+	listAttachmentsTool := mcp.NewTool("gmail_list_attachments",
+		mcp.WithDescription("List all attachments in a Gmail message"),
+		mcp.WithString("messageId",
+			mcp.Required(),
+			mcp.Description("The ID of the Gmail message"),
+		),
+	)
+
+	s.AddTool(listAttachmentsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleListAttachments(ctx, request, sc)
+	})
+
+	// Get attachment tool
+	getAttachmentTool := mcp.NewTool("gmail_get_attachment",
+		mcp.WithDescription("Get the content of an attachment"),
+		mcp.WithString("messageId",
+			mcp.Required(),
+			mcp.Description("The ID of the Gmail message"),
+		),
+		mcp.WithString("attachmentId",
+			mcp.Required(),
+			mcp.Description("The ID of the attachment"),
+		),
+		mcp.WithString("encoding",
+			mcp.Description("Encoding format: 'base64' (default) or 'text'"),
+		),
+	)
+
+	s.AddTool(getAttachmentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleGetAttachment(ctx, request, sc)
+	})
+
+	// Get message body tool
+	getMessageBodyTool := mcp.NewTool("gmail_get_message_body",
+		mcp.WithDescription("Extract text or HTML body from a Gmail message"),
+		mcp.WithString("messageId",
+			mcp.Required(),
+			mcp.Description("The ID of the Gmail message"),
+		),
+		mcp.WithString("format",
+			mcp.Description("Body format: 'text' (default) or 'html'"),
+		),
+	)
+
+	s.AddTool(getMessageBodyTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleGetMessageBody(ctx, request, sc)
+	})
+
+	return nil
+}
+
+func handleListAttachments(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	messageID, ok := args["messageId"].(string)
+	if !ok || messageID == "" {
+		return mcp.NewToolResultError("messageId is required"), nil
+	}
+
+	client := sc.GmailClient()
+	attachments, err := client.ListAttachments(messageID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to list attachments: %v", err)), nil
+	}
+
+	if len(attachments) == 0 {
+		return mcp.NewToolResultText("No attachments found in message"), nil
+	}
+
+	// Convert attachments to JSON for structured output
+	type attachmentOutput struct {
+		AttachmentID string `json:"attachmentId"`
+		Filename     string `json:"filename"`
+		MimeType     string `json:"mimeType"`
+		Size         int64  `json:"size"`
+		SizeHuman    string `json:"sizeHuman"`
+	}
+
+	outputs := make([]attachmentOutput, len(attachments))
+	for i, att := range attachments {
+		outputs[i] = attachmentOutput{
+			AttachmentID: att.AttachmentID,
+			Filename:     att.Filename,
+			MimeType:     att.MimeType,
+			Size:         att.Size,
+			SizeHuman:    formatSize(att.Size),
+		}
+	}
+
+	jsonBytes, err := json.MarshalIndent(outputs, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to format output: %v", err)), nil
+	}
+
+	result := fmt.Sprintf("Found %d attachment(s):\n%s", len(attachments), string(jsonBytes))
+	return mcp.NewToolResultText(result), nil
+}
+
+func handleGetAttachment(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	messageID, ok := args["messageId"].(string)
+	if !ok || messageID == "" {
+		return mcp.NewToolResultError("messageId is required"), nil
+	}
+
+	attachmentID, ok := args["attachmentId"].(string)
+	if !ok || attachmentID == "" {
+		return mcp.NewToolResultError("attachmentId is required"), nil
+	}
+
+	encoding := "base64"
+	if encodingVal, ok := args["encoding"].(string); ok && encodingVal != "" {
+		encoding = encodingVal
+	}
+
+	client := sc.GmailClient()
+
+	switch encoding {
+	case "base64":
+		data, err := client.GetAttachment(messageID, attachmentID)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to get attachment: %v", err)), nil
+		}
+
+		encoded := base64.StdEncoding.EncodeToString(data)
+		result := fmt.Sprintf("Attachment content (base64, %d bytes):\n%s", len(data), encoded)
+		return mcp.NewToolResultText(result), nil
+
+	case "text":
+		text, err := client.GetAttachmentAsString(messageID, attachmentID)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to get attachment: %v", err)), nil
+		}
+
+		result := fmt.Sprintf("Attachment content (text, %d bytes):\n%s", len(text), text)
+		return mcp.NewToolResultText(result), nil
+
+	default:
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid encoding '%s', must be 'base64' or 'text'", encoding)), nil
+	}
+}
+
+func handleGetMessageBody(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	messageID, ok := args["messageId"].(string)
+	if !ok || messageID == "" {
+		return mcp.NewToolResultError("messageId is required"), nil
+	}
+
+	format := "text"
+	if formatVal, ok := args["format"].(string); ok && formatVal != "" {
+		format = formatVal
+	}
+
+	client := sc.GmailClient()
+	body, err := client.GetMessageBody(messageID, format)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get message body: %v", err)), nil
+	}
+
+	result := fmt.Sprintf("Message body (%s, %d bytes):\n%s", format, len(body), body)
+	return mcp.NewToolResultText(result), nil
+}
+
+// formatSize formats a byte size into human-readable format
+func formatSize(bytes int64) string {
+	const (
+		KB = 1024
+		MB = 1024 * KB
+		GB = 1024 * MB
+	)
+
+	switch {
+	case bytes >= GB:
+		return fmt.Sprintf("%.2f GB", float64(bytes)/float64(GB))
+	case bytes >= MB:
+		return fmt.Sprintf("%.2f MB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.2f KB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%d bytes", bytes)
+	}
+}

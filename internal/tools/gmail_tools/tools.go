@@ -14,6 +14,11 @@ import (
 
 // RegisterGmailTools registers all Gmail-related tools with the MCP server
 func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
+	// Register attachment tools
+	if err := RegisterAttachmentTools(s, sc); err != nil {
+		return fmt.Errorf("failed to register attachment tools: %w", err)
+	}
+
 	// List threads tool
 	listThreadsTool := mcp.NewTool("gmail_list_threads",
 		mcp.WithDescription("List Gmail threads matching a query"),
