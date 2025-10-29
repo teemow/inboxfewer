@@ -1,10 +1,8 @@
 package docs
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -27,10 +25,47 @@ type Client struct {
 	driveService *drive.Service
 }
 
-// NewClient creates a new Google Docs client with OAuth2 authentication
-func NewClient(ctx context.Context) (*Client, error) {
+// HasToken checks if a valid OAuth token exists
+func HasToken() bool {
+	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
+	docsTokenFile := filepath.Join(cacheDir, "docs.token")
+	_, err := ioutil.ReadFile(docsTokenFile)
+	return err == nil
+}
+
+// GetAuthURL returns the OAuth URL for user authorization
+func GetAuthURL() string {
+	conf := getOAuthConfig()
+	return conf.AuthCodeURL("state")
+}
+
+// SaveToken exchanges an authorization code for tokens and saves them
+func SaveToken(ctx context.Context, authCode string) error {
+	conf := getOAuthConfig()
+
+	t, err := conf.Exchange(ctx, authCode)
+	if err != nil {
+		return fmt.Errorf("failed to exchange auth code: %w", err)
+	}
+
+	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
+	docsTokenFile := filepath.Join(cacheDir, "docs.token")
+
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
+	tokenData := t.AccessToken + " " + t.RefreshToken
+	if err := ioutil.WriteFile(docsTokenFile, []byte(tokenData), 0600); err != nil {
+		return fmt.Errorf("failed to write token file: %w", err)
+	}
+
+	return nil
+}
+
+func getOAuthConfig() *oauth2.Config {
 	const OOB = "urn:ietf:wg:oauth:2.0:oob"
-	conf := &oauth2.Config{
+	return &oauth2.Config{
 		ClientID:     "881077086782-039l7vctubc7vrvjmubv6a7v0eg96sqg.apps.googleusercontent.com",
 		ClientSecret: "y9Rj5-KheyZSFyjCH1dCBXWs",
 		Endpoint:     google.Endpoint,
@@ -40,6 +75,12 @@ func NewClient(ctx context.Context) (*Client, error) {
 			"https://www.googleapis.com/auth/drive.readonly",
 		},
 	}
+}
+
+// NewClient creates a new Google Docs client with OAuth2 authentication
+// Returns an error if no valid token exists - use HasToken() to check first
+func NewClient(ctx context.Context) (*Client, error) {
+	conf := getOAuthConfig()
 
 	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
 	docsTokenFile := filepath.Join(cacheDir, "docs.token")
@@ -63,22 +104,7 @@ func NewClient(ctx context.Context) (*Client, error) {
 	}
 
 	if ts == nil {
-		authCode := conf.AuthCodeURL("state")
-		log.Printf("Go to %v", authCode)
-		io.WriteString(os.Stdout, "Enter code> ")
-
-		bs := bufio.NewScanner(os.Stdin)
-		if !bs.Scan() {
-			return nil, io.EOF
-		}
-		code := strings.TrimSpace(bs.Text())
-		t, err := conf.Exchange(ctx, code)
-		if err != nil {
-			return nil, fmt.Errorf("failed to exchange OAuth code: %w", err)
-		}
-		os.MkdirAll(cacheDir, 0700)
-		ioutil.WriteFile(docsTokenFile, []byte(t.AccessToken+" "+t.RefreshToken), 0600)
-		ts = conf.TokenSource(ctx, t)
+		return nil, fmt.Errorf("no valid Google Docs OAuth token found. Please authorize access first")
 	}
 
 	// Create client with HTTP/1.1 to avoid HTTP/2 protocol errors

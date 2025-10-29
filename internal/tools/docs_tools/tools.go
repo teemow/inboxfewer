@@ -14,6 +14,28 @@ import (
 
 // RegisterDocsTools registers all Google Docs-related tools with the MCP server
 func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
+	// Get OAuth URL tool
+	getAuthURLTool := mcp.NewTool("docs_get_auth_url",
+		mcp.WithDescription("Get the OAuth URL to authorize Google Docs access"),
+	)
+
+	s.AddTool(getAuthURLTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleGetAuthURL(ctx, request, sc)
+	})
+
+	// Save authorization code tool
+	saveAuthCodeTool := mcp.NewTool("docs_save_auth_code",
+		mcp.WithDescription("Save the OAuth authorization code to complete Google Docs authentication"),
+		mcp.WithString("authCode",
+			mcp.Required(),
+			mcp.Description("The authorization code from Google OAuth"),
+		),
+	)
+
+	s.AddTool(saveAuthCodeTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleSaveAuthCode(ctx, request, sc)
+	})
+
 	// Get document tool
 	getDocumentTool := mcp.NewTool("docs_get_document",
 		mcp.WithDescription("Get Google Docs content by document ID"),
@@ -62,6 +84,26 @@ func handleGetDocument(ctx context.Context, request mcp.CallToolRequest, sc *ser
 	// Get or create docs client
 	docsClient := sc.DocsClient()
 	if docsClient == nil {
+		// Check if token exists before trying to create client
+		if !docs.HasToken() {
+			authURL := docs.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Google Docs OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to read documents
+4. Copy the authorization code
+
+5. Save the token by running this command:
+   echo "<access_token> <refresh_token>" > ~/.cache/inboxfewer/docs.token
+
+Note: You'll need to go through the OAuth flow once to get the tokens.
+After that, the tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
 		var err error
 		docsClient, err = docs.NewClient(ctx)
 		if err != nil {
@@ -115,6 +157,26 @@ func handleGetMetadata(ctx context.Context, request mcp.CallToolRequest, sc *ser
 	// Get or create docs client
 	docsClient := sc.DocsClient()
 	if docsClient == nil {
+		// Check if token exists before trying to create client
+		if !docs.HasToken() {
+			authURL := docs.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Google Docs OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to read documents
+4. Copy the authorization code
+
+5. Save the token by running this command:
+   echo "<access_token> <refresh_token>" > ~/.cache/inboxfewer/docs.token
+
+Note: You'll need to go through the OAuth flow once to get the tokens.
+After that, the tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
 		var err error
 		docsClient, err = docs.NewClient(ctx)
 		if err != nil {
@@ -135,4 +197,37 @@ func handleGetMetadata(ctx context.Context, request mcp.CallToolRequest, sc *ser
 
 	result := fmt.Sprintf("Document metadata:\n%s", string(jsonBytes))
 	return mcp.NewToolResultText(result), nil
+}
+
+func handleGetAuthURL(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	authURL := docs.GetAuthURL()
+
+	result := fmt.Sprintf(`To authorize Google Docs access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to read documents
+4. Copy the authorization code
+
+5. Call the docs_save_auth_code tool with the code to complete authentication`, authURL)
+
+	return mcp.NewToolResultText(result), nil
+}
+
+func handleSaveAuthCode(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	authCode, ok := args["authCode"].(string)
+	if !ok || authCode == "" {
+		return mcp.NewToolResultError("authCode is required"), nil
+	}
+
+	err := docs.SaveToken(ctx, authCode)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to save authorization code: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText("✅ Authorization successful! Google Docs token saved. You can now use the docs_get_document and docs_get_document_metadata tools."), nil
 }

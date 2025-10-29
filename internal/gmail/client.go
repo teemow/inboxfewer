@@ -3,6 +3,7 @@ package gmail
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -23,16 +24,60 @@ type Client struct {
 	svc *gmail.UsersService
 }
 
-// NewClient creates a new Gmail client with OAuth2 authentication
-func NewClient(ctx context.Context) (*Client, error) {
+// HasToken checks if a valid OAuth token exists
+func HasToken() bool {
+	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
+	gmailTokenFile := filepath.Join(cacheDir, "gmail.token")
+	_, err := ioutil.ReadFile(gmailTokenFile)
+	return err == nil
+}
+
+// GetAuthURL returns the OAuth URL for user authorization
+func GetAuthURL() string {
+	conf := getOAuthConfig()
+	return conf.AuthCodeURL("state")
+}
+
+// SaveToken exchanges an authorization code for tokens and saves them
+func SaveToken(ctx context.Context, authCode string) error {
+	conf := getOAuthConfig()
+
+	t, err := conf.Exchange(ctx, authCode)
+	if err != nil {
+		return fmt.Errorf("failed to exchange auth code: %w", err)
+	}
+
+	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
+	gmailTokenFile := filepath.Join(cacheDir, "gmail.token")
+
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
+	tokenData := t.AccessToken + " " + t.RefreshToken
+	if err := ioutil.WriteFile(gmailTokenFile, []byte(tokenData), 0600); err != nil {
+		return fmt.Errorf("failed to write token file: %w", err)
+	}
+
+	return nil
+}
+
+func getOAuthConfig() *oauth2.Config {
 	const OOB = "urn:ietf:wg:oauth:2.0:oob"
-	conf := &oauth2.Config{
+	return &oauth2.Config{
 		ClientID:     "881077086782-039l7vctubc7vrvjmubv6a7v0eg96sqg.apps.googleusercontent.com",
 		ClientSecret: "y9Rj5-KheyZSFyjCH1dCBXWs",
 		Endpoint:     google.Endpoint,
 		RedirectURL:  OOB,
 		Scopes:       []string{gmail.MailGoogleComScope},
 	}
+}
+
+// NewClient creates a new Gmail client with OAuth2 authentication
+// For CLI usage, it will prompt for auth code via stdin if no token exists
+// For MCP usage, it will return an error if no token exists
+func NewClient(ctx context.Context) (*Client, error) {
+	conf := getOAuthConfig()
 
 	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
 	gmailTokenFile := filepath.Join(cacheDir, "gmail.token")
@@ -56,22 +101,33 @@ func NewClient(ctx context.Context) (*Client, error) {
 	}
 
 	if ts == nil {
-		authCode := conf.AuthCodeURL("state")
-		log.Printf("Go to %v", authCode)
-		io.WriteString(os.Stdout, "Enter code> ")
+		// Check if we're in a terminal (CLI mode)
+		if isTerminal() {
+			authCode := conf.AuthCodeURL("state")
+			log.Printf("Go to %v", authCode)
+			io.WriteString(os.Stdout, "Enter code> ")
 
-		bs := bufio.NewScanner(os.Stdin)
-		if !bs.Scan() {
-			return nil, io.EOF
+			bs := bufio.NewScanner(os.Stdin)
+			if !bs.Scan() {
+				return nil, io.EOF
+			}
+			code := strings.TrimSpace(bs.Text())
+			if err := SaveToken(ctx, code); err != nil {
+				return nil, err
+			}
+			// Re-read the token we just saved
+			slurp, _ = ioutil.ReadFile(gmailTokenFile)
+			f := strings.Fields(strings.TrimSpace(string(slurp)))
+			ts = conf.TokenSource(ctx, &oauth2.Token{
+				AccessToken:  f[0],
+				TokenType:    "Bearer",
+				RefreshToken: f[1],
+				Expiry:       time.Unix(1, 0),
+			})
+		} else {
+			// MCP mode - return error with instructions
+			return nil, fmt.Errorf("no valid Gmail OAuth token found. Use gmail_get_auth_url and gmail_save_auth_code tools to authenticate")
 		}
-		code := strings.TrimSpace(bs.Text())
-		t, err := conf.Exchange(ctx, code)
-		if err != nil {
-			return nil, err
-		}
-		os.MkdirAll(cacheDir, 0700)
-		ioutil.WriteFile(gmailTokenFile, []byte(t.AccessToken+" "+t.RefreshToken), 0600)
-		ts = conf.TokenSource(ctx, t)
 	}
 
 	// Create client with HTTP/1.1 to avoid HTTP/2 protocol errors
@@ -170,4 +226,10 @@ func HomeDir() string {
 		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 	}
 	return os.Getenv("HOME")
+}
+
+// isTerminal checks if stdin is connected to a terminal (CLI mode)
+func isTerminal() bool {
+	fileInfo, _ := os.Stdin.Stat()
+	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }

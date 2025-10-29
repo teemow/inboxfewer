@@ -19,6 +19,28 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 		return fmt.Errorf("failed to register attachment tools: %w", err)
 	}
 
+	// Get OAuth URL tool
+	getAuthURLTool := mcp.NewTool("gmail_get_auth_url",
+		mcp.WithDescription("Get the OAuth URL to authorize Gmail access"),
+	)
+
+	s.AddTool(getAuthURLTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleGetAuthURL(ctx, request, sc)
+	})
+
+	// Save authorization code tool
+	saveAuthCodeTool := mcp.NewTool("gmail_save_auth_code",
+		mcp.WithDescription("Save the OAuth authorization code to complete Gmail authentication"),
+		mcp.WithString("authCode",
+			mcp.Required(),
+			mcp.Description("The authorization code from Google OAuth"),
+		),
+	)
+
+	s.AddTool(saveAuthCodeTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleSaveAuthCode(ctx, request, sc)
+	})
+
 	// List threads tool
 	listThreadsTool := mcp.NewTool("gmail_list_threads",
 		mcp.WithDescription("List Gmail threads matching a query"),
@@ -231,4 +253,37 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Checked %d threads, archived %d stale threads", checked, archived)), nil
+}
+
+func handleGetAuthURL(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	authURL := gmail.GetAuthURL()
+
+	result := fmt.Sprintf(`To authorize Gmail access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Call the gmail_save_auth_code tool with the code to complete authentication`, authURL)
+
+	return mcp.NewToolResultText(result), nil
+}
+
+func handleSaveAuthCode(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	authCode, ok := args["authCode"].(string)
+	if !ok || authCode == "" {
+		return mcp.NewToolResultError("authCode is required"), nil
+	}
+
+	err := gmail.SaveToken(ctx, authCode)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to save authorization code: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText("✅ Authorization successful! Gmail token saved. You can now use all Gmail tools."), nil
 }
