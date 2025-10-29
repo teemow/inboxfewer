@@ -34,12 +34,12 @@ run: ## Run the application
 .PHONY: test
 test: ## Run tests
 	@echo "Running tests..."
-	@go test -v -race -cover ./...
+	@go test -v -race ./...
 
 .PHONY: test-coverage
 test-coverage: ## Run tests with coverage report
 	@echo "Running tests with coverage..."
-	@go test -v -race -coverprofile=coverage.out ./...
+	@go test -coverprofile=coverage.out ./...
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
