@@ -21,7 +21,7 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 
 	// Get OAuth URL tool
 	getAuthURLTool := mcp.NewTool("gmail_get_auth_url",
-		mcp.WithDescription("Get the OAuth URL to authorize Gmail access"),
+		mcp.WithDescription("Get the OAuth URL to authorize Google services access (Gmail, Docs, Drive)"),
 	)
 
 	s.AddTool(getAuthURLTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -30,7 +30,7 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 
 	// Save authorization code tool
 	saveAuthCodeTool := mcp.NewTool("gmail_save_auth_code",
-		mcp.WithDescription("Save the OAuth authorization code to complete Gmail authentication"),
+		mcp.WithDescription("Save the OAuth authorization code to complete Google services authentication (Gmail, Docs, Drive)"),
 		mcp.WithString("authCode",
 			mcp.Required(),
 			mcp.Description("The authorization code from Google OAuth"),
@@ -132,13 +132,13 @@ func handleListThreads(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		// Check if token exists before trying to create client
 		if !gmail.HasToken() {
 			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
    %s
 
 2. Sign in with your Google account
-3. Grant access to Gmail
+3. Grant access to Google services (Gmail, Docs, Drive)
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
@@ -182,13 +182,13 @@ func handleArchiveThread(ctx context.Context, request mcp.CallToolRequest, sc *s
 	if client == nil {
 		if !gmail.HasToken() {
 			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
    %s
 
 2. Sign in with your Google account
-3. Grant access to Gmail
+3. Grant access to Google services (Gmail, Docs, Drive)
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
@@ -226,13 +226,13 @@ func handleClassifyThread(ctx context.Context, request mcp.CallToolRequest, sc *
 	if client == nil {
 		if !gmail.HasToken() {
 			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
    %s
 
 2. Sign in with your Google account
-3. Grant access to Gmail
+3. Grant access to Google services (Gmail, Docs, Drive)
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
@@ -276,13 +276,13 @@ func handleCheckStale(ctx context.Context, request mcp.CallToolRequest, sc *serv
 	if client == nil {
 		if !gmail.HasToken() {
 			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
    %s
 
 2. Sign in with your Google account
-3. Grant access to Gmail
+3. Grant access to Google services (Gmail, Docs, Drive)
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
@@ -335,13 +335,13 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 	if client == nil {
 		if !gmail.HasToken() {
 			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
    %s
 
 2. Sign in with your Google account
-3. Grant access to Gmail
+3. Grant access to Google services (Gmail, Docs, Drive)
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
@@ -399,13 +399,13 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 func handleGetAuthURL(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	authURL := gmail.GetAuthURL()
 
-	result := fmt.Sprintf(`To authorize Gmail access:
+	result := fmt.Sprintf(`To authorize Google services access (Gmail, Docs, Drive):
 
 1. Visit this URL in your browser:
    %s
 
 2. Sign in with your Google account
-3. Grant access to Gmail
+3. Grant access to Google services
 4. Copy the authorization code
 
 5. Call the gmail_save_auth_code tool with the code to complete authentication`, authURL)
@@ -433,5 +433,5 @@ func handleSaveAuthCode(ctx context.Context, request mcp.CallToolRequest, sc *se
 	}
 	sc.SetGmailClient(client)
 
-	return mcp.NewToolResultText("✅ Authorization successful! Gmail token saved. You can now use all Gmail tools."), nil
+	return mcp.NewToolResultText("✅ Authorization successful! Google services token saved. You can now use all Gmail and Google Docs tools."), nil
 }

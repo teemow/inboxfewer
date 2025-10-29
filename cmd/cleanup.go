@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -17,7 +18,7 @@ import (
 var githubUser, githubToken string
 
 func readGithubConfig() error {
-	file := filepath.Join(gmail.HomeDir(), "keys", "github-inboxfewer.token")
+	file := filepath.Join(homeDir(), "keys", "github-inboxfewer.token")
 	slurp, err := ioutil.ReadFile(file)
 	if err != nil {
 		return err
@@ -73,4 +74,12 @@ If the corresponding GitHub issue or PR is closed, the thread will be archived.`
 			return nil
 		},
 	}
+}
+
+func homeDir() string {
+	if home := os.Getenv("HOME"); home != "" {
+		return home
+	}
+	// Windows fallback
+	return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 }

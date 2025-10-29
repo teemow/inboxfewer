@@ -3,20 +3,12 @@ package docs
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"time"
 
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	docs "google.golang.org/api/docs/v1"
 	drive "google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
+
+	"github.com/teemow/inboxfewer/internal/google"
 )
 
 // Client wraps the Google Docs and Drive API services
@@ -27,95 +19,26 @@ type Client struct {
 
 // HasToken checks if a valid OAuth token exists
 func HasToken() bool {
-	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
-	docsTokenFile := filepath.Join(cacheDir, "docs.token")
-	_, err := ioutil.ReadFile(docsTokenFile)
-	return err == nil
+	return google.HasToken()
 }
 
 // GetAuthURL returns the OAuth URL for user authorization
 func GetAuthURL() string {
-	conf := getOAuthConfig()
-	return conf.AuthCodeURL("state")
+	return google.GetAuthURL()
 }
 
 // SaveToken exchanges an authorization code for tokens and saves them
 func SaveToken(ctx context.Context, authCode string) error {
-	conf := getOAuthConfig()
-
-	t, err := conf.Exchange(ctx, authCode)
-	if err != nil {
-		return fmt.Errorf("failed to exchange auth code: %w", err)
-	}
-
-	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
-	docsTokenFile := filepath.Join(cacheDir, "docs.token")
-
-	if err := os.MkdirAll(cacheDir, 0700); err != nil {
-		return fmt.Errorf("failed to create cache directory: %w", err)
-	}
-
-	tokenData := t.AccessToken + " " + t.RefreshToken
-	if err := ioutil.WriteFile(docsTokenFile, []byte(tokenData), 0600); err != nil {
-		return fmt.Errorf("failed to write token file: %w", err)
-	}
-
-	return nil
-}
-
-func getOAuthConfig() *oauth2.Config {
-	const OOB = "urn:ietf:wg:oauth:2.0:oob"
-	return &oauth2.Config{
-		ClientID:     "615260903473-ctldo9bte5phiu092s8ovfbe7c8aao1o.apps.googleusercontent.com",
-		ClientSecret: "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",
-		Endpoint:     google.Endpoint,
-		RedirectURL:  OOB,
-		Scopes: []string{
-			"https://www.googleapis.com/auth/documents.readonly",
-			"https://www.googleapis.com/auth/drive.readonly",
-		},
-	}
+	return google.SaveToken(ctx, authCode)
 }
 
 // NewClient creates a new Google Docs client with OAuth2 authentication
 // Returns an error if no valid token exists - use HasToken() to check first
 func NewClient(ctx context.Context) (*Client, error) {
-	conf := getOAuthConfig()
-
-	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
-	docsTokenFile := filepath.Join(cacheDir, "docs.token")
-
-	slurp, err := ioutil.ReadFile(docsTokenFile)
-	var ts oauth2.TokenSource
-	if err == nil {
-		f := strings.Fields(strings.TrimSpace(string(slurp)))
-		if len(f) == 2 {
-			ts = conf.TokenSource(ctx, &oauth2.Token{
-				AccessToken:  f[0],
-				TokenType:    "Bearer",
-				RefreshToken: f[1],
-				Expiry:       time.Unix(1, 0),
-			})
-			if _, err := ts.Token(); err != nil {
-				log.Printf("Cached Docs token invalid: %v", err)
-				ts = nil
-			}
-		}
+	client, err := google.GetHTTPClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("no valid Google OAuth token found. Please authorize access first: %w", err)
 	}
-
-	if ts == nil {
-		return nil, fmt.Errorf("no valid Google Docs OAuth token found. Please authorize access first")
-	}
-
-	// Create client with HTTP/1.1 to avoid HTTP/2 protocol errors
-	client := oauth2.NewClient(ctx, ts)
-
-	// Force HTTP/1.1 by disabling HTTP/2
-	transport := client.Transport.(*oauth2.Transport)
-	baseTransport := &http.Transport{
-		ForceAttemptHTTP2: false,
-	}
-	transport.Base = baseTransport
 
 	// Create Docs service
 	docsService, err := docs.NewService(ctx, option.WithHTTPClient(client))
@@ -200,29 +123,4 @@ func (c *Client) GetFileMetadata(fileID string) (*DocumentMetadata, error) {
 	}
 
 	return metadata, nil
-}
-
-func userCacheDir() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(homeDir(), "Library", "Caches")
-	case "windows":
-		for _, ev := range []string{"TEMP", "TMP"} {
-			if v := os.Getenv(ev); v != "" {
-				return v
-			}
-		}
-		panic("No Windows TEMP or TMP environment variables found")
-	}
-	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
-		return xdg
-	}
-	return filepath.Join(homeDir(), ".cache")
-}
-
-func homeDir() string {
-	if runtime.GOOS == "windows" {
-		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
-	}
-	return os.Getenv("HOME")
 }
