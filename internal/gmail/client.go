@@ -65,8 +65,8 @@ func SaveToken(ctx context.Context, authCode string) error {
 func getOAuthConfig() *oauth2.Config {
 	const OOB = "urn:ietf:wg:oauth:2.0:oob"
 	return &oauth2.Config{
-		ClientID:     "881077086782-039l7vctubc7vrvjmubv6a7v0eg96sqg.apps.googleusercontent.com",
-		ClientSecret: "y9Rj5-KheyZSFyjCH1dCBXWs",
+		ClientID:     "615260903473-ctldo9bte5phiu092s8ovfbe7c8aao1o.apps.googleusercontent.com",
+		ClientSecret: "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",
 		Endpoint:     google.Endpoint,
 		RedirectURL:  OOB,
 		Scopes:       []string{gmail.MailGoogleComScope},

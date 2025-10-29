@@ -126,7 +126,36 @@ func handleListThreads(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		}
 	}
 
+	// Get or create Gmail client
 	client := sc.GmailClient()
+	if client == nil {
+		// Check if token exists before trying to create client
+		if !gmail.HasToken() {
+			authURL := gmail.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the gmail_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClient(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClient(client)
+	}
+
 	threads, err := client.ListThreads(query, maxResults)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to list threads: %v", err)), nil
@@ -148,7 +177,35 @@ func handleArchiveThread(ctx context.Context, request mcp.CallToolRequest, sc *s
 		return mcp.NewToolResultError("threadId is required"), nil
 	}
 
+	// Get or create Gmail client
 	client := sc.GmailClient()
+	if client == nil {
+		if !gmail.HasToken() {
+			authURL := gmail.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the gmail_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClient(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClient(client)
+	}
+
 	if err := client.ArchiveThread(threadID); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to archive thread: %v", err)), nil
 	}
@@ -164,7 +221,35 @@ func handleClassifyThread(ctx context.Context, request mcp.CallToolRequest, sc *
 		return mcp.NewToolResultError("threadId is required"), nil
 	}
 
+	// Get or create Gmail client
 	client := sc.GmailClient()
+	if client == nil {
+		if !gmail.HasToken() {
+			authURL := gmail.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the gmail_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClient(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClient(client)
+	}
+
 	thread := &gmail_v1.Thread{Id: threadID}
 	if err := client.PopulateThread(thread); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to get thread: %v", err)), nil
@@ -186,7 +271,35 @@ func handleCheckStale(ctx context.Context, request mcp.CallToolRequest, sc *serv
 		return mcp.NewToolResultError("threadId is required"), nil
 	}
 
+	// Get or create Gmail client
 	client := sc.GmailClient()
+	if client == nil {
+		if !gmail.HasToken() {
+			authURL := gmail.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the gmail_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClient(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClient(client)
+	}
+
 	thread := &gmail_v1.Thread{Id: threadID}
 	if err := client.PopulateThread(thread); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to get thread: %v", err)), nil
@@ -217,7 +330,35 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 		query = queryVal
 	}
 
+	// Get or create Gmail client
 	client := sc.GmailClient()
+	if client == nil {
+		if !gmail.HasToken() {
+			authURL := gmail.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the gmail_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClient(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClient(client)
+	}
+
 	archived := 0
 	checked := 0
 
@@ -284,6 +425,13 @@ func handleSaveAuthCode(ctx context.Context, request mcp.CallToolRequest, sc *se
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to save authorization code: %v", err)), nil
 	}
+
+	// Create the client now that we have a token
+	client, err := gmail.NewClient(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Token saved but failed to create Gmail client: %v", err)), nil
+	}
+	sc.SetGmailClient(client)
 
 	return mcp.NewToolResultText("✅ Authorization successful! Gmail token saved. You can now use all Gmail tools."), nil
 }

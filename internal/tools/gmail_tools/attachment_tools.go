@@ -90,7 +90,35 @@ func handleListAttachments(ctx context.Context, request mcp.CallToolRequest, sc 
 		return mcp.NewToolResultError("messageId is required"), nil
 	}
 
+	// Get or create Gmail client
 	client := sc.GmailClient()
+	if client == nil {
+		if !gmail.HasToken() {
+			authURL := gmail.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the gmail_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClient(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClient(client)
+	}
+
 	attachments, err := client.ListAttachments(messageID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to list attachments: %v", err)), nil
@@ -147,7 +175,34 @@ func handleGetAttachment(ctx context.Context, request mcp.CallToolRequest, sc *s
 		encoding = encodingVal
 	}
 
+	// Get or create Gmail client
 	client := sc.GmailClient()
+	if client == nil {
+		if !gmail.HasToken() {
+			authURL := gmail.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the gmail_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClient(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClient(client)
+	}
 
 	switch encoding {
 	case "base64":
@@ -187,7 +242,35 @@ func handleGetMessageBody(ctx context.Context, request mcp.CallToolRequest, sc *
 		format = formatVal
 	}
 
+	// Get or create Gmail client
 	client := sc.GmailClient()
+	if client == nil {
+		if !gmail.HasToken() {
+			authURL := gmail.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the gmail_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClient(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClient(client)
+	}
+
 	body, err := client.GetMessageBody(messageID, format)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to get message body: %v", err)), nil
@@ -210,7 +293,35 @@ func handleExtractDocLinks(ctx context.Context, request mcp.CallToolRequest, sc 
 		format = formatVal
 	}
 
+	// Get or create Gmail client
 	client := sc.GmailClient()
+	if client == nil {
+		if !gmail.HasToken() {
+			authURL := gmail.GetAuthURL()
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the gmail_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClient(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClient(client)
+	}
+
 	body, err := client.GetMessageBody(messageID, format)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to get message body: %v", err)), nil

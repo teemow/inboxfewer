@@ -96,11 +96,10 @@ func handleGetDocument(ctx context.Context, request mcp.CallToolRequest, sc *ser
 3. Grant access to read documents
 4. Copy the authorization code
 
-5. Save the token by running this command:
-   echo "<access_token> <refresh_token>" > ~/.cache/inboxfewer/docs.token
+5. Provide the authorization code to your AI agent
+   The agent will use the docs_save_auth_code tool to complete authentication.
 
-Note: You'll need to go through the OAuth flow once to get the tokens.
-After that, the tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
@@ -169,11 +168,10 @@ func handleGetMetadata(ctx context.Context, request mcp.CallToolRequest, sc *ser
 3. Grant access to read documents
 4. Copy the authorization code
 
-5. Save the token by running this command:
-   echo "<access_token> <refresh_token>" > ~/.cache/inboxfewer/docs.token
+5. Provide the authorization code to your AI agent
+   The agent will use the docs_save_auth_code tool to complete authentication.
 
-Note: You'll need to go through the OAuth flow once to get the tokens.
-After that, the tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
