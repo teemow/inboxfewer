@@ -19,28 +19,6 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 		return fmt.Errorf("failed to register attachment tools: %w", err)
 	}
 
-	// Get OAuth URL tool
-	getAuthURLTool := mcp.NewTool("gmail_get_auth_url",
-		mcp.WithDescription("Get the OAuth URL to authorize Google services access (Gmail, Docs, Drive)"),
-	)
-
-	s.AddTool(getAuthURLTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetAuthURL(ctx, request, sc)
-	})
-
-	// Save authorization code tool
-	saveAuthCodeTool := mcp.NewTool("gmail_save_auth_code",
-		mcp.WithDescription("Save the OAuth authorization code to complete Google services authentication (Gmail, Docs, Drive)"),
-		mcp.WithString("authCode",
-			mcp.Required(),
-			mcp.Description("The authorization code from Google OAuth"),
-		),
-	)
-
-	s.AddTool(saveAuthCodeTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleSaveAuthCode(ctx, request, sc)
-	})
-
 	// List threads tool
 	listThreadsTool := mcp.NewTool("gmail_list_threads",
 		mcp.WithDescription("List Gmail threads matching a query"),
@@ -142,7 +120,7 @@ func handleListThreads(ctx context.Context, request mcp.CallToolRequest, sc *ser
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the gmail_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool to complete authentication.
 
 Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
@@ -192,7 +170,7 @@ func handleArchiveThread(ctx context.Context, request mcp.CallToolRequest, sc *s
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the gmail_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool to complete authentication.
 
 Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
@@ -236,7 +214,7 @@ func handleClassifyThread(ctx context.Context, request mcp.CallToolRequest, sc *
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the gmail_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool to complete authentication.
 
 Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
@@ -286,7 +264,7 @@ func handleCheckStale(ctx context.Context, request mcp.CallToolRequest, sc *serv
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the gmail_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool to complete authentication.
 
 Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
@@ -345,7 +323,7 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the gmail_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool to complete authentication.
 
 Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
@@ -394,44 +372,4 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Checked %d threads, archived %d stale threads", checked, archived)), nil
-}
-
-func handleGetAuthURL(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
-	authURL := gmail.GetAuthURL()
-
-	result := fmt.Sprintf(`To authorize Google services access (Gmail, Docs, Drive):
-
-1. Visit this URL in your browser:
-   %s
-
-2. Sign in with your Google account
-3. Grant access to Google services
-4. Copy the authorization code
-
-5. Call the gmail_save_auth_code tool with the code to complete authentication`, authURL)
-
-	return mcp.NewToolResultText(result), nil
-}
-
-func handleSaveAuthCode(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
-	args := request.GetArguments()
-
-	authCode, ok := args["authCode"].(string)
-	if !ok || authCode == "" {
-		return mcp.NewToolResultError("authCode is required"), nil
-	}
-
-	err := gmail.SaveToken(ctx, authCode)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to save authorization code: %v", err)), nil
-	}
-
-	// Create the client now that we have a token
-	client, err := gmail.NewClient(ctx)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Token saved but failed to create Gmail client: %v", err)), nil
-	}
-	sc.SetGmailClient(client)
-
-	return mcp.NewToolResultText("✅ Authorization successful! Google services token saved. You can now use all Gmail and Google Docs tools."), nil
 }

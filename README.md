@@ -25,19 +25,17 @@ Create a file at `~/keys/github-inboxfewer.token` with two space-separated value
 <github-username> <github-personal-access-token>
 ```
 
-### Gmail OAuth
+### Google Services OAuth
 
-On first run, you'll be prompted to authenticate with Gmail. The OAuth token will be cached at:
-- Linux/Unix: `~/.cache/inboxfewer/gmail.token`
-- macOS: `~/Library/Caches/inboxfewer/gmail.token`
-- Windows: `%TEMP%/inboxfewer/gmail.token`
+On first run, you'll be prompted to authenticate with Google services (Gmail, Google Docs, Google Drive). A single unified OAuth token is used for all Google services and will be cached at:
+- Linux/Unix: `~/.cache/inboxfewer/google.token`
+- macOS: `~/Library/Caches/inboxfewer/google.token`
+- Windows: `%TEMP%/inboxfewer/google.token`
 
-### Google Docs OAuth
-
-When first using Google Docs tools, you'll be prompted to authenticate with Google Docs API. The OAuth token will be cached at:
-- Linux/Unix: `~/.cache/inboxfewer/docs.token`
-- macOS: `~/Library/Caches/inboxfewer/docs.token`
-- Windows: `%TEMP%/inboxfewer/docs.token`
+**Note:** The OAuth token provides access to Gmail, Google Docs, and Google Drive APIs with the following scopes:
+- Gmail: Read and modify messages (for archiving)
+- Google Docs: Read document content
+- Google Drive: Read file metadata
 
 ## Usage
 
@@ -92,6 +90,18 @@ The HTTP server will expose:
 ## MCP Server Tools
 
 When running as an MCP server, the following tools are available:
+
+### OAuth Authentication Flow
+
+Before using any Google services (Gmail, Docs, Drive), you need to authenticate:
+
+1. **Check if authenticated:** The server will automatically check for an existing token
+2. **Get authorization URL:** If not authenticated, use `google_get_auth_url` to get the OAuth URL
+3. **Authorize access:** Visit the URL in your browser and grant permissions
+4. **Save the code:** Copy the authorization code and use `google_save_auth_code` to save it
+5. **Use the tools:** All Google-related tools will now work with the saved token
+
+The token is stored in `~/.cache/inboxfewer/google.token` and provides access to all Google APIs (Gmail, Docs, Drive).
 
 ### Gmail Tools
 
@@ -170,6 +180,27 @@ Extract Google Docs/Drive links from a Gmail message.
 
 **Use Case:** Extracts Google Docs, Sheets, Slides, and Drive file links from email bodies. Particularly useful for finding meeting notes shared via Google Docs links.
 
+### Google OAuth Tools
+
+#### `google_get_auth_url`
+Get the OAuth authorization URL for Google services.
+
+**Arguments:** None
+
+**Returns:** Authorization URL that the user should visit to grant access to Gmail, Google Docs, and Google Drive.
+
+**Use Case:** When the OAuth token is missing or expired, use this to get the authorization URL. After visiting the URL and authorizing access, use `google_save_auth_code` with the provided code.
+
+#### `google_save_auth_code`
+Save the OAuth authorization code to complete authentication.
+
+**Arguments:**
+- `authCode` (required): The authorization code obtained from the Google OAuth flow
+
+**Returns:** Success message indicating the token has been saved.
+
+**Use Case:** After visiting the authorization URL from `google_get_auth_url`, Google provides an authorization code. Pass this code to complete the OAuth flow and save the access token.
+
 ### Google Docs Tools
 
 #### `docs_get_document`
@@ -181,7 +212,7 @@ Get Google Docs content by document ID.
 
 **Returns:** Document content in the specified format. Markdown format preserves headings, lists, formatting, and links.
 
-**OAuth:** On first use, you'll be prompted to authenticate with Google Docs API. The OAuth token will be cached at `~/.cache/inboxfewer/docs.token`.
+**OAuth:** Uses the unified Google OAuth token (see Configuration section above). If not already authenticated, you'll be prompted to authorize access.
 
 **Use Case:** Retrieve the actual content of Google Meet notes, shared documents, or any Google Doc accessible to your account.
 
@@ -343,9 +374,17 @@ inboxfewer/
 │   │   ├── converter.go   # Document to Markdown/text conversion
 │   │   ├── types.go       # Document metadata types
 │   │   └── doc.go         # Package documentation
+│   ├── google/            # Unified Google OAuth2 authentication
+│   │   ├── oauth.go       # OAuth token management for all Google services
+│   │   └── doc.go         # Package documentation
+│   ├── github/            # GitHub types and utilities
+│   │   └── types.go       # GitHub issue/PR types
 │   ├── server/            # MCP server context
 │   │   └── context.go     # Server context management
 │   └── tools/             # MCP tool implementations
+│       ├── google_tools/  # Google OAuth MCP tools
+│       │   ├── tools.go   # OAuth authentication tools
+│       │   └── doc.go     # Package documentation
 │       ├── gmail_tools/   # Gmail-related MCP tools
 │       │   ├── tools.go           # Thread tools
 │       │   ├── attachment_tools.go # Attachment tools
@@ -353,7 +392,16 @@ inboxfewer/
 │       └── docs_tools/    # Google Docs MCP tools
 │           ├── tools.go   # Docs retrieval tools
 │           └── doc.go     # Package documentation
+├── docs/                  # Documentation
+│   └── debugging.md       # Debugging guide
+├── scripts/               # Utility scripts
+│   └── start-mcp-server.sh # Development server script
+├── .github/               # GitHub Actions workflows
+│   └── workflows/
+│       ├── ci.yaml        # Continuous integration
+│       └── auto-release.yaml # Automated releases
 ├── main.go                # Application entry point
+├── Makefile               # Build automation
 ├── go.mod                 # Go module definition
 └── README.md              # This file
 ```

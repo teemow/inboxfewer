@@ -105,7 +105,7 @@ func handleListAttachments(ctx context.Context, request mcp.CallToolRequest, sc 
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the gmail_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool to complete authentication.
 
 Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
@@ -190,7 +190,7 @@ func handleGetAttachment(ctx context.Context, request mcp.CallToolRequest, sc *s
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the gmail_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool to complete authentication.
 
 Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
@@ -257,7 +257,7 @@ func handleGetMessageBody(ctx context.Context, request mcp.CallToolRequest, sc *
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the gmail_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool to complete authentication.
 
 Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil
@@ -308,7 +308,7 @@ func handleExtractDocLinks(ctx context.Context, request mcp.CallToolRequest, sc 
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the gmail_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool to complete authentication.
 
 Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
 			return mcp.NewToolResultError(errorMsg), nil

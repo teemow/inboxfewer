@@ -15,6 +15,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/docs_tools"
 	"github.com/teemow/inboxfewer/internal/tools/gmail_tools"
+	"github.com/teemow/inboxfewer/internal/tools/google_tools"
 )
 
 func newServeCmd() *cobra.Command {
@@ -74,6 +75,11 @@ func runServe(transport string, debugMode bool, httpAddr string) error {
 	mcpSrv := mcpserver.NewMCPServer("inboxfewer", version,
 		mcpserver.WithToolCapabilities(true),
 	)
+
+	// Register Google OAuth tools
+	if err := google_tools.RegisterGoogleTools(mcpSrv, serverContext); err != nil {
+		return fmt.Errorf("failed to register Google OAuth tools: %w", err)
+	}
 
 	// Register Gmail tools
 	if err := gmail_tools.RegisterGmailTools(mcpSrv, serverContext); err != nil {
