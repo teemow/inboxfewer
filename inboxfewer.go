@@ -4,8 +4,7 @@
 // https://golang.org/LICENSE
 
 // Inboxfewer archives messages in your gmail inbox if the
-// corresponding github issue has been closed or the gerrit code
-// review has been merged or abandoned.
+// corresponding github issue or pull request has been closed.
 package main
 
 import (
@@ -23,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/build/gerrit"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -148,7 +146,17 @@ func main() {
 		ts = conf.TokenSource(context.Background(), t)
 	}
 
-	client := oauth2.NewClient(context.Background(), ts)
+	// Create client with HTTP/1.1 to avoid HTTP/2 protocol errors
+	ctx := context.Background()
+	client := oauth2.NewClient(ctx, ts)
+	
+	// Force HTTP/1.1 by disabling HTTP/2
+	transport := client.Transport.(*oauth2.Transport)
+	baseTransport := &http.Transport{
+		ForceAttemptHTTP2: false,
+	}
+	transport.Base = baseTransport
+	
 	svc, err := gmail.New(client)
 	if err != nil {
 		log.Fatal(err)
@@ -191,24 +199,6 @@ type message struct {
 
 type threadType interface {
 	IsStale() (bool, error)
-}
-
-type gerritChange struct {
-	ID     string // "Innnnn"
-	Server string // "go-review.googlesource.com"
-}
-
-func (gc gerritChange) IsStale() (bool, error) {
-	c := gerrit.NewClient("https://"+gc.Server, gerrit.NoAuth)
-	ci, err := c.GetChangeDetail(gc.ID)
-	if err != nil {
-		return false, err
-	}
-	switch ci.Status {
-	case "SUBMITTED", "MERGED", "ABANDONED":
-		return true, nil
-	}
-	return false, nil
 }
 
 type githubIssue struct {
@@ -279,15 +269,6 @@ func (c *FewerClient) ClassifyThread(t *gmail.Thread) threadType {
 			continue
 		}
 		for _, mph := range mpart.Headers {
-			if mph.Name == "X-Gerrit-Change-Id" {
-				v := headerValue(m, "X-Gerrit-ChangeURL") // "<https://go-review.googlesource.com/12665>"
-				v = strings.TrimPrefix(v, "<https://")
-				v = v[:strings.LastIndex(v, "/")]
-				return gerritChange{
-					ID:     mph.Value,
-					Server: v,
-				}
-			}
 			// <golang/go/issue/3665/100642466@github.com>
 			if mph.Name == "Message-ID" &&
 				(strings.Contains(mph.Value, "/issues/") || strings.Contains(mph.Value, "/issue/")) &&
