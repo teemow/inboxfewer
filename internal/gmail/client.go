@@ -3,19 +3,14 @@ package gmail
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"time"
 
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	gmail "google.golang.org/api/gmail/v1"
+
+	"github.com/teemow/inboxfewer/internal/google"
 )
 
 // Client wraps the Gmail Users service
@@ -23,66 +18,52 @@ type Client struct {
 	svc *gmail.UsersService
 }
 
+// HasToken checks if a valid OAuth token exists
+func HasToken() bool {
+	return google.HasToken()
+}
+
+// GetAuthURL returns the OAuth URL for user authorization
+func GetAuthURL() string {
+	return google.GetAuthURL()
+}
+
+// SaveToken exchanges an authorization code for tokens and saves them
+func SaveToken(ctx context.Context, authCode string) error {
+	return google.SaveToken(ctx, authCode)
+}
+
 // NewClient creates a new Gmail client with OAuth2 authentication
+// For CLI usage, it will prompt for auth code via stdin if no token exists
+// For MCP usage, it will return an error if no token exists
 func NewClient(ctx context.Context) (*Client, error) {
-	const OOB = "urn:ietf:wg:oauth:2.0:oob"
-	conf := &oauth2.Config{
-		ClientID:     "881077086782-039l7vctubc7vrvjmubv6a7v0eg96sqg.apps.googleusercontent.com",
-		ClientSecret: "y9Rj5-KheyZSFyjCH1dCBXWs",
-		Endpoint:     google.Endpoint,
-		RedirectURL:  OOB,
-		Scopes:       []string{gmail.MailGoogleComScope},
-	}
+	// Try to get existing token
+	client, err := google.GetHTTPClient(ctx)
+	if err != nil {
+		// Check if we're in a terminal (CLI mode)
+		if isTerminal() {
+			authURL := google.GetAuthURL()
+			log.Printf("Go to %v", authURL)
+			io.WriteString(os.Stdout, "Enter code> ")
 
-	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
-	gmailTokenFile := filepath.Join(cacheDir, "gmail.token")
-
-	slurp, err := ioutil.ReadFile(gmailTokenFile)
-	var ts oauth2.TokenSource
-	if err == nil {
-		f := strings.Fields(strings.TrimSpace(string(slurp)))
-		if len(f) == 2 {
-			ts = conf.TokenSource(ctx, &oauth2.Token{
-				AccessToken:  f[0],
-				TokenType:    "Bearer",
-				RefreshToken: f[1],
-				Expiry:       time.Unix(1, 0),
-			})
-			if _, err := ts.Token(); err != nil {
-				log.Printf("Cached token invalid: %v", err)
-				ts = nil
+			bs := bufio.NewScanner(os.Stdin)
+			if !bs.Scan() {
+				return nil, io.EOF
 			}
+			code := bs.Text()
+			if err := google.SaveToken(ctx, code); err != nil {
+				return nil, err
+			}
+			// Try again with the new token
+			client, err = google.GetHTTPClient(ctx)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// MCP mode - return error with instructions
+			return nil, fmt.Errorf("no valid Google OAuth token found. Use gmail_get_auth_url and gmail_save_auth_code tools to authenticate")
 		}
 	}
-
-	if ts == nil {
-		authCode := conf.AuthCodeURL("state")
-		log.Printf("Go to %v", authCode)
-		io.WriteString(os.Stdout, "Enter code> ")
-
-		bs := bufio.NewScanner(os.Stdin)
-		if !bs.Scan() {
-			return nil, io.EOF
-		}
-		code := strings.TrimSpace(bs.Text())
-		t, err := conf.Exchange(ctx, code)
-		if err != nil {
-			return nil, err
-		}
-		os.MkdirAll(cacheDir, 0700)
-		ioutil.WriteFile(gmailTokenFile, []byte(t.AccessToken+" "+t.RefreshToken), 0600)
-		ts = conf.TokenSource(ctx, t)
-	}
-
-	// Create client with HTTP/1.1 to avoid HTTP/2 protocol errors
-	client := oauth2.NewClient(ctx, ts)
-
-	// Force HTTP/1.1 by disabling HTTP/2
-	transport := client.Transport.(*oauth2.Transport)
-	baseTransport := &http.Transport{
-		ForceAttemptHTTP2: false,
-	}
-	transport.Base = baseTransport
 
 	svc, err := gmail.New(client)
 	if err != nil {
@@ -147,27 +128,8 @@ func (c *Client) ListThreads(q string, maxResults int64) ([]*gmail.Thread, error
 	return res.Threads, nil
 }
 
-func userCacheDir() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(HomeDir(), "Library", "Caches")
-	case "windows":
-		for _, ev := range []string{"TEMP", "TMP"} {
-			if v := os.Getenv(ev); v != "" {
-				return v
-			}
-		}
-		panic("No Windows TEMP or TMP environment variables found")
-	}
-	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
-		return xdg
-	}
-	return filepath.Join(HomeDir(), ".cache")
-}
-
-func HomeDir() string {
-	if runtime.GOOS == "windows" {
-		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
-	}
-	return os.Getenv("HOME")
+// isTerminal checks if stdin is connected to a terminal (CLI mode)
+func isTerminal() bool {
+	fileInfo, _ := os.Stdin.Stat()
+	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
