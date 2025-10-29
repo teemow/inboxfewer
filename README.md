@@ -143,6 +143,74 @@ For SSE or HTTP transports, configure your MCP client to connect to:
 
 ## Development
 
+### Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/teemow/inboxfewer.git
+cd inboxfewer
+
+# Build the project
+make build
+
+# Run tests
+make test
+
+# See all available targets
+make help
+```
+
+### Makefile Targets
+
+The project includes a comprehensive Makefile with the following targets:
+
+**Development:**
+- `make build` - Build the binary
+- `make install` - Install the binary to GOPATH/bin
+- `make clean` - Clean build artifacts
+- `make run` - Run the application
+
+**Testing:**
+- `make test` - Run tests
+- `make test-coverage` - Run tests with coverage report
+- `make vet` - Run go vet
+
+**Code Quality:**
+- `make fmt` - Run go fmt
+- `make lint` - Run golangci-lint (requires golangci-lint installed)
+- `make lint-yaml` - Run YAML linter (requires yamllint installed)
+- `make tidy` - Run go mod tidy
+- `make check` - Run all checks (fmt, vet, test, lint-yaml)
+
+**Release:**
+- `make release-dry-run` - Test the release process without publishing (requires goreleaser)
+- `make release-local` - Create a release locally (requires goreleaser)
+
+**Multi-platform Builds:**
+- `make build-linux` - Build for Linux
+- `make build-darwin` - Build for macOS
+- `make build-windows` - Build for Windows
+- `make build-all` - Build for all platforms
+
+### Automated Releases
+
+The project uses GitHub Actions to automatically create releases:
+
+1. **CI Checks** (`ci.yaml`): Runs on every PR and push to master
+   - Runs tests, linting, and formatting checks
+   - Validates the release process with a dry-run
+
+2. **Auto Release** (`auto-release.yaml`): Triggers on merged PRs to master
+   - Automatically increments the patch version
+   - Creates a git tag
+   - Runs GoReleaser to build binaries for multiple platforms
+   - Publishes a GitHub release with artifacts
+
+Releases include pre-built binaries for:
+- Linux (amd64, arm64)
+- macOS/Darwin (amd64, arm64)
+- Windows (amd64, arm64)
+
 ### Project Structure
 
 ```
