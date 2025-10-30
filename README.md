@@ -5,6 +5,8 @@ Archives Gmail threads for closed GitHub issues and pull requests.
 ## Features
 
 - **Gmail Integration**: Automatically archives emails related to closed GitHub issues and PRs
+- **Contact Search**: Search for contacts in Google Contacts by name, email, or phone number
+- **Email Sending**: Send emails through Gmail API with support for CC, BCC, and HTML formatting
 - **Google Docs Integration**: Extract and retrieve Google Docs content from email messages, with full support for multi-tab documents (Oct 2024 feature)
 - **MCP Server**: Provides Model Context Protocol server for AI assistant integration
 - **Multiple Transports**: Supports stdio, SSE, and streamable HTTP transports
@@ -32,10 +34,11 @@ On first run, you'll be prompted to authenticate with Google services (Gmail, Go
 - macOS: `~/Library/Caches/inboxfewer/google.token`
 - Windows: `%TEMP%/inboxfewer/google.token`
 
-**Note:** The OAuth token provides access to Gmail, Google Docs, and Google Drive APIs with the following scopes:
-- Gmail: Read and modify messages (for archiving)
+**Note:** The OAuth token provides access to Gmail, Google Docs, Google Drive, and Google Contacts APIs with the following scopes:
+- Gmail: Read, modify, and send messages
 - Google Docs: Read document content
 - Google Drive: Read file metadata
+- Google Contacts: Read contact information
 
 ## Usage
 
@@ -101,7 +104,7 @@ Before using any Google services (Gmail, Docs, Drive), you need to authenticate:
 4. **Save the code:** Copy the authorization code and use `google_save_auth_code` to save it
 5. **Use the tools:** All Google-related tools will now work with the saved token
 
-The token is stored in `~/.cache/inboxfewer/google.token` and provides access to all Google APIs (Gmail, Docs, Drive).
+The token is stored in `~/.cache/inboxfewer/google.token` and provides access to all Google APIs (Gmail, Docs, Drive, Contacts).
 
 ### Gmail Tools
 
@@ -180,6 +183,32 @@ Extract Google Docs/Drive links from a Gmail message.
 
 **Use Case:** Extracts Google Docs, Sheets, Slides, and Drive file links from email bodies. Particularly useful for finding meeting notes shared via Google Docs links.
 
+#### `gmail_search_contacts`
+Search for contacts in Google Contacts.
+
+**Arguments:**
+- `query` (required): Search query to find contacts (e.g., name, email, phone number)
+- `maxResults` (optional): Maximum number of results to return (default: 10)
+
+**Returns:** List of contacts matching the query, including display name, email address, and phone number.
+
+**Use Case:** Find contact information from your Google Contacts before sending an email or when looking up someone's contact details.
+
+#### `gmail_send_email`
+Send an email through Gmail.
+
+**Arguments:**
+- `to` (required): Recipient email address(es), comma-separated for multiple recipients
+- `subject` (required): Email subject
+- `body` (required): Email body content
+- `cc` (optional): CC email address(es), comma-separated for multiple recipients
+- `bcc` (optional): BCC email address(es), comma-separated for multiple recipients
+- `isHTML` (optional): Whether the body is HTML (default: false for plain text)
+
+**Returns:** Confirmation message with the sent message ID.
+
+**Use Case:** Send emails programmatically through your Gmail account. Supports both plain text and HTML emails, with CC and BCC options.
+
 ### Google OAuth Tools
 
 #### `google_get_auth_url`
@@ -226,7 +255,9 @@ Get metadata about a Google Doc or Drive file.
 
 **Use Case:** Get information about a document without downloading its full content.
 
-### Workflow Example: Extracting Meeting Notes
+### Workflow Examples
+
+#### Extracting Meeting Notes
 
 ```bash
 # 1. Find emails with Google Docs links
@@ -239,6 +270,23 @@ gmail_extract_doc_links(messageId: "msg123")
 # 3. Fetch the document content
 docs_get_document(documentId: "1ABC...", format: "markdown")
 # Returns the meeting notes in Markdown format
+```
+
+#### Searching Contacts and Sending Email
+
+```bash
+# 1. Search for a contact
+gmail_search_contacts(query: "John Doe")
+# Returns: List of contacts with name, email, and phone
+
+# 2. Send an email to the contact
+gmail_send_email(
+  to: "john.doe@example.com",
+  subject: "Follow up on meeting",
+  body: "Hi John,\n\nThanks for the meeting today...",
+  cc: "manager@example.com"
+)
+# Returns: Email sent successfully with message ID
 ```
 
 ## MCP Server Configuration
