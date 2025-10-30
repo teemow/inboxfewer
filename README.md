@@ -9,6 +9,7 @@ Archives Gmail threads for closed GitHub issues and pull requests.
 - **Email Sending**: Send emails through Gmail API with support for CC, BCC, and HTML formatting
 - **Google Docs Integration**: Extract and retrieve Google Docs content from email messages, with full support for multi-tab documents (Oct 2024 feature)
 - **Google Calendar Integration**: Full calendar management including event creation, modification, availability checking, and meeting scheduling with Google Meet support
+- **Google Meet Integration**: Retrieve meeting artifacts including recordings, transcripts, and Gemini notes from completed Google Meet sessions
 - **MCP Server**: Provides Model Context Protocol server for AI assistant integration
 - **Multiple Transports**: Supports stdio, SSE, and streamable HTTP transports
 - **Flexible Usage**: Can run as a CLI tool or as an MCP server
@@ -35,12 +36,13 @@ On first run, you'll be prompted to authenticate with Google services (Gmail, Go
 - macOS: `~/Library/Caches/inboxfewer/google-{account}.token`
 - Windows: `%TEMP%/inboxfewer/google-{account}.token`
 
-**Note:** Each OAuth token provides access to Gmail, Google Docs, Google Drive, Google Contacts, and Google Calendar APIs with the following scopes:
+**Note:** Each OAuth token provides access to Gmail, Google Docs, Google Drive, Google Contacts, Google Calendar, and Google Meet APIs with the following scopes:
 - Gmail: Read, modify, and send messages
 - Google Docs: Read document content
 - Google Drive: Read file metadata
 - Google Contacts: Read contact information (personal contacts, interaction history, and directory)
 - Google Calendar: Read and write calendar events, check availability, and manage calendars
+- Google Meet: Read meeting artifacts (recordings, transcripts) and configure meeting spaces (enable/disable auto-recording, transcription, note-taking)
 
 ### Multi-Account Support
 
@@ -456,6 +458,136 @@ Find available time slots for scheduling a meeting with one or more attendees.
 
 **Use Case:** Automatically find the best meeting times when scheduling with multiple participants.
 
+### Google Meet Tools
+
+**Note:** All Google Meet tools support an optional `account` parameter to specify which Google account to use (default: 'default').
+
+**Space Configuration:** You can now programmatically create Google Meet spaces with automatic recording, transcription, and Gemini note-taking enabled! Use the space management tools below to configure these features.
+
+#### `meet_create_space`
+Create a new Google Meet space with optional auto-recording, transcription, and note-taking configuration.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `access_type` (optional): Who can join without knocking: 'OPEN', 'TRUSTED', 'RESTRICTED'
+- `enable_recording` (optional): Enable automatic recording (default: false)
+- `enable_transcription` (optional): Enable automatic transcription (default: false)
+- `enable_smart_notes` (optional): Enable automatic note-taking with Gemini (default: false). Requires Gemini add-on.
+
+**Returns:** New space details including meeting URI, meeting code, and configuration settings.
+
+**Use Case:** Create a meeting space with automatic recording and transcription enabled for important meetings.
+
+**Example:**
+```bash
+meet_create_space(
+  enable_recording: true,
+  enable_transcription: true,
+  enable_smart_notes: true
+)
+```
+
+#### `meet_get_space`
+Get details about a Google Meet space including its configuration.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `space_name` (required): The resource name of the space (e.g., 'spaces/SPACE_ID')
+
+**Returns:** Space details including meeting URI, meeting code, access settings, and artifact configuration (recording, transcription, smart notes status).
+
+**Use Case:** Check the current configuration of a meeting space.
+
+#### `meet_update_space_config`
+Update the configuration of an existing Google Meet space to enable/disable auto-recording, transcription, and notes.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `space_name` (required): The resource name of the space to update (e.g., 'spaces/SPACE_ID')
+- `access_type` (optional): Who can join without knocking: 'OPEN', 'TRUSTED', 'RESTRICTED'
+- `enable_recording` (optional): Enable automatic recording
+- `enable_transcription` (optional): Enable automatic transcription
+- `enable_smart_notes` (optional): Enable automatic note-taking with Gemini. Requires Gemini add-on.
+
+**Returns:** Updated space configuration.
+
+**Use Case:** Enable recording and transcription for an existing meeting space.
+
+**Example:**
+```bash
+meet_update_space_config(
+  space_name: "spaces/abc123",
+  enable_recording: true,
+  enable_transcription: true
+)
+```
+
+#### `meet_get_conference`
+Get details about a Google Meet conference record.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `conference_record` (required): The resource name of the conference record (e.g., 'spaces/SPACE_ID/conferenceRecords/CONF_ID')
+
+**Returns:** Conference metadata including space ID, meeting code, start/end times, and counts of recordings and transcripts.
+
+**Use Case:** Retrieve information about a completed Google Meet session.
+
+#### `meet_list_recordings`
+List all recordings for a Google Meet conference.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `conference_record` (required): The resource name of the conference record
+
+**Returns:** List of recordings with details including state, start/end times, and Google Drive file locations with download links.
+
+**Use Case:** Find and access recorded meetings for review or sharing.
+
+#### `meet_get_recording`
+Get details about a specific Google Meet recording, including download link.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `recording_name` (required): The resource name of the recording (e.g., 'spaces/SPACE_ID/conferenceRecords/CONF_ID/recordings/REC_ID')
+
+**Returns:** Recording details including state, timestamps, Drive file location, and export URI for downloading.
+
+**Use Case:** Retrieve download link for a specific meeting recording.
+
+#### `meet_list_transcripts`
+List all transcripts for a Google Meet conference.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `conference_record` (required): The resource name of the conference record
+
+**Returns:** List of transcripts with details including state, language, start/end times, and Google Docs file locations.
+
+**Use Case:** Find available transcripts for a meeting.
+
+#### `meet_get_transcript`
+Get details about a specific Google Meet transcript.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `transcript_name` (required): The resource name of the transcript (e.g., 'spaces/SPACE_ID/conferenceRecords/CONF_ID/transcripts/TRANS_ID')
+
+**Returns:** Transcript details including state, language, timestamps, and Docs file location.
+
+**Use Case:** Get metadata about a specific meeting transcript.
+
+#### `meet_get_transcript_text`
+Get the full text content of a Google Meet transcript with timestamps and speakers.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `transcript_name` (required): The resource name of the transcript
+
+**Returns:** Full transcript text with timestamps and speaker names for each entry.
+
+**Use Case:** Retrieve the complete conversation from a meeting for review or analysis.
+
 ### Workflow Examples
 
 #### Extracting Meeting Notes
@@ -676,6 +808,10 @@ inboxfewer/
 │   │   ├── client.go      # Calendar API client
 │   │   ├── types.go       # Event and calendar types
 │   │   └── doc.go         # Package documentation
+│   ├── meet/              # Google Meet client and utilities
+│   │   ├── client.go      # Meet API client
+│   │   ├── types.go       # Conference, recording, and transcript types
+│   │   └── doc.go         # Package documentation
 │   ├── google/            # Unified Google OAuth2 authentication
 │   │   ├── oauth.go       # OAuth token management for all Google services
 │   │   └── doc.go         # Package documentation
@@ -694,12 +830,15 @@ inboxfewer/
 │       ├── docs_tools/    # Google Docs MCP tools
 │       │   ├── tools.go   # Docs retrieval tools
 │       │   └── doc.go     # Package documentation
-│       └── calendar_tools/ # Google Calendar MCP tools
-│           ├── tools.go            # Tool registration
-│           ├── event_tools.go      # Event management tools
-│           ├── calendar_list_tools.go # Calendar list tools
-│           ├── scheduling_tools.go # Scheduling and availability tools
-│           └── doc.go              # Package documentation
+│       ├── calendar_tools/ # Google Calendar MCP tools
+│       │   ├── tools.go            # Tool registration
+│       │   ├── event_tools.go      # Event management tools
+│       │   ├── calendar_list_tools.go # Calendar list tools
+│       │   ├── scheduling_tools.go # Scheduling and availability tools
+│       │   └── doc.go              # Package documentation
+│       └── meet_tools/    # Google Meet MCP tools
+│           ├── tools.go   # Meet artifact retrieval tools
+│           └── doc.go     # Package documentation
 ├── docs/                  # Documentation
 │   └── debugging.md       # Debugging guide
 ├── scripts/               # Utility scripts
