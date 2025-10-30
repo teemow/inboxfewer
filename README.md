@@ -38,7 +38,7 @@ On first run, you'll be prompted to authenticate with Google services (Gmail, Go
 - Gmail: Read, modify, and send messages
 - Google Docs: Read document content
 - Google Drive: Read file metadata
-- Google Contacts: Read contact information
+- Google Contacts: Read contact information (personal contacts, interaction history, and directory)
 
 ## Usage
 
@@ -184,7 +184,7 @@ Extract Google Docs/Drive links from a Gmail message.
 **Use Case:** Extracts Google Docs, Sheets, Slides, and Drive file links from email bodies. Particularly useful for finding meeting notes shared via Google Docs links.
 
 #### `gmail_search_contacts`
-Search for contacts in Google Contacts.
+Search for contacts across all Google contact sources.
 
 **Arguments:**
 - `query` (required): Search query to find contacts (e.g., name, email, phone number)
@@ -192,7 +192,12 @@ Search for contacts in Google Contacts.
 
 **Returns:** List of contacts matching the query, including display name, email address, and phone number.
 
-**Use Case:** Find contact information from your Google Contacts before sending an email or when looking up someone's contact details.
+**Contact Sources Searched:**
+- **Personal Contacts**: Your saved contacts in Google Contacts
+- **Other Contacts**: People you've interacted with via email but haven't saved
+- **Directory Contacts**: Organizational directory (for Google Workspace accounts only)
+
+**Use Case:** Find contact information from all your contact sources before sending an email or when looking up someone's contact details. The search automatically de-duplicates contacts across sources.
 
 #### `gmail_send_email`
 Send an email through Gmail.

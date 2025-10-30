@@ -153,52 +153,134 @@ type Contact struct {
 	PhoneNumber  string
 }
 
-// SearchContacts searches for contacts in Google Contacts using the query
+// SearchContacts searches for contacts across all sources (personal, directory, and other contacts)
+// using the query string to filter results
 func (c *Client) SearchContacts(query string, pageSize int) ([]*Contact, error) {
 	if pageSize <= 0 {
 		pageSize = 10
 	}
 
+	var allContacts []*Contact
+	seenEmails := make(map[string]bool) // Track seen emails to avoid duplicates
+	queryLower := strings.ToLower(query)
+
+	// 1. Search personal contacts using SearchContacts
 	req := c.peopleSvc.People.SearchContacts().
 		Query(query).
 		ReadMask("names,emailAddresses,phoneNumbers").
 		PageSize(int64(pageSize))
 
 	resp, err := req.Do()
-	if err != nil {
-		return nil, fmt.Errorf("failed to search contacts: %w", err)
+	if err == nil { // Don't fail if one source fails
+		for _, result := range resp.Results {
+			if contact := extractContact(result.Person); contact != nil {
+				if contact.EmailAddress != "" && !seenEmails[contact.EmailAddress] {
+					seenEmails[contact.EmailAddress] = true
+					allContacts = append(allContacts, contact)
+				}
+			}
+		}
 	}
 
-	var contacts []*Contact
-	for _, result := range resp.Results {
-		person := result.Person
-		if person == nil {
-			continue
-		}
+	// 2. Search other contacts (people user has interacted with)
+	// Fetch other contacts and filter by query
+	otherReq := c.peopleSvc.OtherContacts.List().
+		ReadMask("names,emailAddresses,phoneNumbers").
+		PageSize(int64(pageSize * 3)) // Fetch more since we'll filter
 
-		contact := &Contact{
-			ResourceName: person.ResourceName,
+	otherResp, err := otherReq.Do()
+	if err == nil {
+		for _, person := range otherResp.OtherContacts {
+			if contact := extractContact(person); contact != nil {
+				// Filter by query
+				if matchesQuery(contact, queryLower) {
+					if contact.EmailAddress != "" && !seenEmails[contact.EmailAddress] {
+						seenEmails[contact.EmailAddress] = true
+						allContacts = append(allContacts, contact)
+					}
+				}
+			}
 		}
-
-		// Get display name
-		if len(person.Names) > 0 {
-			contact.DisplayName = person.Names[0].DisplayName
-		}
-
-		// Get primary email
-		if len(person.EmailAddresses) > 0 {
-			contact.EmailAddress = person.EmailAddresses[0].Value
-		}
-
-		// Get primary phone number
-		if len(person.PhoneNumbers) > 0 {
-			contact.PhoneNumber = person.PhoneNumbers[0].Value
-		}
-
-		contacts = append(contacts, contact)
 	}
 
-	return contacts, nil
+	// 3. Try to search directory contacts (for Workspace accounts)
+	// This will only work for Workspace accounts, will fail gracefully for consumer accounts
+	dirReq := c.peopleSvc.People.SearchDirectoryPeople().
+		Query(query).
+		ReadMask("names,emailAddresses,phoneNumbers").
+		PageSize(int64(pageSize))
+
+	dirResp, err := dirReq.Do()
+	if err == nil { // Will fail for non-Workspace accounts, that's OK
+		for _, person := range dirResp.People {
+			if contact := extractContact(person); contact != nil {
+				if contact.EmailAddress != "" && !seenEmails[contact.EmailAddress] {
+					seenEmails[contact.EmailAddress] = true
+					allContacts = append(allContacts, contact)
+				}
+			}
+		}
+	}
+
+	// Limit results to requested page size
+	if len(allContacts) > pageSize {
+		allContacts = allContacts[:pageSize]
+	}
+
+	return allContacts, nil
+}
+
+// extractContact extracts contact information from a Person object
+func extractContact(person *people.Person) *Contact {
+	if person == nil {
+		return nil
+	}
+
+	contact := &Contact{
+		ResourceName: person.ResourceName,
+	}
+
+	// Get display name
+	if len(person.Names) > 0 {
+		contact.DisplayName = person.Names[0].DisplayName
+	}
+
+	// Get primary email
+	if len(person.EmailAddresses) > 0 {
+		contact.EmailAddress = person.EmailAddresses[0].Value
+	}
+
+	// Get primary phone number
+	if len(person.PhoneNumbers) > 0 {
+		contact.PhoneNumber = person.PhoneNumbers[0].Value
+	}
+
+	// Skip contacts without any useful information
+	if contact.DisplayName == "" && contact.EmailAddress == "" && contact.PhoneNumber == "" {
+		return nil
+	}
+
+	return contact
+}
+
+// matchesQuery checks if a contact matches the search query
+func matchesQuery(contact *Contact, queryLower string) bool {
+	if queryLower == "" {
+		return true
+	}
+
+	// Check if query matches name, email, or phone
+	if strings.Contains(strings.ToLower(contact.DisplayName), queryLower) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(contact.EmailAddress), queryLower) {
+		return true
+	}
+	if strings.Contains(contact.PhoneNumber, queryLower) {
+		return true
+	}
+
+	return false
 }
 
 // EmailMessage represents an email to be sent

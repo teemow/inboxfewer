@@ -64,10 +64,12 @@ func getOAuthConfig() *oauth2.Config {
 		Endpoint:     google.Endpoint,
 		RedirectURL:  OOB,
 		Scopes: []string{
-			gmail.MailGoogleComScope,                             // Gmail access (includes send)
-			"https://www.googleapis.com/auth/documents.readonly", // Google Docs access
-			"https://www.googleapis.com/auth/drive.readonly",     // Google Drive access
-			"https://www.googleapis.com/auth/contacts.readonly",  // Google Contacts access
+			gmail.MailGoogleComScope,                                  // Gmail access (includes send)
+			"https://www.googleapis.com/auth/documents.readonly",      // Google Docs access
+			"https://www.googleapis.com/auth/drive.readonly",          // Google Drive access
+			"https://www.googleapis.com/auth/contacts.readonly",       // Google Contacts access
+			"https://www.googleapis.com/auth/contacts.other.readonly", // Other contacts (interaction history)
+			"https://www.googleapis.com/auth/directory.readonly",      // Directory contacts (Workspace)
 		},
 	}
 }
