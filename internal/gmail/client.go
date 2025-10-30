@@ -164,11 +164,15 @@ func (c *Client) SearchContacts(query string, pageSize int) ([]*Contact, error) 
 	seenEmails := make(map[string]bool) // Track seen emails to avoid duplicates
 	queryLower := strings.ToLower(query)
 
+	// We want to collect enough candidates from all sources before limiting
+	// Set a higher target to ensure we get good coverage from each source
+	targetResults := pageSize * 10 // Collect 10x the requested results before limiting
+
 	// 1. Search personal contacts using SearchContacts
 	req := c.peopleSvc.People.SearchContacts().
 		Query(query).
 		ReadMask("names,emailAddresses,phoneNumbers").
-		PageSize(int64(pageSize))
+		PageSize(int64(pageSize * 2)) // Request more to get better coverage
 
 	resp, err := req.Do()
 	if err == nil { // Don't fail if one source fails
@@ -184,11 +188,13 @@ func (c *Client) SearchContacts(query string, pageSize int) ([]*Contact, error) 
 
 	// 2. Search other contacts (people user has interacted with)
 	// Need to paginate through all other contacts since API doesn't support search query
+	// Keep searching until we have enough results OR we've exhausted the pages
 	pageToken := ""
-	maxPagesToFetch := 10 // Limit to avoid infinite loops, fetches up to 1000 contacts
+	maxPagesToFetch := 10 // Fetch up to 1000 contacts total
 	pagesSearched := 0
+	otherContactsFound := 0
 
-	for pagesSearched < maxPagesToFetch && len(allContacts) < pageSize*5 {
+	for pagesSearched < maxPagesToFetch {
 		otherReq := c.peopleSvc.OtherContacts.List().
 			ReadMask("names,emailAddresses,phoneNumbers").
 			PageSize(100) // Fetch 100 at a time for efficiency
@@ -209,10 +215,7 @@ func (c *Client) SearchContacts(query string, pageSize int) ([]*Contact, error) 
 					if contact.EmailAddress != "" && !seenEmails[contact.EmailAddress] {
 						seenEmails[contact.EmailAddress] = true
 						allContacts = append(allContacts, contact)
-						// Stop if we have enough matches
-						if len(allContacts) >= pageSize*5 {
-							break
-						}
+						otherContactsFound++
 					}
 				}
 			}
@@ -223,6 +226,12 @@ func (c *Client) SearchContacts(query string, pageSize int) ([]*Contact, error) 
 		if pageToken == "" {
 			break // No more pages
 		}
+
+		// Stop if we've collected enough total results
+		if len(allContacts) >= targetResults {
+			break
+		}
+
 		pagesSearched++
 	}
 
@@ -231,7 +240,7 @@ func (c *Client) SearchContacts(query string, pageSize int) ([]*Contact, error) 
 	dirReq := c.peopleSvc.People.SearchDirectoryPeople().
 		Query(query).
 		ReadMask("names,emailAddresses,phoneNumbers").
-		PageSize(int64(pageSize))
+		PageSize(int64(pageSize * 2)) // Request more to get better coverage
 
 	dirResp, err := dirReq.Do()
 	if err == nil { // Will fail for non-Workspace accounts, that's OK
