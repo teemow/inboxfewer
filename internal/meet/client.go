@@ -366,19 +366,19 @@ func (c *Client) CreateSpace(input SpaceInput) (*Space, error) {
 
 			if input.Config.ArtifactConfig.EnableRecording {
 				artifactConfig.RecordingConfig = &meet.RecordingConfig{
-					AutoGenerationType: "ON",
+					AutoRecordingGeneration: "ON",
 				}
 			}
 
 			if input.Config.ArtifactConfig.EnableTranscription {
 				artifactConfig.TranscriptionConfig = &meet.TranscriptionConfig{
-					AutoGenerationType: "ON",
+					AutoTranscriptionGeneration: "ON",
 				}
 			}
 
 			if input.Config.ArtifactConfig.EnableSmartNotes {
 				artifactConfig.SmartNotesConfig = &meet.SmartNotesConfig{
-					AutoGenerationType: "ON",
+					AutoSmartNotesGeneration: "ON",
 				}
 			}
 
@@ -438,33 +438,33 @@ func (c *Client) UpdateSpaceConfig(spaceName string, input SpaceConfigInput) (*S
 		// Update recording config
 		if input.ArtifactConfig.EnableRecording {
 			existing.Config.ArtifactConfig.RecordingConfig = &meet.RecordingConfig{
-				AutoGenerationType: "ON",
+				AutoRecordingGeneration: "ON",
 			}
 		} else {
 			existing.Config.ArtifactConfig.RecordingConfig = &meet.RecordingConfig{
-				AutoGenerationType: "OFF",
+				AutoRecordingGeneration: "OFF",
 			}
 		}
 
 		// Update transcription config
 		if input.ArtifactConfig.EnableTranscription {
 			existing.Config.ArtifactConfig.TranscriptionConfig = &meet.TranscriptionConfig{
-				AutoGenerationType: "ON",
+				AutoTranscriptionGeneration: "ON",
 			}
 		} else {
 			existing.Config.ArtifactConfig.TranscriptionConfig = &meet.TranscriptionConfig{
-				AutoGenerationType: "OFF",
+				AutoTranscriptionGeneration: "OFF",
 			}
 		}
 
 		// Update smart notes config
 		if input.ArtifactConfig.EnableSmartNotes {
 			existing.Config.ArtifactConfig.SmartNotesConfig = &meet.SmartNotesConfig{
-				AutoGenerationType: "ON",
+				AutoSmartNotesGeneration: "ON",
 			}
 		} else {
 			existing.Config.ArtifactConfig.SmartNotesConfig = &meet.SmartNotesConfig{
-				AutoGenerationType: "OFF",
+				AutoSmartNotesGeneration: "OFF",
 			}
 		}
 	}
@@ -481,10 +481,14 @@ func (c *Client) UpdateSpaceConfig(spaceName string, input SpaceConfigInput) (*S
 // toSpace converts a Meet API Space to our Space type
 func toSpace(s *meet.Space) *Space {
 	space := &Space{
-		Name:             s.Name,
-		MeetingURI:       s.MeetingUri,
-		MeetingCode:      s.MeetingCode,
-		ActiveConference: s.ActiveConference,
+		Name:        s.Name,
+		MeetingURI:  s.MeetingUri,
+		MeetingCode: s.MeetingCode,
+	}
+
+	// Extract ActiveConference record name if present
+	if s.ActiveConference != nil {
+		space.ActiveConference = s.ActiveConference.ConferenceRecord
 	}
 
 	if s.Config != nil {
@@ -498,19 +502,19 @@ func toSpace(s *meet.Space) *Space {
 
 			if s.Config.ArtifactConfig.RecordingConfig != nil {
 				artifactConfig.RecordingConfig = &ArtifactGenerationConfig{
-					Enabled: s.Config.ArtifactConfig.RecordingConfig.AutoGenerationType == "ON",
+					Enabled: s.Config.ArtifactConfig.RecordingConfig.AutoRecordingGeneration == "ON",
 				}
 			}
 
 			if s.Config.ArtifactConfig.TranscriptionConfig != nil {
 				artifactConfig.TranscriptionConfig = &ArtifactGenerationConfig{
-					Enabled: s.Config.ArtifactConfig.TranscriptionConfig.AutoGenerationType == "ON",
+					Enabled: s.Config.ArtifactConfig.TranscriptionConfig.AutoTranscriptionGeneration == "ON",
 				}
 			}
 
 			if s.Config.ArtifactConfig.SmartNotesConfig != nil {
 				artifactConfig.SmartNotesConfig = &ArtifactGenerationConfig{
-					Enabled: s.Config.ArtifactConfig.SmartNotesConfig.AutoGenerationType == "ON",
+					Enabled: s.Config.ArtifactConfig.SmartNotesConfig.AutoSmartNotesGeneration == "ON",
 				}
 			}
 

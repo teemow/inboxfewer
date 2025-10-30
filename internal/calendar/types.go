@@ -86,6 +86,11 @@ type AvailableSlot struct {
 
 // toEventSummary converts a Google Calendar event to an EventSummary
 func toEventSummary(event *calendar.Event) EventSummary {
+	// Handle nil event
+	if event == nil {
+		return EventSummary{}
+	}
+
 	summary := EventSummary{
 		ID:          event.Id,
 		Summary:     event.Summary,
@@ -155,6 +160,11 @@ func toEventSummary(event *calendar.Event) EventSummary {
 
 // toCalendarInfo converts a Google Calendar list entry to CalendarInfo
 func toCalendarInfo(entry *calendar.CalendarListEntry) CalendarInfo {
+	// Handle nil entry
+	if entry == nil {
+		return CalendarInfo{}
+	}
+
 	return CalendarInfo{
 		ID:          entry.Id,
 		Summary:     entry.Summary,
