@@ -3,7 +3,6 @@ package google
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -21,7 +20,7 @@ import (
 func HasToken() bool {
 	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
 	tokenFile := filepath.Join(cacheDir, "google.token")
-	_, err := ioutil.ReadFile(tokenFile)
+	_, err := os.ReadFile(tokenFile)
 	return err == nil
 }
 
@@ -48,7 +47,7 @@ func SaveToken(ctx context.Context, authCode string) error {
 	}
 
 	tokenData := t.AccessToken + " " + t.RefreshToken
-	if err := ioutil.WriteFile(tokenFile, []byte(tokenData), 0600); err != nil {
+	if err := os.WriteFile(tokenFile, []byte(tokenData), 0600); err != nil {
 		return fmt.Errorf("failed to write token file: %w", err)
 	}
 
@@ -82,7 +81,7 @@ func GetTokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
 	tokenFile := filepath.Join(cacheDir, "google.token")
 
-	slurp, err := ioutil.ReadFile(tokenFile)
+	slurp, err := os.ReadFile(tokenFile)
 	if err != nil {
 		return nil, fmt.Errorf("no valid Google OAuth token found")
 	}
