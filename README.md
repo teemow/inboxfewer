@@ -5,7 +5,7 @@ Archives Gmail threads for closed GitHub issues and pull requests.
 ## Features
 
 - **Gmail Integration**: Automatically archives emails related to closed GitHub issues and PRs
-- **Google Docs Integration**: Extract and retrieve Google Docs content from email messages
+- **Google Docs Integration**: Extract and retrieve Google Docs content from email messages, with full support for multi-tab documents (Oct 2024 feature)
 - **MCP Server**: Provides Model Context Protocol server for AI assistant integration
 - **Multiple Transports**: Supports stdio, SSE, and streamable HTTP transports
 - **Flexible Usage**: Can run as a CLI tool or as an MCP server
@@ -210,11 +210,11 @@ Get Google Docs content by document ID.
 - `documentId` (required): The ID of the Google Doc (extracted from URL)
 - `format` (optional): Output format - 'markdown' (default), 'text', or 'json'
 
-**Returns:** Document content in the specified format. Markdown format preserves headings, lists, formatting, and links.
+**Returns:** Document content in the specified format. Markdown format preserves headings, lists, formatting, and links. **Fully supports documents with multiple tabs** (introduced October 2024) - all tabs and nested child tabs are automatically fetched and included in the output.
 
 **OAuth:** Uses the unified Google OAuth token (see Configuration section above). If not already authenticated, you'll be prompted to authorize access.
 
-**Use Case:** Retrieve the actual content of Google Meet notes, shared documents, or any Google Doc accessible to your account.
+**Use Case:** Retrieve the actual content of Google Meet notes, shared documents, or any Google Doc accessible to your account. Works seamlessly with both legacy single-tab documents and new multi-tab documents.
 
 #### `docs_get_document_metadata`
 Get metadata about a Google Doc or Drive file.

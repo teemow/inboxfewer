@@ -59,12 +59,15 @@ func NewClient(ctx context.Context) (*Client, error) {
 }
 
 // GetDocument retrieves a Google Doc's content by document ID
+// This method automatically fetches all tabs to support documents with multiple tabs (introduced Oct 2024)
 func (c *Client) GetDocument(documentID string) (*docs.Document, error) {
 	if documentID == "" {
 		return nil, fmt.Errorf("documentID is required")
 	}
 
-	doc, err := c.docsService.Documents.Get(documentID).Do()
+	// Use includeTabsContent=true to fetch all tabs in documents that have them
+	// This returns document.tabs populated for multi-tab docs, or document.body for legacy docs
+	doc, err := c.docsService.Documents.Get(documentID).IncludeTabsContent(true).Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get document %s: %w", documentID, err)
 	}

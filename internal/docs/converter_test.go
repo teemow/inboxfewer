@@ -327,6 +327,399 @@ func TestDocumentToPlainText(t *testing.T) {
 	}
 }
 
+func TestDocumentToMarkdown_WithTabs(t *testing.T) {
+	tests := []struct {
+		name     string
+		doc      *docs.Document
+		expected string
+		wantErr  bool
+	}{
+		{
+			name: "Document with single tab",
+			doc: &docs.Document{
+				Title: "Tabbed Document",
+				Tabs: []*docs.Tab{
+					{
+						TabProperties: &docs.TabProperties{
+							Title: "First Tab",
+						},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "Content in first tab.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: "# Tabbed Document\n\n## Tab: First Tab\n\nContent in first tab.\n\n\n",
+		},
+		{
+			name: "Document with multiple tabs",
+			doc: &docs.Document{
+				Title: "Multi-Tab Document",
+				Tabs: []*docs.Tab{
+					{
+						TabProperties: &docs.TabProperties{
+							Title: "Tab One",
+						},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "First tab content.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						TabProperties: &docs.TabProperties{
+							Title: "Tab Two",
+						},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "Second tab content.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: "# Multi-Tab Document\n\n## Tab: Tab One\n\nFirst tab content.\n\n\n## Tab: Tab Two\n\nSecond tab content.\n\n\n",
+		},
+		{
+			name: "Document with child tabs",
+			doc: &docs.Document{
+				Title: "Nested Tabs Document",
+				Tabs: []*docs.Tab{
+					{
+						TabProperties: &docs.TabProperties{
+							Title: "Parent Tab",
+						},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "Parent content.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						ChildTabs: []*docs.Tab{
+							{
+								TabProperties: &docs.TabProperties{
+									Title: "Child Tab",
+								},
+								DocumentTab: &docs.DocumentTab{
+									Body: &docs.Body{
+										Content: []*docs.StructuralElement{
+											{
+												Paragraph: &docs.Paragraph{
+													Elements: []*docs.ParagraphElement{
+														{
+															TextRun: &docs.TextRun{
+																Content: "Child content.\n",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: "# Nested Tabs Document\n\n## Tab: Parent Tab\n\nParent content.\n\n\n### Child Tab\n\nChild content.\n\n\n",
+		},
+		{
+			name: "Document with tab without title",
+			doc: &docs.Document{
+				Title: "Untitled Tab Document",
+				Tabs: []*docs.Tab{
+					{
+						TabProperties: &docs.TabProperties{
+							Title: "First Tab",
+						},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "First.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						TabProperties: &docs.TabProperties{},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "Second.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: "# Untitled Tab Document\n\n## Tab: First Tab\n\nFirst.\n\n\n## Tab 2\n\nSecond.\n\n\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := DocumentToMarkdown(tt.doc)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("DocumentToMarkdown() expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("DocumentToMarkdown() unexpected error: %v", err)
+				return
+			}
+
+			if result != tt.expected {
+				t.Errorf("DocumentToMarkdown() =\n%q\nwant:\n%q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestDocumentToPlainText_WithTabs(t *testing.T) {
+	tests := []struct {
+		name     string
+		doc      *docs.Document
+		expected string
+		wantErr  bool
+	}{
+		{
+			name: "Tabbed document with single tab",
+			doc: &docs.Document{
+				Title: "Tabbed Document",
+				Tabs: []*docs.Tab{
+					{
+						TabProperties: &docs.TabProperties{
+							Title: "First Tab",
+						},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "Content in first tab.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: "Tabbed Document\n\n=== First Tab ===\n\nContent in first tab.\n\n",
+		},
+		{
+			name: "Tabbed document with multiple tabs",
+			doc: &docs.Document{
+				Title: "Multi-Tab Document",
+				Tabs: []*docs.Tab{
+					{
+						TabProperties: &docs.TabProperties{
+							Title: "Tab One",
+						},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "First tab content.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						TabProperties: &docs.TabProperties{
+							Title: "Tab Two",
+						},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "Second tab content.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: "Multi-Tab Document\n\n=== Tab One ===\n\nFirst tab content.\n\n=== Tab Two ===\n\nSecond tab content.\n\n",
+		},
+		{
+			name: "Tabbed document with child tabs",
+			doc: &docs.Document{
+				Title: "Nested Tabs",
+				Tabs: []*docs.Tab{
+					{
+						TabProperties: &docs.TabProperties{
+							Title: "Parent",
+						},
+						DocumentTab: &docs.DocumentTab{
+							Body: &docs.Body{
+								Content: []*docs.StructuralElement{
+									{
+										Paragraph: &docs.Paragraph{
+											Elements: []*docs.ParagraphElement{
+												{
+													TextRun: &docs.TextRun{
+														Content: "Parent content.\n",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						ChildTabs: []*docs.Tab{
+							{
+								TabProperties: &docs.TabProperties{
+									Title: "Child",
+								},
+								DocumentTab: &docs.DocumentTab{
+									Body: &docs.Body{
+										Content: []*docs.StructuralElement{
+											{
+												Paragraph: &docs.Paragraph{
+													Elements: []*docs.ParagraphElement{
+														{
+															TextRun: &docs.TextRun{
+																Content: "Child content.\n",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: "Nested Tabs\n\n=== Parent ===\n\nParent content.\n  --- Child ---\n\nChild content.\n\n\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := DocumentToPlainText(tt.doc)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("DocumentToPlainText() expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("DocumentToPlainText() unexpected error: %v", err)
+				return
+			}
+
+			if result != tt.expected {
+				t.Errorf("DocumentToPlainText() =\n%q\nwant:\n%q", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestProcessTable(t *testing.T) {
 	table := &docs.Table{
 		TableRows: []*docs.TableRow{

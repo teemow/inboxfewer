@@ -8,6 +8,7 @@ import (
 )
 
 // DocumentToMarkdown converts a Google Doc to Markdown format
+// Supports both legacy documents (with doc.Body) and new tabbed documents (with doc.Tabs)
 func DocumentToMarkdown(doc *docs.Document) (string, error) {
 	if doc == nil {
 		return "", fmt.Errorf("document is nil")
@@ -22,10 +23,82 @@ func DocumentToMarkdown(doc *docs.Document) (string, error) {
 		md.WriteString("\n\n")
 	}
 
-	// Process document body
-	if doc.Body != nil && doc.Body.Content != nil {
-		for _, element := range doc.Body.Content {
-			processStructuralElement(&md, element)
+	// Check if document uses the new tabs structure
+	if doc.Tabs != nil && len(doc.Tabs) > 0 {
+		// Process tabbed document - iterate through all tabs
+		for tabIndex, tab := range doc.Tabs {
+			if tab.TabProperties != nil && tab.TabProperties.Title != "" {
+				// Add tab title as H2
+				md.WriteString("## Tab: ")
+				md.WriteString(tab.TabProperties.Title)
+				md.WriteString("\n\n")
+			} else if tabIndex > 0 {
+				// For tabs without explicit titles, add a separator
+				md.WriteString("## Tab ")
+				md.WriteString(fmt.Sprintf("%d", tabIndex+1))
+				md.WriteString("\n\n")
+			}
+
+			// Process tab content
+			if tab.DocumentTab != nil && tab.DocumentTab.Body != nil && tab.DocumentTab.Body.Content != nil {
+				for _, element := range tab.DocumentTab.Body.Content {
+					processStructuralElement(&md, element)
+				}
+			}
+
+			// Process child tabs recursively if they exist
+			if tab.ChildTabs != nil && len(tab.ChildTabs) > 0 {
+				childMd, err := processChildTabs(tab.ChildTabs, 3) // Start at H3 for child tabs
+				if err != nil {
+					return "", fmt.Errorf("failed to process child tabs: %w", err)
+				}
+				md.WriteString(childMd)
+			}
+		}
+	} else {
+		// Process legacy document body
+		if doc.Body != nil && doc.Body.Content != nil {
+			for _, element := range doc.Body.Content {
+				processStructuralElement(&md, element)
+			}
+		}
+	}
+
+	return md.String(), nil
+}
+
+// processChildTabs recursively processes child tabs
+func processChildTabs(tabs []*docs.Tab, headingLevel int) (string, error) {
+	var md strings.Builder
+
+	for tabIndex, tab := range tabs {
+		if tab.TabProperties != nil && tab.TabProperties.Title != "" {
+			// Add child tab title with appropriate heading level
+			md.WriteString(strings.Repeat("#", headingLevel))
+			md.WriteString(" ")
+			md.WriteString(tab.TabProperties.Title)
+			md.WriteString("\n\n")
+		} else {
+			md.WriteString(strings.Repeat("#", headingLevel))
+			md.WriteString(" Subtab ")
+			md.WriteString(fmt.Sprintf("%d", tabIndex+1))
+			md.WriteString("\n\n")
+		}
+
+		// Process child tab content
+		if tab.DocumentTab != nil && tab.DocumentTab.Body != nil && tab.DocumentTab.Body.Content != nil {
+			for _, element := range tab.DocumentTab.Body.Content {
+				processStructuralElement(&md, element)
+			}
+		}
+
+		// Recursively process nested child tabs
+		if tab.ChildTabs != nil && len(tab.ChildTabs) > 0 {
+			childMd, err := processChildTabs(tab.ChildTabs, headingLevel+1)
+			if err != nil {
+				return "", err
+			}
+			md.WriteString(childMd)
 		}
 	}
 
@@ -33,6 +106,7 @@ func DocumentToMarkdown(doc *docs.Document) (string, error) {
 }
 
 // DocumentToPlainText extracts plain text from a Google Doc
+// Supports both legacy documents (with doc.Body) and new tabbed documents (with doc.Tabs)
 func DocumentToPlainText(doc *docs.Document) (string, error) {
 	if doc == nil {
 		return "", fmt.Errorf("document is nil")
@@ -46,14 +120,77 @@ func DocumentToPlainText(doc *docs.Document) (string, error) {
 		text.WriteString("\n\n")
 	}
 
-	// Process document body
-	if doc.Body != nil && doc.Body.Content != nil {
-		for _, element := range doc.Body.Content {
-			extractPlainText(&text, element)
+	// Check if document uses the new tabs structure
+	if doc.Tabs != nil && len(doc.Tabs) > 0 {
+		// Process tabbed document - iterate through all tabs
+		for tabIndex, tab := range doc.Tabs {
+			if tab.TabProperties != nil && tab.TabProperties.Title != "" {
+				// Add tab title
+				text.WriteString("=== ")
+				text.WriteString(tab.TabProperties.Title)
+				text.WriteString(" ===\n\n")
+			} else if tabIndex > 0 {
+				text.WriteString(fmt.Sprintf("=== Tab %d ===\n\n", tabIndex+1))
+			}
+
+			// Process tab content
+			if tab.DocumentTab != nil && tab.DocumentTab.Body != nil && tab.DocumentTab.Body.Content != nil {
+				for _, element := range tab.DocumentTab.Body.Content {
+					extractPlainText(&text, element)
+				}
+			}
+
+			// Process child tabs recursively if they exist
+			if tab.ChildTabs != nil && len(tab.ChildTabs) > 0 {
+				childText := extractChildTabsText(tab.ChildTabs, 1)
+				text.WriteString(childText)
+			}
+
+			text.WriteString("\n")
+		}
+	} else {
+		// Process legacy document body
+		if doc.Body != nil && doc.Body.Content != nil {
+			for _, element := range doc.Body.Content {
+				extractPlainText(&text, element)
+			}
 		}
 	}
 
 	return text.String(), nil
+}
+
+// extractChildTabsText recursively extracts text from child tabs
+func extractChildTabsText(tabs []*docs.Tab, level int) string {
+	var text strings.Builder
+
+	for tabIndex, tab := range tabs {
+		if tab.TabProperties != nil && tab.TabProperties.Title != "" {
+			text.WriteString(strings.Repeat("  ", level))
+			text.WriteString("--- ")
+			text.WriteString(tab.TabProperties.Title)
+			text.WriteString(" ---\n\n")
+		} else {
+			text.WriteString(strings.Repeat("  ", level))
+			text.WriteString(fmt.Sprintf("--- Subtab %d ---\n\n", tabIndex+1))
+		}
+
+		// Process child tab content
+		if tab.DocumentTab != nil && tab.DocumentTab.Body != nil && tab.DocumentTab.Body.Content != nil {
+			for _, element := range tab.DocumentTab.Body.Content {
+				extractPlainText(&text, element)
+			}
+		}
+
+		// Recursively process nested child tabs
+		if tab.ChildTabs != nil && len(tab.ChildTabs) > 0 {
+			text.WriteString(extractChildTabsText(tab.ChildTabs, level+1))
+		}
+
+		text.WriteString("\n")
+	}
+
+	return text.String()
 }
 
 // processStructuralElement processes a structural element and converts it to Markdown
