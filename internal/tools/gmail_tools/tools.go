@@ -19,6 +19,16 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 		return fmt.Errorf("failed to register attachment tools: %w", err)
 	}
 
+	// Register contact tools
+	if err := RegisterContactTools(s, sc); err != nil {
+		return fmt.Errorf("failed to register contact tools: %w", err)
+	}
+
+	// Register email tools
+	if err := RegisterEmailTools(s, sc); err != nil {
+		return fmt.Errorf("failed to register email tools: %w", err)
+	}
+
 	// List threads tool
 	listThreadsTool := mcp.NewTool("gmail_list_threads",
 		mcp.WithDescription("List Gmail threads matching a query"),
