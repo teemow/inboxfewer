@@ -21,34 +21,56 @@ import (
 type Client struct {
 	svc       *gmail.UsersService
 	peopleSvc *people.Service
+	account   string // The account this client is associated with
 }
 
-// HasToken checks if a valid OAuth token exists
+// Account returns the account name this client is associated with
+func (c *Client) Account() string {
+	return c.account
+}
+
+// HasTokenForAccount checks if a valid OAuth token exists for the specified account
+func HasTokenForAccount(account string) bool {
+	return google.HasTokenForAccount(account)
+}
+
+// HasToken checks if a valid OAuth token exists for the default account
 func HasToken() bool {
 	return google.HasToken()
 }
 
-// GetAuthURL returns the OAuth URL for user authorization
+// GetAuthURLForAccount returns the OAuth URL for user authorization for a specific account
+func GetAuthURLForAccount(account string) string {
+	return google.GetAuthURLForAccount(account)
+}
+
+// GetAuthURL returns the OAuth URL for user authorization for the default account
 func GetAuthURL() string {
 	return google.GetAuthURL()
 }
 
-// SaveToken exchanges an authorization code for tokens and saves them
+// SaveTokenForAccount exchanges an authorization code for tokens and saves them for a specific account
+func SaveTokenForAccount(ctx context.Context, account string, authCode string) error {
+	return google.SaveTokenForAccount(ctx, account, authCode)
+}
+
+// SaveToken exchanges an authorization code for tokens and saves them for the default account
 func SaveToken(ctx context.Context, authCode string) error {
 	return google.SaveToken(ctx, authCode)
 }
 
-// NewClient creates a new Gmail client with OAuth2 authentication
+// NewClientForAccount creates a new Gmail client with OAuth2 authentication for a specific account
 // For CLI usage, it will prompt for auth code via stdin if no token exists
 // For MCP usage, it will return an error if no token exists
-func NewClient(ctx context.Context) (*Client, error) {
+func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
 	// Try to get existing token
-	client, err := google.GetHTTPClient(ctx)
+	client, err := google.GetHTTPClientForAccount(ctx, account)
 	if err != nil {
 		// Check if we're in a terminal (CLI mode)
 		if isTerminal() {
-			authURL := google.GetAuthURL()
+			authURL := google.GetAuthURLForAccount(account)
 			log.Printf("Go to %v", authURL)
+			log.Printf("Authorizing for account: %s", account)
 			io.WriteString(os.Stdout, "Enter code> ")
 
 			bs := bufio.NewScanner(os.Stdin)
@@ -56,17 +78,17 @@ func NewClient(ctx context.Context) (*Client, error) {
 				return nil, io.EOF
 			}
 			code := bs.Text()
-			if err := google.SaveToken(ctx, code); err != nil {
+			if err := google.SaveTokenForAccount(ctx, account, code); err != nil {
 				return nil, err
 			}
 			// Try again with the new token
-			client, err = google.GetHTTPClient(ctx)
+			client, err = google.GetHTTPClientForAccount(ctx, account)
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			// MCP mode - return error with instructions
-			return nil, fmt.Errorf("no valid Google OAuth token found. Use gmail_get_auth_url and gmail_save_auth_code tools to authenticate")
+			return nil, fmt.Errorf("no valid Google OAuth token found for account %s. Use google_get_auth_url and google_save_auth_code tools to authenticate", account)
 		}
 	}
 
@@ -83,7 +105,15 @@ func NewClient(ctx context.Context) (*Client, error) {
 	return &Client{
 		svc:       svc.Users,
 		peopleSvc: peopleSvc,
+		account:   account,
 	}, nil
+}
+
+// NewClient creates a new Gmail client with OAuth2 authentication for the default account
+// For CLI usage, it will prompt for auth code via stdin if no token exists
+// For MCP usage, it will return an error if no token exists
+func NewClient(ctx context.Context) (*Client, error) {
+	return NewClientForAccount(ctx, "default")
 }
 
 // ArchiveThread archives a thread by removing the INBOX label

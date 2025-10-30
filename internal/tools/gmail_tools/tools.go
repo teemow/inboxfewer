@@ -12,6 +12,15 @@ import (
 	"github.com/teemow/inboxfewer/internal/server"
 )
 
+// getAccountFromArgs extracts the account name from request arguments, defaulting to "default"
+func getAccountFromArgs(args map[string]interface{}) string {
+	account := "default"
+	if accountVal, ok := args["account"].(string); ok && accountVal != "" {
+		account = accountVal
+	}
+	return account
+}
+
 // RegisterGmailTools registers all Gmail-related tools with the MCP server
 func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 	// Register attachment tools
@@ -32,6 +41,9 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 	// List threads tool
 	listThreadsTool := mcp.NewTool("gmail_list_threads",
 		mcp.WithDescription("List Gmail threads matching a query"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("query",
 			mcp.Required(),
 			mcp.Description("Gmail search query (e.g., 'in:inbox', 'from:user@example.com')"),
@@ -48,6 +60,9 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 	// Archive thread tool
 	archiveThreadTool := mcp.NewTool("gmail_archive_thread",
 		mcp.WithDescription("Archive a Gmail thread by removing it from the inbox"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("threadId",
 			mcp.Required(),
 			mcp.Description("The ID of the thread to archive"),
@@ -61,6 +76,9 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 	// Classify thread tool
 	classifyThreadTool := mcp.NewTool("gmail_classify_thread",
 		mcp.WithDescription("Classify a Gmail thread to determine if it's related to GitHub issues or PRs"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("threadId",
 			mcp.Required(),
 			mcp.Description("The ID of the thread to classify"),
@@ -74,6 +92,9 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 	// Check stale tool
 	checkStaleTool := mcp.NewTool("gmail_check_stale",
 		mcp.WithDescription("Check if a Gmail thread is stale (GitHub issue/PR is closed)"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("threadId",
 			mcp.Required(),
 			mcp.Description("The ID of the thread to check"),
@@ -87,6 +108,9 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 	// Archive stale threads tool
 	archiveStaleTool := mcp.NewTool("gmail_archive_stale_threads",
 		mcp.WithDescription("Archive all Gmail threads in inbox that are related to closed GitHub issues/PRs"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("query",
 			mcp.Description("Gmail search query (default: 'in:inbox')"),
 		),
@@ -102,6 +126,9 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 func handleListThreads(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 
+	// Get account name
+	account := getAccountFromArgs(args)
+
 	query, ok := args["query"].(string)
 	if !ok || query == "" {
 		return mcp.NewToolResultError("query is required"), nil
@@ -114,13 +141,13 @@ func handleListThreads(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		}
 	}
 
-	// Get or create Gmail client
-	client := sc.GmailClient()
+	// Get or create Gmail client for the specified account
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		// Check if token exists before trying to create client
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:
    %s
@@ -130,18 +157,18 @@ func handleListThreads(ctx context.Context, request mcp.CallToolRequest, sc *ser
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
 
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client for account %s: %v", account, err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	threads, err := client.ListThreads(query, maxResults)
@@ -159,18 +186,19 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 
 func handleArchiveThread(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
+	account := getAccountFromArgs(args)
 
 	threadID, ok := args["threadId"].(string)
 	if !ok || threadID == "" {
 		return mcp.NewToolResultError("threadId is required"), nil
 	}
 
-	// Get or create Gmail client
-	client := sc.GmailClient()
+	// Get or create Gmail client for the specified account
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:
    %s
@@ -180,18 +208,18 @@ func handleArchiveThread(ctx context.Context, request mcp.CallToolRequest, sc *s
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
 
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client for account %s: %v", account, err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	if err := client.ArchiveThread(threadID); err != nil {
@@ -203,18 +231,19 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 
 func handleClassifyThread(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
+	account := getAccountFromArgs(args)
 
 	threadID, ok := args["threadId"].(string)
 	if !ok || threadID == "" {
 		return mcp.NewToolResultError("threadId is required"), nil
 	}
 
-	// Get or create Gmail client
-	client := sc.GmailClient()
+	// Get or create Gmail client for the specified account
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:
    %s
@@ -224,18 +253,18 @@ func handleClassifyThread(ctx context.Context, request mcp.CallToolRequest, sc *
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
 
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client for account %s: %v", account, err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	thread := &gmail_v1.Thread{Id: threadID}
@@ -253,18 +282,19 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 
 func handleCheckStale(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
+	account := getAccountFromArgs(args)
 
 	threadID, ok := args["threadId"].(string)
 	if !ok || threadID == "" {
 		return mcp.NewToolResultError("threadId is required"), nil
 	}
 
-	// Get or create Gmail client
-	client := sc.GmailClient()
+	// Get or create Gmail client for the specified account
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:
    %s
@@ -274,18 +304,18 @@ func handleCheckStale(ctx context.Context, request mcp.CallToolRequest, sc *serv
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
 
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client for account %s: %v", account, err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	thread := &gmail_v1.Thread{Id: threadID}
@@ -312,18 +342,19 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 
 func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
+	account := getAccountFromArgs(args)
 
 	query := "in:inbox"
 	if queryVal, ok := args["query"].(string); ok && queryVal != "" {
 		query = queryVal
 	}
 
-	// Get or create Gmail client
-	client := sc.GmailClient()
+	// Get or create Gmail client for the specified account
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:
    %s
@@ -333,18 +364,18 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
 
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client for account %s: %v", account, err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	archived := 0

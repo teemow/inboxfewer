@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"log"
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/teemow/inboxfewer/internal/google"
 )
 
 // rootCmd represents the base command for the inboxfewer application
@@ -30,6 +33,11 @@ func SetVersion(v string) {
 
 // Execute is the main entry point for the CLI application
 func Execute() {
+	// Migrate old token format to new multi-account format
+	if err := google.MigrateDefaultToken(); err != nil {
+		log.Printf("Warning: failed to migrate token: %v", err)
+	}
+
 	rootCmd.SetVersionTemplate(`{{printf "inboxfewer version %s\n" .Version}}`)
 
 	// If no subcommand is provided, run the cleanup command by default
