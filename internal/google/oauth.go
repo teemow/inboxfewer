@@ -14,7 +14,9 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	calendar "google.golang.org/api/calendar/v3"
 	gmail "google.golang.org/api/gmail/v1"
+	meet "google.golang.org/api/meet/v2"
 )
 
 const defaultAccount = "default"
@@ -136,6 +138,9 @@ func getOAuthConfig() *oauth2.Config {
 			"https://www.googleapis.com/auth/contacts.readonly",       // Google Contacts access
 			"https://www.googleapis.com/auth/contacts.other.readonly", // Other contacts (interaction history)
 			"https://www.googleapis.com/auth/directory.readonly",      // Directory contacts (Workspace)
+			calendar.CalendarScope,                                    // Google Calendar access (read/write)
+			meet.MeetingsSpaceReadonlyScope,                           // Google Meet access (read-only artifacts)
+			"https://www.googleapis.com/auth/meetings.space.settings", // Google Meet settings (configure spaces)
 		},
 	}
 }

@@ -13,9 +13,11 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/calendar_tools"
 	"github.com/teemow/inboxfewer/internal/tools/docs_tools"
 	"github.com/teemow/inboxfewer/internal/tools/gmail_tools"
 	"github.com/teemow/inboxfewer/internal/tools/google_tools"
+	"github.com/teemow/inboxfewer/internal/tools/meet_tools"
 )
 
 func newServeCmd() *cobra.Command {
@@ -89,6 +91,16 @@ func runServe(transport string, debugMode bool, httpAddr string) error {
 	// Register Docs tools
 	if err := docs_tools.RegisterDocsTools(mcpSrv, serverContext); err != nil {
 		return fmt.Errorf("failed to register Docs tools: %w", err)
+	}
+
+	// Register Calendar tools
+	if err := calendar_tools.RegisterCalendarTools(mcpSrv, serverContext); err != nil {
+		return fmt.Errorf("failed to register Calendar tools: %w", err)
+	}
+
+	// Register Meet tools
+	if err := meet_tools.RegisterMeetTools(mcpSrv, serverContext); err != nil {
+		return fmt.Errorf("failed to register Meet tools: %w", err)
 	}
 
 	// Start the appropriate server based on transport type

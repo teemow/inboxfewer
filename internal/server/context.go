@@ -5,20 +5,24 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/teemow/inboxfewer/internal/calendar"
 	"github.com/teemow/inboxfewer/internal/docs"
 	"github.com/teemow/inboxfewer/internal/gmail"
+	"github.com/teemow/inboxfewer/internal/meet"
 )
 
 // ServerContext holds the context for the MCP server
 type ServerContext struct {
-	ctx          context.Context
-	cancel       context.CancelFunc
-	gmailClients map[string]*gmail.Client // Maps account name to Gmail client
-	docsClients  map[string]*docs.Client  // Maps account name to Docs client
-	githubUser   string
-	githubToken  string
-	mu           sync.RWMutex
-	shutdown     bool
+	ctx             context.Context
+	cancel          context.CancelFunc
+	gmailClients    map[string]*gmail.Client    // Maps account name to Gmail client
+	docsClients     map[string]*docs.Client     // Maps account name to Docs client
+	calendarClients map[string]*calendar.Client // Maps account name to Calendar client
+	meetClients     map[string]*meet.Client     // Maps account name to Meet client
+	githubUser      string
+	githubToken     string
+	mu              sync.RWMutex
+	shutdown        bool
 }
 
 // NewServerContext creates a new server context
@@ -28,6 +32,8 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 	// Initialize client maps
 	gmailClients := make(map[string]*gmail.Client)
 	docsClients := make(map[string]*docs.Client)
+	calendarClients := make(map[string]*calendar.Client)
+	meetClients := make(map[string]*meet.Client)
 
 	// Try to create default Gmail client, but don't fail if token is missing
 	// Clients will be lazily initialized when first needed
@@ -42,13 +48,15 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 	}
 
 	return &ServerContext{
-		ctx:          shutdownCtx,
-		cancel:       cancel,
-		gmailClients: gmailClients,
-		docsClients:  docsClients,
-		githubUser:   githubUser,
-		githubToken:  githubToken,
-		shutdown:     false,
+		ctx:             shutdownCtx,
+		cancel:          cancel,
+		gmailClients:    gmailClients,
+		docsClients:     docsClients,
+		calendarClients: calendarClients,
+		meetClients:     meetClients,
+		githubUser:      githubUser,
+		githubToken:     githubToken,
+		shutdown:        false,
 	}, nil
 }
 
@@ -143,6 +151,94 @@ func (sc *ServerContext) SetDocsClientForAccount(account string, client *docs.Cl
 // SetDocsClient sets the Docs client for the default account
 func (sc *ServerContext) SetDocsClient(client *docs.Client) {
 	sc.SetDocsClientForAccount("default", client)
+}
+
+// CalendarClientForAccount returns the Calendar client for a specific account
+// Creates and caches the client if it doesn't exist yet
+// Returns nil if the account has no token
+func (sc *ServerContext) CalendarClientForAccount(account string) *calendar.Client {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	// Check if client already exists
+	if client, ok := sc.calendarClients[account]; ok {
+		return client
+	}
+
+	// Try to create client if token exists
+	if !calendar.HasTokenForAccount(account) {
+		return nil
+	}
+
+	client, err := calendar.NewClientForAccount(sc.ctx, account)
+	if err != nil {
+		fmt.Printf("Warning: failed to create Calendar client for account %s: %v\n", account, err)
+		return nil
+	}
+
+	sc.calendarClients[account] = client
+	return client
+}
+
+// CalendarClient returns the Calendar client for the default account
+func (sc *ServerContext) CalendarClient() *calendar.Client {
+	return sc.CalendarClientForAccount("default")
+}
+
+// SetCalendarClientForAccount sets the Calendar client for a specific account
+func (sc *ServerContext) SetCalendarClientForAccount(account string, client *calendar.Client) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.calendarClients[account] = client
+}
+
+// SetCalendarClient sets the Calendar client for the default account
+func (sc *ServerContext) SetCalendarClient(client *calendar.Client) {
+	sc.SetCalendarClientForAccount("default", client)
+}
+
+// MeetClientForAccount returns the Meet client for a specific account
+// Creates and caches the client if it doesn't exist yet
+// Returns nil if the account has no token
+func (sc *ServerContext) MeetClientForAccount(account string) *meet.Client {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	// Check if client already exists
+	if client, ok := sc.meetClients[account]; ok {
+		return client
+	}
+
+	// Try to create client if token exists
+	if !meet.HasTokenForAccount(account) {
+		return nil
+	}
+
+	client, err := meet.NewClientForAccount(sc.ctx, account)
+	if err != nil {
+		fmt.Printf("Warning: failed to create Meet client for account %s: %v\n", account, err)
+		return nil
+	}
+
+	sc.meetClients[account] = client
+	return client
+}
+
+// MeetClient returns the Meet client for the default account
+func (sc *ServerContext) MeetClient() *meet.Client {
+	return sc.MeetClientForAccount("default")
+}
+
+// SetMeetClientForAccount sets the Meet client for a specific account
+func (sc *ServerContext) SetMeetClientForAccount(account string, client *meet.Client) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.meetClients[account] = client
+}
+
+// SetMeetClient sets the Meet client for the default account
+func (sc *ServerContext) SetMeetClient(client *meet.Client) {
+	sc.SetMeetClientForAccount("default", client)
 }
 
 // GithubUser returns the GitHub username
