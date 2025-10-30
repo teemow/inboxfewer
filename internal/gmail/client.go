@@ -183,13 +183,25 @@ func (c *Client) SearchContacts(query string, pageSize int) ([]*Contact, error) 
 	}
 
 	// 2. Search other contacts (people user has interacted with)
-	// Fetch other contacts and filter by query
-	otherReq := c.peopleSvc.OtherContacts.List().
-		ReadMask("names,emailAddresses,phoneNumbers").
-		PageSize(int64(pageSize * 3)) // Fetch more since we'll filter
+	// Need to paginate through all other contacts since API doesn't support search query
+	pageToken := ""
+	maxPagesToFetch := 10 // Limit to avoid infinite loops, fetches up to 1000 contacts
+	pagesSearched := 0
 
-	otherResp, err := otherReq.Do()
-	if err == nil {
+	for pagesSearched < maxPagesToFetch && len(allContacts) < pageSize*5 {
+		otherReq := c.peopleSvc.OtherContacts.List().
+			ReadMask("names,emailAddresses,phoneNumbers").
+			PageSize(100) // Fetch 100 at a time for efficiency
+
+		if pageToken != "" {
+			otherReq = otherReq.PageToken(pageToken)
+		}
+
+		otherResp, err := otherReq.Do()
+		if err != nil {
+			break // Stop if we hit an error
+		}
+
 		for _, person := range otherResp.OtherContacts {
 			if contact := extractContact(person); contact != nil {
 				// Filter by query
@@ -197,10 +209,21 @@ func (c *Client) SearchContacts(query string, pageSize int) ([]*Contact, error) 
 					if contact.EmailAddress != "" && !seenEmails[contact.EmailAddress] {
 						seenEmails[contact.EmailAddress] = true
 						allContacts = append(allContacts, contact)
+						// Stop if we have enough matches
+						if len(allContacts) >= pageSize*5 {
+							break
+						}
 					}
 				}
 			}
 		}
+
+		// Check if there are more pages
+		pageToken = otherResp.NextPageToken
+		if pageToken == "" {
+			break // No more pages
+		}
+		pagesSearched++
 	}
 
 	// 3. Try to search directory contacts (for Workspace accounts)
