@@ -8,6 +8,7 @@ Archives Gmail threads for closed GitHub issues and pull requests.
 - **Contact Search**: Search for contacts in Google Contacts by name, email, or phone number
 - **Email Sending**: Send emails through Gmail API with support for CC, BCC, and HTML formatting
 - **Google Docs Integration**: Extract and retrieve Google Docs content from email messages, with full support for multi-tab documents (Oct 2024 feature)
+- **Google Calendar Integration**: Full calendar management including event creation, modification, availability checking, and meeting scheduling with Google Meet support
 - **MCP Server**: Provides Model Context Protocol server for AI assistant integration
 - **Multiple Transports**: Supports stdio, SSE, and streamable HTTP transports
 - **Flexible Usage**: Can run as a CLI tool or as an MCP server
@@ -34,11 +35,12 @@ On first run, you'll be prompted to authenticate with Google services (Gmail, Go
 - macOS: `~/Library/Caches/inboxfewer/google-{account}.token`
 - Windows: `%TEMP%/inboxfewer/google-{account}.token`
 
-**Note:** Each OAuth token provides access to Gmail, Google Docs, Google Drive, and Google Contacts APIs with the following scopes:
+**Note:** Each OAuth token provides access to Gmail, Google Docs, Google Drive, Google Contacts, and Google Calendar APIs with the following scopes:
 - Gmail: Read, modify, and send messages
 - Google Docs: Read document content
 - Google Drive: Read file metadata
 - Google Contacts: Read contact information (personal contacts, interaction history, and directory)
+- Google Calendar: Read and write calendar events, check availability, and manage calendars
 
 ### Multi-Account Support
 
@@ -302,6 +304,158 @@ Get metadata about a Google Doc or Drive file.
 
 **Use Case:** Get information about a document without downloading its full content.
 
+### Google Calendar Tools
+
+**Note:** All Google Calendar tools support an optional `account` parameter to specify which Google account to use (default: 'default').
+
+#### `calendar_list_events`
+List/search calendar events within a time range.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `calendarId` (optional): Calendar ID (use 'primary' for primary calendar, default: 'primary')
+- `timeMin` (required): Start time for the range (RFC3339 format, e.g., '2025-01-01T00:00:00Z')
+- `timeMax` (required): End time for the range (RFC3339 format, e.g., '2025-01-31T23:59:59Z')
+- `query` (optional): Search query to filter events
+
+**Returns:** List of events with details including ID, summary, start/end times, location, attendees, and Google Meet link if present.
+
+#### `calendar_get_event`
+Get details of a specific calendar event.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `calendarId` (optional): Calendar ID (use 'primary' for primary calendar, default: 'primary')
+- `eventId` (required): The ID of the event to retrieve
+
+**Returns:** Full event details including description, attendees, status, and conference data.
+
+#### `calendar_create_event`
+Create a new calendar event (supports recurring, out-of-office, and Google Meet).
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `calendarId` (optional): Calendar ID (use 'primary' for primary calendar, default: 'primary')
+- `summary` (required): Event title/summary
+- `description` (optional): Event description
+- `location` (optional): Event location
+- `start` (required): Start time (RFC3339 format, e.g., '2025-01-15T14:00:00Z')
+- `end` (required): End time (RFC3339 format, e.g., '2025-01-15T15:00:00Z')
+- `timeZone` (optional): Time zone (e.g., 'America/New_York'). Defaults to UTC.
+- `attendees` (optional): Comma-separated list of attendee email addresses
+- `recurrence` (optional): Recurrence rule (e.g., 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR')
+- `eventType` (optional): Event type: 'default', 'outOfOffice', 'focusTime', 'workingLocation'
+- `addGoogleMeet` (optional): Automatically add a Google Meet link to the event
+- `guestsCanModify` (optional): Allow guests to modify the event
+- `guestsCanInviteOthers` (optional): Allow guests to invite others
+- `guestsCanSeeOtherGuests` (optional): Allow guests to see other guests
+
+**Returns:** Created event details including ID and Google Meet link if added.
+
+**Use Case:** Create meetings, out-of-office blocks, recurring events, or focus time with full control over guest permissions.
+
+#### `calendar_update_event`
+Update an existing calendar event.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `calendarId` (optional): Calendar ID (use 'primary' for primary calendar, default: 'primary')
+- `eventId` (required): The ID of the event to update
+- `summary` (optional): New event title/summary
+- `description` (optional): New event description
+- `location` (optional): New event location
+- `start` (optional): New start time (RFC3339 format)
+- `end` (optional): New end time (RFC3339 format)
+- `timeZone` (optional): Time zone (e.g., 'America/New_York')
+- `attendees` (optional): New comma-separated list of attendee email addresses
+- `eventType` (optional): New event type
+- `guestsCanModify` (optional): Allow guests to modify the event
+- `guestsCanInviteOthers` (optional): Allow guests to invite others
+- `guestsCanSeeOtherGuests` (optional): Allow guests to see other guests
+
+**Returns:** Updated event details.
+
+**Use Case:** Modify event details, change times, update attendees, or adjust guest permissions.
+
+#### `calendar_delete_event`
+Delete a calendar event.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `calendarId` (optional): Calendar ID (use 'primary' for primary calendar, default: 'primary')
+- `eventId` (required): The ID of the event to delete
+
+**Returns:** Confirmation message.
+
+#### `calendar_extract_docs_links`
+Extract Google Docs/Drive links from a calendar event.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `calendarId` (optional): Calendar ID (use 'primary' for primary calendar, default: 'primary')
+- `eventId` (required): The ID of the event
+
+**Returns:** List of Google Docs/Drive links found in event attachments and description.
+
+**Use Case:** Extract meeting notes, agendas, or documents attached to calendar events.
+
+#### `calendar_get_meet_link`
+Get the Google Meet link from a calendar event.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `calendarId` (optional): Calendar ID (use 'primary' for primary calendar, default: 'primary')
+- `eventId` (required): The ID of the event
+
+**Returns:** Google Meet video conference link if present.
+
+#### `calendar_list_calendars`
+List all calendars accessible to the user.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+
+**Returns:** List of calendars with ID, name, access role, time zone, and primary calendar indication.
+
+**Use Case:** Discover available calendars including shared calendars, team calendars, and room resources.
+
+#### `calendar_get_calendar`
+Get information about a specific calendar.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `calendarId` (required): Calendar ID (use 'primary' for primary calendar)
+
+**Returns:** Calendar information including name, description, time zone, and access permissions.
+
+#### `calendar_query_freebusy`
+Check availability for one or more calendars/attendees in a time range.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `timeMin` (required): Start time for the range (RFC3339 format)
+- `timeMax` (required): End time for the range (RFC3339 format)
+- `calendars` (required): Comma-separated list of calendar IDs or email addresses to check
+
+**Returns:** Free/busy information showing when each calendar has scheduled events.
+
+**Use Case:** Check if colleagues are available before scheduling a meeting.
+
+#### `calendar_find_available_time`
+Find available time slots for scheduling a meeting with one or more attendees.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `attendees` (required): Comma-separated list of attendee email addresses
+- `durationMinutes` (required): Meeting duration in minutes
+- `timeMin` (required): Start time for search range (RFC3339 format)
+- `timeMax` (required): End time for search range (RFC3339 format)
+- `maxResults` (optional): Maximum number of available slots to return (default: 10)
+
+**Returns:** List of available time slots where all attendees are free.
+
+**Use Case:** Automatically find the best meeting times when scheduling with multiple participants.
+
 ### Workflow Examples
 
 #### Extracting Meeting Notes
@@ -334,6 +488,55 @@ gmail_send_email(
   cc: "manager@example.com"
 )
 # Returns: Email sent successfully with message ID
+```
+
+#### Scheduling a Meeting with Multiple Attendees
+
+```bash
+# 1. Find available time slots for all attendees
+calendar_find_available_time(
+  attendees: "alice@example.com, bob@example.com, carol@example.com",
+  durationMinutes: 60,
+  timeMin: "2025-02-01T09:00:00Z",
+  timeMax: "2025-02-01T17:00:00Z"
+)
+# Returns: List of available 1-hour slots
+
+# 2. Create the meeting with Google Meet
+calendar_create_event(
+  summary: "Team Planning Session",
+  start: "2025-02-01T14:00:00Z",
+  end: "2025-02-01T15:00:00Z",
+  attendees: "alice@example.com, bob@example.com, carol@example.com",
+  addGoogleMeet: true,
+  description: "Q1 2025 planning discussion"
+)
+# Returns: Event created with Google Meet link
+
+# 3. Extract the Meet link from the event
+calendar_get_meet_link(calendarId: "primary", eventId: "event123")
+# Returns: https://meet.google.com/abc-defg-hij
+```
+
+#### Managing Out-of-Office and Focus Time
+
+```bash
+# 1. Create an out-of-office block
+calendar_create_event(
+  summary: "Out of Office - Vacation",
+  start: "2025-03-15T00:00:00Z",
+  end: "2025-03-22T00:00:00Z",
+  eventType: "outOfOffice"
+)
+
+# 2. Schedule recurring focus time
+calendar_create_event(
+  summary: "Focus Time - Deep Work",
+  start: "2025-02-03T09:00:00Z",
+  end: "2025-02-03T11:00:00Z",
+  recurrence: "RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR",
+  eventType: "focusTime"
+)
 ```
 
 ## MCP Server Configuration
@@ -469,6 +672,10 @@ inboxfewer/
 │   │   ├── converter.go   # Document to Markdown/text conversion
 │   │   ├── types.go       # Document metadata types
 │   │   └── doc.go         # Package documentation
+│   ├── calendar/          # Google Calendar client and utilities
+│   │   ├── client.go      # Calendar API client
+│   │   ├── types.go       # Event and calendar types
+│   │   └── doc.go         # Package documentation
 │   ├── google/            # Unified Google OAuth2 authentication
 │   │   ├── oauth.go       # OAuth token management for all Google services
 │   │   └── doc.go         # Package documentation
@@ -484,9 +691,15 @@ inboxfewer/
 │       │   ├── tools.go           # Thread tools
 │       │   ├── attachment_tools.go # Attachment tools
 │       │   └── doc.go             # Package documentation
-│       └── docs_tools/    # Google Docs MCP tools
-│           ├── tools.go   # Docs retrieval tools
-│           └── doc.go     # Package documentation
+│       ├── docs_tools/    # Google Docs MCP tools
+│       │   ├── tools.go   # Docs retrieval tools
+│       │   └── doc.go     # Package documentation
+│       └── calendar_tools/ # Google Calendar MCP tools
+│           ├── tools.go            # Tool registration
+│           ├── event_tools.go      # Event management tools
+│           ├── calendar_list_tools.go # Calendar list tools
+│           ├── scheduling_tools.go # Scheduling and availability tools
+│           └── doc.go              # Package documentation
 ├── docs/                  # Documentation
 │   └── debugging.md       # Debugging guide
 ├── scripts/               # Utility scripts
