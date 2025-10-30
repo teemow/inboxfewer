@@ -15,29 +15,50 @@ import (
 type Client struct {
 	docsService  *docs.Service
 	driveService *drive.Service
+	account      string // The account this client is associated with
 }
 
-// HasToken checks if a valid OAuth token exists
+// Account returns the account name this client is associated with
+func (c *Client) Account() string {
+	return c.account
+}
+
+// HasTokenForAccount checks if a valid OAuth token exists for the specified account
+func HasTokenForAccount(account string) bool {
+	return google.HasTokenForAccount(account)
+}
+
+// HasToken checks if a valid OAuth token exists for the default account
 func HasToken() bool {
 	return google.HasToken()
 }
 
-// GetAuthURL returns the OAuth URL for user authorization
+// GetAuthURLForAccount returns the OAuth URL for user authorization for a specific account
+func GetAuthURLForAccount(account string) string {
+	return google.GetAuthURLForAccount(account)
+}
+
+// GetAuthURL returns the OAuth URL for user authorization for the default account
 func GetAuthURL() string {
 	return google.GetAuthURL()
 }
 
-// SaveToken exchanges an authorization code for tokens and saves them
+// SaveTokenForAccount exchanges an authorization code for tokens and saves them for a specific account
+func SaveTokenForAccount(ctx context.Context, account string, authCode string) error {
+	return google.SaveTokenForAccount(ctx, account, authCode)
+}
+
+// SaveToken exchanges an authorization code for tokens and saves them for the default account
 func SaveToken(ctx context.Context, authCode string) error {
 	return google.SaveToken(ctx, authCode)
 }
 
-// NewClient creates a new Google Docs client with OAuth2 authentication
-// Returns an error if no valid token exists - use HasToken() to check first
-func NewClient(ctx context.Context) (*Client, error) {
-	client, err := google.GetHTTPClient(ctx)
+// NewClientForAccount creates a new Google Docs client with OAuth2 authentication for a specific account
+// Returns an error if no valid token exists - use HasTokenForAccount() to check first
+func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
+	client, err := google.GetHTTPClientForAccount(ctx, account)
 	if err != nil {
-		return nil, fmt.Errorf("no valid Google OAuth token found. Please authorize access first: %w", err)
+		return nil, fmt.Errorf("no valid Google OAuth token found for account %s. Please authorize access first: %w", account, err)
 	}
 
 	// Create Docs service
@@ -55,7 +76,14 @@ func NewClient(ctx context.Context) (*Client, error) {
 	return &Client{
 		docsService:  docsService,
 		driveService: driveService,
+		account:      account,
 	}, nil
+}
+
+// NewClient creates a new Google Docs client with OAuth2 authentication for the default account
+// Returns an error if no valid token exists - use HasToken() to check first
+func NewClient(ctx context.Context) (*Client, error) {
+	return NewClientForAccount(ctx, "default")
 }
 
 // GetDocument retrieves a Google Doc's content by document ID

@@ -29,16 +29,24 @@ Create a file at `~/keys/github-inboxfewer.token` with two space-separated value
 
 ### Google Services OAuth
 
-On first run, you'll be prompted to authenticate with Google services (Gmail, Google Docs, Google Drive). A single unified OAuth token is used for all Google services and will be cached at:
-- Linux/Unix: `~/.cache/inboxfewer/google.token`
-- macOS: `~/Library/Caches/inboxfewer/google.token`
-- Windows: `%TEMP%/inboxfewer/google.token`
+On first run, you'll be prompted to authenticate with Google services (Gmail, Google Docs, Google Drive). OAuth tokens are cached per account at:
+- Linux/Unix: `~/.cache/inboxfewer/google-{account}.token`
+- macOS: `~/Library/Caches/inboxfewer/google-{account}.token`
+- Windows: `%TEMP%/inboxfewer/google-{account}.token`
 
-**Note:** The OAuth token provides access to Gmail, Google Docs, Google Drive, and Google Contacts APIs with the following scopes:
+**Note:** Each OAuth token provides access to Gmail, Google Docs, Google Drive, and Google Contacts APIs with the following scopes:
 - Gmail: Read, modify, and send messages
 - Google Docs: Read document content
 - Google Drive: Read file metadata
 - Google Contacts: Read contact information (personal contacts, interaction history, and directory)
+
+### Multi-Account Support
+
+inboxfewer supports managing multiple Google accounts (e.g., work and personal). Each account is identified by a unique name and has its own OAuth token.
+
+**Default Account:** If no account name is specified, the `default` account is used. Existing users' tokens will be automatically migrated to the `default` account on first run.
+
+**Account Names:** Account names must contain only alphanumeric characters, hyphens, and underscores (e.g., `work`, `personal`, `work-email`).
 
 ## Usage
 
@@ -47,11 +55,17 @@ On first run, you'll be prompted to authenticate with Google services (Gmail, Go
 Archive Gmail threads related to closed GitHub issues/PRs:
 
 ```bash
-# Run cleanup (default command)
+# Run cleanup with default account
 inboxfewer
 
 # Or explicitly
 inboxfewer cleanup
+
+# Use a specific account
+inboxfewer cleanup --account work
+
+# Use personal account
+inboxfewer cleanup --account personal
 ```
 
 ### MCP Server Mode
@@ -96,22 +110,45 @@ When running as an MCP server, the following tools are available:
 
 ### OAuth Authentication Flow
 
-Before using any Google services (Gmail, Docs, Drive), you need to authenticate:
+Before using any Google services (Gmail, Docs, Drive), you need to authenticate each account:
 
-1. **Check if authenticated:** The server will automatically check for an existing token
-2. **Get authorization URL:** If not authenticated, use `google_get_auth_url` to get the OAuth URL
+1. **Check if authenticated:** The server will automatically check for an existing token for the specified account
+2. **Get authorization URL:** If not authenticated, use `google_get_auth_url` (optionally with `account` parameter) to get the OAuth URL
 3. **Authorize access:** Visit the URL in your browser and grant permissions
-4. **Save the code:** Copy the authorization code and use `google_save_auth_code` to save it
-5. **Use the tools:** All Google-related tools will now work with the saved token
+4. **Save the code:** Copy the authorization code and use `google_save_auth_code` (with matching `account` parameter) to save it
+5. **Use the tools:** All Google-related tools will now work with the saved token for that account
 
-The token is stored in `~/.cache/inboxfewer/google.token` and provides access to all Google APIs (Gmail, Docs, Drive, Contacts).
+Each token is stored in `~/.cache/inboxfewer/google-{account}.token` and provides access to all Google APIs (Gmail, Docs, Drive, Contacts).
+
+### Multi-Account Support in MCP Tools
+
+All Google-related MCP tools support an optional `account` parameter to specify which Google account to use:
+
+- **Default behavior:** If `account` is not specified, the `default` account is used
+- **Multiple accounts:** You can manage multiple Google accounts (e.g., `work`, `personal`, `company-email`)
+- **Per-tool specification:** Each tool call can use a different account
+
+**Example:**
+```javascript
+// Use default account
+gmail_list_threads({query: "in:inbox"})
+
+// Use work account
+gmail_list_threads({account: "work", query: "in:inbox"})
+
+// Use personal account
+gmail_send_email({account: "personal", to: "friend@example.com", subject: "Hello", body: "Hi!"})
+```
 
 ### Gmail Tools
+
+**Note:** All Gmail tools support an optional `account` parameter to specify which Google account to use (default: 'default').
 
 #### `gmail_list_threads`
 List Gmail threads matching a query.
 
 **Arguments:**
+- `account` (optional): Account name (default: 'default')
 - `query` (required): Gmail search query (e.g., 'in:inbox', 'from:user@example.com')
 - `maxResults` (optional): Maximum number of results (default: 10)
 
@@ -219,28 +256,33 @@ Send an email through Gmail.
 #### `google_get_auth_url`
 Get the OAuth authorization URL for Google services.
 
-**Arguments:** None
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
 
-**Returns:** Authorization URL that the user should visit to grant access to Gmail, Google Docs, and Google Drive.
+**Returns:** Authorization URL that the user should visit to grant access to Gmail, Google Docs, and Google Drive for the specified account.
 
-**Use Case:** When the OAuth token is missing or expired, use this to get the authorization URL. After visiting the URL and authorizing access, use `google_save_auth_code` with the provided code.
+**Use Case:** When the OAuth token is missing or expired for an account, use this to get the authorization URL. After visiting the URL and authorizing access, use `google_save_auth_code` with the same account name and the provided code.
 
 #### `google_save_auth_code`
 Save the OAuth authorization code to complete authentication.
 
 **Arguments:**
+- `account` (optional): Account name (default: 'default')
 - `authCode` (required): The authorization code obtained from the Google OAuth flow
 
-**Returns:** Success message indicating the token has been saved.
+**Returns:** Success message indicating the token has been saved for the specified account.
 
-**Use Case:** After visiting the authorization URL from `google_get_auth_url`, Google provides an authorization code. Pass this code to complete the OAuth flow and save the access token.
+**Use Case:** After visiting the authorization URL from `google_get_auth_url`, Google provides an authorization code. Pass this code (along with the matching account name) to complete the OAuth flow and save the access token.
 
 ### Google Docs Tools
+
+**Note:** All Google Docs tools support an optional `account` parameter to specify which Google account to use (default: 'default').
 
 #### `docs_get_document`
 Get Google Docs content by document ID.
 
 **Arguments:**
+- `account` (optional): Account name (default: 'default')
 - `documentId` (required): The ID of the Google Doc (extracted from URL)
 - `format` (optional): Output format - 'markdown' (default), 'text', or 'json'
 

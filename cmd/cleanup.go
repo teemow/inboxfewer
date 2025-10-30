@@ -32,7 +32,9 @@ func readGithubConfig() error {
 }
 
 func newCleanupCmd() *cobra.Command {
-	return &cobra.Command{
+	var account string
+
+	cmd := &cobra.Command{
 		Use:   "cleanup",
 		Short: "Clean up Gmail inbox by archiving closed GitHub issue threads",
 		Long: `Scan your Gmail inbox for threads related to GitHub issues and pull requests.
@@ -43,9 +45,9 @@ If the corresponding GitHub issue or PR is closed, the thread will be archived.`
 			}
 
 			ctx := context.Background()
-			client, err := gmail.NewClient(ctx)
+			client, err := gmail.NewClientForAccount(ctx, account)
 			if err != nil {
-				return fmt.Errorf("failed to create Gmail client: %w", err)
+				return fmt.Errorf("failed to create Gmail client for account %s: %w", account, err)
 			}
 
 			n := 0
@@ -74,6 +76,9 @@ If the corresponding GitHub issue or PR is closed, the thread will be archived.`
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVar(&account, "account", "default", "Google account name to use (default: 'default')")
+	return cmd
 }
 
 func homeDir() string {

@@ -17,6 +17,9 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 	// List attachments tool
 	listAttachmentsTool := mcp.NewTool("gmail_list_attachments",
 		mcp.WithDescription("List all attachments in a Gmail message"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("messageId",
 			mcp.Required(),
 			mcp.Description("The ID of the Gmail message"),
@@ -30,6 +33,9 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 	// Get attachment tool
 	getAttachmentTool := mcp.NewTool("gmail_get_attachment",
 		mcp.WithDescription("Get the content of an attachment"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("messageId",
 			mcp.Required(),
 			mcp.Description("The ID of the Gmail message"),
@@ -50,6 +56,9 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 	// Get message body tool
 	getMessageBodyTool := mcp.NewTool("gmail_get_message_body",
 		mcp.WithDescription("Extract text or HTML body from a Gmail message"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("messageId",
 			mcp.Required(),
 			mcp.Description("The ID of the Gmail message"),
@@ -66,6 +75,9 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 	// Extract doc links tool
 	extractDocLinksTool := mcp.NewTool("gmail_extract_doc_links",
 		mcp.WithDescription("Extract Google Docs/Drive links from a Gmail message"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("messageId",
 			mcp.Required(),
 			mcp.Description("The ID of the Gmail message"),
@@ -91,10 +103,11 @@ func handleListAttachments(ctx context.Context, request mcp.CallToolRequest, sc 
 	}
 
 	// Get or create Gmail client
-	client := sc.GmailClient()
+	account := getAccountFromArgs(args)
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
 			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
@@ -112,11 +125,11 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	attachments, err := client.ListAttachments(messageID)
@@ -176,10 +189,11 @@ func handleGetAttachment(ctx context.Context, request mcp.CallToolRequest, sc *s
 	}
 
 	// Get or create Gmail client
-	client := sc.GmailClient()
+	account := getAccountFromArgs(args)
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
 			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
@@ -197,11 +211,11 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	switch encoding {
@@ -243,10 +257,11 @@ func handleGetMessageBody(ctx context.Context, request mcp.CallToolRequest, sc *
 	}
 
 	// Get or create Gmail client
-	client := sc.GmailClient()
+	account := getAccountFromArgs(args)
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
 			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
@@ -264,11 +279,11 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	body, err := client.GetMessageBody(messageID, format)
@@ -294,10 +309,11 @@ func handleExtractDocLinks(ctx context.Context, request mcp.CallToolRequest, sc 
 	}
 
 	// Get or create Gmail client
-	client := sc.GmailClient()
+	account := getAccountFromArgs(args)
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
 			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
@@ -315,11 +331,11 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	body, err := client.GetMessageBody(messageID, format)

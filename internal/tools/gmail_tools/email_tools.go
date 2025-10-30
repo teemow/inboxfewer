@@ -17,6 +17,9 @@ func RegisterEmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 	// Send email tool
 	sendEmailTool := mcp.NewTool("gmail_send_email",
 		mcp.WithDescription("Send an email through Gmail"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("to",
 			mcp.Required(),
 			mcp.Description("Recipient email address(es), comma-separated for multiple recipients"),
@@ -87,12 +90,13 @@ func handleSendEmail(ctx context.Context, request mcp.CallToolRequest, sc *serve
 	cc := splitEmailAddresses(ccStr)
 	bcc := splitEmailAddresses(bccStr)
 
-	// Get or create Gmail client
-	client := sc.GmailClient()
+	// Get or create Gmail client for the specified account
+	account := getAccountFromArgs(args)
+	client := sc.GmailClientForAccount(account)
 	if client == nil {
-		if !gmail.HasToken() {
-			authURL := gmail.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:
    %s
@@ -102,18 +106,18 @@ func handleSendEmail(ctx context.Context, request mcp.CallToolRequest, sc *serve
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
 
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		var err error
-		client, err = gmail.NewClient(ctx)
+		client, err = gmail.NewClientForAccount(ctx, account)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client for account %s: %v", account, err)), nil
 		}
-		sc.SetGmailClient(client)
+		sc.SetGmailClientForAccount(account, client)
 	}
 
 	// Create email message

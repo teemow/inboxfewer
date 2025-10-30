@@ -17,6 +17,9 @@ func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 	// Get document tool
 	getDocumentTool := mcp.NewTool("docs_get_document",
 		mcp.WithDescription("Get Google Docs content by document ID"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("documentId",
 			mcp.Required(),
 			mcp.Description("The ID of the Google Doc"),
@@ -33,6 +36,9 @@ func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 	// Get document metadata tool
 	getMetadataTool := mcp.NewTool("docs_get_document_metadata",
 		mcp.WithDescription("Get metadata about a Google Doc or Drive file"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
 		mcp.WithString("documentId",
 			mcp.Required(),
 			mcp.Description("The ID of the Google Doc or Drive file"),
@@ -49,6 +55,12 @@ func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 func handleGetDocument(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 
+	// Get account name, default to "default"
+	account := "default"
+	if accountVal, ok := args["account"].(string); ok && accountVal != "" {
+		account = accountVal
+	}
+
 	documentID, ok := args["documentId"].(string)
 	if !ok || documentID == "" {
 		return mcp.NewToolResultError("documentId is required"), nil
@@ -59,13 +71,13 @@ func handleGetDocument(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		format = formatVal
 	}
 
-	// Get or create docs client
-	docsClient := sc.DocsClient()
+	// Get or create docs client for the specified account
+	docsClient := sc.DocsClientForAccount(account)
 	if docsClient == nil {
 		// Check if token exists before trying to create client
-		if !docs.HasToken() {
-			authURL := docs.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
+		if !docs.HasTokenForAccount(account) {
+			authURL := docs.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:
    %s
@@ -75,18 +87,18 @@ func handleGetDocument(ctx context.Context, request mcp.CallToolRequest, sc *ser
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
 
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		var err error
-		docsClient, err = docs.NewClient(ctx)
+		docsClient, err = docs.NewClientForAccount(ctx, account)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Docs client: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Docs client for account %s: %v", account, err)), nil
 		}
-		sc.SetDocsClient(docsClient)
+		sc.SetDocsClientForAccount(account, docsClient)
 	}
 
 	switch format {
@@ -126,18 +138,24 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 func handleGetMetadata(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 
+	// Get account name, default to "default"
+	account := "default"
+	if accountVal, ok := args["account"].(string); ok && accountVal != "" {
+		account = accountVal
+	}
+
 	documentID, ok := args["documentId"].(string)
 	if !ok || documentID == "" {
 		return mcp.NewToolResultError("documentId is required"), nil
 	}
 
-	// Get or create docs client
-	docsClient := sc.DocsClient()
+	// Get or create docs client for the specified account
+	docsClient := sc.DocsClientForAccount(account)
 	if docsClient == nil {
 		// Check if token exists before trying to create client
-		if !docs.HasToken() {
-			authURL := docs.GetAuthURL()
-			errorMsg := fmt.Sprintf(`Google OAuth token not found. To authorize access:
+		if !docs.HasTokenForAccount(account) {
+			authURL := docs.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:
    %s
@@ -147,18 +165,18 @@ func handleGetMetadata(ctx context.Context, request mcp.CallToolRequest, sc *ser
 4. Copy the authorization code
 
 5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
 
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, authURL)
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		var err error
-		docsClient, err = docs.NewClient(ctx)
+		docsClient, err = docs.NewClientForAccount(ctx, account)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Docs client: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Docs client for account %s: %v", account, err)), nil
 		}
-		sc.SetDocsClient(docsClient)
+		sc.SetDocsClientForAccount(account, docsClient)
 	}
 
 	metadata, err := docsClient.GetFileMetadata(documentID)
