@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	meet "google.golang.org/api/meet/v2"
@@ -419,14 +420,19 @@ func (c *Client) UpdateSpaceConfig(spaceName string, input SpaceConfigInput) (*S
 		existing.Config = &meet.SpaceConfig{}
 	}
 
+	// Build the update mask dynamically based on which fields are being updated
+	var updateFields []string
+
 	// Update access type
 	if input.AccessType != "" {
 		existing.Config.AccessType = input.AccessType
+		updateFields = append(updateFields, "config.accessType")
 	}
 
 	// Update entry point access
 	if input.EntryPointAccess != "" {
 		existing.Config.EntryPointAccess = input.EntryPointAccess
+		updateFields = append(updateFields, "config.entryPointAccess")
 	}
 
 	// Update artifact configuration
@@ -445,6 +451,7 @@ func (c *Client) UpdateSpaceConfig(spaceName string, input SpaceConfigInput) (*S
 				AutoRecordingGeneration: "OFF",
 			}
 		}
+		updateFields = append(updateFields, "config.artifactConfig.recordingConfig.autoRecordingGeneration")
 
 		// Update transcription config
 		if input.ArtifactConfig.EnableTranscription {
@@ -456,6 +463,7 @@ func (c *Client) UpdateSpaceConfig(spaceName string, input SpaceConfigInput) (*S
 				AutoTranscriptionGeneration: "OFF",
 			}
 		}
+		updateFields = append(updateFields, "config.artifactConfig.transcriptionConfig.autoTranscriptionGeneration")
 
 		// Update smart notes config
 		if input.ArtifactConfig.EnableSmartNotes {
@@ -467,10 +475,14 @@ func (c *Client) UpdateSpaceConfig(spaceName string, input SpaceConfigInput) (*S
 				AutoSmartNotesGeneration: "OFF",
 			}
 		}
+		updateFields = append(updateFields, "config.artifactConfig.smartNotesConfig.autoSmartNotesGeneration")
 	}
 
-	// Update the space with the configuration
-	updated, err := c.svc.Spaces.Patch(spaceName, existing).UpdateMask("config").Do()
+	// Build comma-separated update mask
+	updateMask := strings.Join(updateFields, ",")
+
+	// Update the space with the configuration using proper field mask
+	updated, err := c.svc.Spaces.Patch(spaceName, existing).UpdateMask(updateMask).Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to update space config: %w", err)
 	}
