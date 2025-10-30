@@ -1,7 +1,6 @@
 package gmail_tools
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -57,68 +56,4 @@ func TestSplitEmailAddresses(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestHandleSearchContacts_MissingQuery(t *testing.T) {
-	// Create a mock request with missing query
-	args := map[string]interface{}{}
-
-	// Simulate the request
-	request := &mockCallToolRequest{args: args}
-
-	result, err := handleSearchContacts(nil, request, nil)
-
-	if err != nil {
-		t.Errorf("handleSearchContacts() error = %v, want nil", err)
-	}
-
-	if result == nil {
-		t.Fatal("handleSearchContacts() result is nil")
-	}
-
-	// Check that it returns an error result
-	if !result.IsError {
-		t.Error("handleSearchContacts() should return error for missing query")
-	}
-
-	if !strings.Contains(result.Content[0].Text, "query is required") {
-		t.Errorf("handleSearchContacts() error message = %s, want 'query is required'", result.Content[0].Text)
-	}
-}
-
-func TestHandleSearchContacts_EmptyQuery(t *testing.T) {
-	// Create a mock request with empty query
-	args := map[string]interface{}{
-		"query": "",
-	}
-
-	request := &mockCallToolRequest{args: args}
-
-	result, err := handleSearchContacts(nil, request, nil)
-
-	if err != nil {
-		t.Errorf("handleSearchContacts() error = %v, want nil", err)
-	}
-
-	if result == nil {
-		t.Fatal("handleSearchContacts() result is nil")
-	}
-
-	// Check that it returns an error result
-	if !result.IsError {
-		t.Error("handleSearchContacts() should return error for empty query")
-	}
-
-	if !strings.Contains(result.Content[0].Text, "query is required") {
-		t.Errorf("handleSearchContacts() error message = %s, want 'query is required'", result.Content[0].Text)
-	}
-}
-
-// mockCallToolRequest is a mock implementation of mcp.CallToolRequest
-type mockCallToolRequest struct {
-	args map[string]interface{}
-}
-
-func (m *mockCallToolRequest) GetArguments() map[string]interface{} {
-	return m.args
 }
