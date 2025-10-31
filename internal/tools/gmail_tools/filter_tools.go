@@ -13,7 +13,8 @@ import (
 )
 
 // RegisterFilterTools registers filter-related tools with the MCP server
-func RegisterFilterTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
+func RegisterFilterTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Filter tools are safe operations (organizing email, not sending)
 	// Create filter tool
 	createFilterTool := mcp.NewTool("gmail_create_filter",
 		mcp.WithDescription("Create a new Gmail filter to automatically organize incoming emails. Filters can match on sender, recipient, subject, or custom queries, and perform actions like labeling, archiving, or marking as read."),
@@ -67,18 +68,6 @@ func RegisterFilterTools(s *mcpserver.MCPServer, sc *server.ServerContext) error
 		return handleCreateFilter(ctx, request, sc)
 	})
 
-	// List filters tool
-	listFiltersTool := mcp.NewTool("gmail_list_filters",
-		mcp.WithDescription("List all existing Gmail filters for the account"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-	)
-
-	s.AddTool(listFiltersTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleListFilters(ctx, request, sc)
-	})
-
 	// Delete filter tool
 	deleteFilterTool := mcp.NewTool("gmail_delete_filter",
 		mcp.WithDescription("Delete a Gmail filter by its ID (obtain ID from gmail_list_filters)"),
@@ -95,7 +84,19 @@ func RegisterFilterTools(s *mcpserver.MCPServer, sc *server.ServerContext) error
 		return handleDeleteFilter(ctx, request, sc)
 	})
 
-	// List labels tool
+	// List filters tool (always available, even in read-only mode)
+	listFiltersTool := mcp.NewTool("gmail_list_filters",
+		mcp.WithDescription("List all existing Gmail filters for the account"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
+	)
+
+	s.AddTool(listFiltersTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleListFilters(ctx, request, sc)
+	})
+
+	// List labels tool (always available, even in read-only mode)
 	listLabelsTool := mcp.NewTool("gmail_list_labels",
 		mcp.WithDescription("List all Gmail labels for the account. Use this to get label IDs for creating filters."),
 		mcp.WithString("account",

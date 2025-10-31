@@ -13,8 +13,8 @@ import (
 )
 
 // RegisterUnsubscribeTools registers unsubscribe-related tools with the MCP server
-func RegisterUnsubscribeTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// Get unsubscribe info tool
+func RegisterUnsubscribeTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Get unsubscribe info tool (read-only, always available)
 	getUnsubscribeInfoTool := mcp.NewTool("gmail_get_unsubscribe_info",
 		mcp.WithDescription("Extract unsubscribe information from a Gmail message. Returns available unsubscribe methods (mailto or HTTP)."),
 		mcp.WithString("account",
@@ -30,7 +30,7 @@ func RegisterUnsubscribeTools(s *mcpserver.MCPServer, sc *server.ServerContext) 
 		return handleGetUnsubscribeInfo(ctx, request, sc)
 	})
 
-	// Unsubscribe via HTTP tool
+	// Unsubscribe via HTTP tool (safe operation, always available)
 	unsubscribeViaHTTPTool := mcp.NewTool("gmail_unsubscribe_via_http",
 		mcp.WithDescription("Unsubscribe from a newsletter using an HTTP unsubscribe link. Use gmail_get_unsubscribe_info first to get available unsubscribe methods."),
 		mcp.WithString("account",

@@ -104,12 +104,47 @@ inboxfewer serve --transport streamable-http --http-addr :8080
 The HTTP server will expose:
 - HTTP endpoint: `http://localhost:8080/mcp`
 
+### Safety Mode (Read-Only by Default)
+
+**By default, the MCP server operates in read-only mode** for AI safety. Only safe, non-destructive operations are available:
+
+**Always Available (Safe Operations):**
+- List, get, search, and query operations
+- Archive threads (safe cleanup)
+- Create tasks and task lists (safe planning)
+- Create calendar entries (safe scheduling)
+- Unsubscribe from emails (safe inbox cleanup)
+- Create and delete Gmail filters (safe email organization)
+- Create and configure Meet spaces (safe meeting setup)
+
+**Requires `--yolo` Flag (Write Operations):**
+- Email sending, replying, and forwarding
+- Drive file operations (upload, delete, move, share)
+- Calendar event deletion and updates
+- Task deletion and updates
+
+#### Enable Write Operations
+
+To enable all write operations, use the `--yolo` flag:
+
+```bash
+# Enable write operations with stdio
+inboxfewer serve --yolo
+
+# Enable write operations with SSE
+inboxfewer serve --transport sse --http-addr :8080 --yolo
+
+# Enable write operations with HTTP
+inboxfewer serve --transport streamable-http --http-addr :8080 --yolo
+```
+
 ### Options
 
 ```bash
 --debug           Enable debug logging
 --transport       Transport type: stdio, sse, or streamable-http (default: stdio)
 --http-addr       HTTP server address for sse/http transports (default: :8080)
+--yolo            Enable write operations (default: false, read-only mode)
 ```
 
 ## MCP Server Tools

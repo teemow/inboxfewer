@@ -13,7 +13,12 @@ import (
 )
 
 // RegisterEmailTools registers email-related tools with the MCP server
-func RegisterEmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
+func RegisterEmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Only register write tools if not in read-only mode
+	if readOnly {
+		return nil
+	}
+
 	// Send email tool
 	sendEmailTool := mcp.NewTool("gmail_send_email",
 		mcp.WithDescription("Send an email through Gmail"),

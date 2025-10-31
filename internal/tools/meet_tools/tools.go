@@ -55,8 +55,8 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 }
 
 // RegisterMeetTools registers all Meet-related tools with the MCP server
-func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// Get conference record
+func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Get conference record (read-only, always available)
 	getConferenceTool := mcp.NewTool("meet_get_conference",
 		mcp.WithDescription("Get details about a Google Meet conference record"),
 		mcp.WithString("account",
@@ -152,6 +152,7 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 		return handleGetTranscriptText(ctx, request, sc)
 	})
 
+	// Meet space configuration tools (safe operations)
 	// Create space
 	createSpaceTool := mcp.NewTool("meet_create_space",
 		mcp.WithDescription("Create a new Google Meet space with optional auto-recording, transcription, and note-taking configuration"),
@@ -176,7 +177,7 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 		return handleCreateSpace(ctx, request, sc)
 	})
 
-	// Get space
+	// Get space (read-only, always available)
 	getSpaceTool := mcp.NewTool("meet_get_space",
 		mcp.WithDescription("Get details about a Google Meet space including its configuration"),
 		mcp.WithString("account",
@@ -192,7 +193,7 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 		return handleGetSpace(ctx, request, sc)
 	})
 
-	// Update space configuration
+	// Update space configuration (safe operation)
 	updateSpaceConfigTool := mcp.NewTool("meet_update_space_config",
 		mcp.WithDescription("Update the configuration of an existing Google Meet space (enable/disable auto-recording, transcription, notes)"),
 		mcp.WithString("account",

@@ -13,7 +13,12 @@ import (
 )
 
 // registerFolderTools registers folder management tools
-func registerFolderTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
+func registerFolderTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Only register write tools if not in read-only mode
+	if readOnly {
+		return nil
+	}
+
 	// Create folder tool
 	createFolderTool := mcp.NewTool("drive_create_folder",
 		mcp.WithDescription("Create a new folder in Google Drive"),

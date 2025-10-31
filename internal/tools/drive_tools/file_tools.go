@@ -16,95 +16,98 @@ import (
 )
 
 // registerFileTools registers file management tools
-func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// Upload file tool
-	uploadFileTool := mcp.NewTool("drive_upload_file",
-		mcp.WithDescription("Upload a file to Google Drive"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("name",
-			mcp.Required(),
-			mcp.Description("The name of the file"),
-		),
-		mcp.WithString("content",
-			mcp.Required(),
-			mcp.Description("The file content (base64-encoded for binary files, or plain text)"),
-		),
-		mcp.WithString("mimeType",
-			mcp.Description("The MIME type of the file (e.g., 'application/pdf', 'text/plain', 'image/png')"),
-		),
-		mcp.WithString("parentFolders",
-			mcp.Description("Comma-separated list of parent folder IDs where the file should be placed"),
-		),
-		mcp.WithString("description",
-			mcp.Description("A short description of the file"),
-		),
-		mcp.WithBoolean("isBase64",
-			mcp.Description("Whether the content is base64-encoded (default: true for binary files, false for text)"),
-		),
-	)
+func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Register write tools only if not in read-only mode
+	if !readOnly {
+		// Upload file tool
+		uploadFileTool := mcp.NewTool("drive_upload_file",
+			mcp.WithDescription("Upload a file to Google Drive"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("The name of the file"),
+			),
+			mcp.WithString("content",
+				mcp.Required(),
+				mcp.Description("The file content (base64-encoded for binary files, or plain text)"),
+			),
+			mcp.WithString("mimeType",
+				mcp.Description("The MIME type of the file (e.g., 'application/pdf', 'text/plain', 'image/png')"),
+			),
+			mcp.WithString("parentFolders",
+				mcp.Description("Comma-separated list of parent folder IDs where the file should be placed"),
+			),
+			mcp.WithString("description",
+				mcp.Description("A short description of the file"),
+			),
+			mcp.WithBoolean("isBase64",
+				mcp.Description("Whether the content is base64-encoded (default: true for binary files, false for text)"),
+			),
+		)
 
-	s.AddTool(uploadFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		s.AddTool(uploadFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := getAccountFromArgs(args)
 
-		name, ok := args["name"].(string)
-		if !ok || name == "" {
-			return mcp.NewToolResultError("name is required"), nil
-		}
-
-		contentStr, ok := args["content"].(string)
-		if !ok || contentStr == "" {
-			return mcp.NewToolResultError("content is required"), nil
-		}
-
-		client, err := getDriveClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		options := &drive.UploadOptions{}
-
-		if mimeType, ok := args["mimeType"].(string); ok && mimeType != "" {
-			options.MimeType = mimeType
-		}
-
-		if description, ok := args["description"].(string); ok && description != "" {
-			options.Description = description
-		}
-
-		if parentFoldersStr, ok := args["parentFolders"].(string); ok && parentFoldersStr != "" {
-			options.ParentFolders = parseCommaList(parentFoldersStr)
-		}
-
-		// Decode content if base64
-		isBase64 := true
-		if isB64, ok := args["isBase64"].(bool); ok {
-			isBase64 = isB64
-		}
-
-		var content io.Reader
-		if isBase64 {
-			decoded, err := base64.StdEncoding.DecodeString(contentStr)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to decode base64 content: %v", err)), nil
+			name, ok := args["name"].(string)
+			if !ok || name == "" {
+				return mcp.NewToolResultError("name is required"), nil
 			}
-			content = strings.NewReader(string(decoded))
-		} else {
-			content = strings.NewReader(contentStr)
-		}
 
-		fileInfo, err := client.UploadFile(ctx, name, content, options)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to upload file: %v", err)), nil
-		}
+			contentStr, ok := args["content"].(string)
+			if !ok || contentStr == "" {
+				return mcp.NewToolResultError("content is required"), nil
+			}
 
-		result, _ := json.MarshalIndent(fileInfo, "", "  ")
-		return mcp.NewToolResultText(fmt.Sprintf("File uploaded successfully:\n%s", string(result))), nil
-	})
+			client, err := getDriveClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-	// List files tool
+			options := &drive.UploadOptions{}
+
+			if mimeType, ok := args["mimeType"].(string); ok && mimeType != "" {
+				options.MimeType = mimeType
+			}
+
+			if description, ok := args["description"].(string); ok && description != "" {
+				options.Description = description
+			}
+
+			if parentFoldersStr, ok := args["parentFolders"].(string); ok && parentFoldersStr != "" {
+				options.ParentFolders = parseCommaList(parentFoldersStr)
+			}
+
+			// Decode content if base64
+			isBase64 := true
+			if isB64, ok := args["isBase64"].(bool); ok {
+				isBase64 = isB64
+			}
+
+			var content io.Reader
+			if isBase64 {
+				decoded, err := base64.StdEncoding.DecodeString(contentStr)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to decode base64 content: %v", err)), nil
+				}
+				content = strings.NewReader(string(decoded))
+			} else {
+				content = strings.NewReader(contentStr)
+			}
+
+			fileInfo, err := client.UploadFile(ctx, name, content, options)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to upload file: %v", err)), nil
+			}
+
+			result, _ := json.MarshalIndent(fileInfo, "", "  ")
+			return mcp.NewToolResultText(fmt.Sprintf("File uploaded successfully:\n%s", string(result))), nil
+		})
+	}
+
+	// List files tool (read-only, always available)
 	listFilesTool := mcp.NewTool("drive_list_files",
 		mcp.WithDescription("List files in Google Drive with optional filtering"),
 		mcp.WithString("account",
@@ -262,39 +265,41 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 		return mcp.NewToolResultText(string(content)), nil
 	})
 
-	// Delete file tool
-	deleteFileTool := mcp.NewTool("drive_delete_file",
-		mcp.WithDescription("Delete a file from Google Drive"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("fileId",
-			mcp.Required(),
-			mcp.Description("The ID of the file to delete"),
-		),
-	)
+	// Delete file tool (write operation, only available with !readOnly)
+	if !readOnly {
+		deleteFileTool := mcp.NewTool("drive_delete_file",
+			mcp.WithDescription("Delete a file from Google Drive"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("fileId",
+				mcp.Required(),
+				mcp.Description("The ID of the file to delete"),
+			),
+		)
 
-	s.AddTool(deleteFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		s.AddTool(deleteFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := getAccountFromArgs(args)
 
-		fileID, ok := args["fileId"].(string)
-		if !ok || fileID == "" {
-			return mcp.NewToolResultError("fileId is required"), nil
-		}
+			fileID, ok := args["fileId"].(string)
+			if !ok || fileID == "" {
+				return mcp.NewToolResultError("fileId is required"), nil
+			}
 
-		client, err := getDriveClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			client, err := getDriveClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		err = client.DeleteFile(ctx, fileID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to delete file: %v", err)), nil
-		}
+			err = client.DeleteFile(ctx, fileID)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to delete file: %v", err)), nil
+			}
 
-		return mcp.NewToolResultText(fmt.Sprintf("File %s deleted successfully", fileID)), nil
-	})
+			return mcp.NewToolResultText(fmt.Sprintf("File %s deleted successfully", fileID)), nil
+		})
+	}
 
 	return nil
 }
