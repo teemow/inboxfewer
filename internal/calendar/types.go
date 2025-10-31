@@ -16,6 +16,7 @@ type EventInput struct {
 	TimeZone    string
 	Attendees   []string
 	Recurrence  []string // RRULE, EXRULE, RDATE, EXDATE
+	AllDay      bool     // If true, creates an all-day event
 
 	// Event type: "default", "outOfOffice", "focusTime", "workingLocation"
 	EventType string

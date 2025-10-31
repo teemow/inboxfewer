@@ -161,17 +161,26 @@ func (c *Client) CreateEvent(calendarID string, input EventInput) (*EventSummary
 	}
 
 	// Set start and end times
-	if input.TimeZone == "" {
-		input.TimeZone = "UTC"
-	}
-
-	event.Start = &calendar.EventDateTime{
-		DateTime: input.Start.Format(time.RFC3339),
-		TimeZone: input.TimeZone,
-	}
-	event.End = &calendar.EventDateTime{
-		DateTime: input.End.Format(time.RFC3339),
-		TimeZone: input.TimeZone,
+	// For all-day events, use Date instead of DateTime
+	if input.AllDay {
+		event.Start = &calendar.EventDateTime{
+			Date: input.Start.Format("2006-01-02"),
+		}
+		event.End = &calendar.EventDateTime{
+			Date: input.End.Format("2006-01-02"),
+		}
+	} else {
+		if input.TimeZone == "" {
+			input.TimeZone = "UTC"
+		}
+		event.Start = &calendar.EventDateTime{
+			DateTime: input.Start.Format(time.RFC3339),
+			TimeZone: input.TimeZone,
+		}
+		event.End = &calendar.EventDateTime{
+			DateTime: input.End.Format(time.RFC3339),
+			TimeZone: input.TimeZone,
+		}
 	}
 
 	// Set attendees
@@ -245,21 +254,33 @@ func (c *Client) UpdateEvent(calendarID, eventID string, input EventInput) (*Eve
 
 	// Update times if provided
 	if !input.Start.IsZero() {
-		if input.TimeZone == "" {
-			input.TimeZone = "UTC"
-		}
-		existing.Start = &calendar.EventDateTime{
-			DateTime: input.Start.Format(time.RFC3339),
-			TimeZone: input.TimeZone,
+		if input.AllDay {
+			existing.Start = &calendar.EventDateTime{
+				Date: input.Start.Format("2006-01-02"),
+			}
+		} else {
+			if input.TimeZone == "" {
+				input.TimeZone = "UTC"
+			}
+			existing.Start = &calendar.EventDateTime{
+				DateTime: input.Start.Format(time.RFC3339),
+				TimeZone: input.TimeZone,
+			}
 		}
 	}
 	if !input.End.IsZero() {
-		if input.TimeZone == "" {
-			input.TimeZone = "UTC"
-		}
-		existing.End = &calendar.EventDateTime{
-			DateTime: input.End.Format(time.RFC3339),
-			TimeZone: input.TimeZone,
+		if input.AllDay {
+			existing.End = &calendar.EventDateTime{
+				Date: input.End.Format("2006-01-02"),
+			}
+		} else {
+			if input.TimeZone == "" {
+				input.TimeZone = "UTC"
+			}
+			existing.End = &calendar.EventDateTime{
+				DateTime: input.End.Format(time.RFC3339),
+				TimeZone: input.TimeZone,
+			}
 		}
 	}
 
