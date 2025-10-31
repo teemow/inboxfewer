@@ -148,7 +148,7 @@ inboxfewer serve --yolo
 
 # MCP SERVER
 
-The MCP server provides over 100 tools for managing Gmail, Google Docs, Drive, Calendar, Meet, and Tasks. By default, the server operates in read-only mode for safety. Use `--yolo` to enable write operations.
+The MCP server provides 66 tools for managing Gmail, Google Docs, Drive, Calendar, Meet, and Tasks. By default, the server operates in read-only mode for safety. Use `--yolo` to enable write operations.
 
 **Key Capabilities:**
 - Gmail: List, search, archive, send emails, manage filters
