@@ -60,10 +60,7 @@ OAuth tokens are cached per account at:
 Each token provides access to the following Google APIs with these scopes:
 
 **Gmail:**
-- `https://www.googleapis.com/auth/gmail.readonly` - Read messages
-- `https://www.googleapis.com/auth/gmail.modify` - Modify messages (archive, label)
-- `https://www.googleapis.com/auth/gmail.send` - Send messages
-- `https://www.googleapis.com/auth/gmail.settings.basic` - Manage filters
+- `https://mail.google.com/` - Full Gmail access (read, compose, send, and permanently delete all your email)
 
 **Google Docs:**
 - `https://www.googleapis.com/auth/documents.readonly` - Read document content
@@ -77,12 +74,11 @@ Each token provides access to the following Google APIs with these scopes:
 - `https://www.googleapis.com/auth/directory.readonly` - Read directory (Workspace)
 
 **Google Calendar:**
-- `https://www.googleapis.com/auth/calendar` - Read and write calendar events
-- `https://www.googleapis.com/auth/calendar.events` - Manage events
+- `https://www.googleapis.com/auth/calendar` - Full calendar access (read, write, share, and permanently delete all calendars)
 
 **Google Meet:**
-- `https://www.googleapis.com/auth/meetings.space.readonly` - Read meeting spaces
-- `https://www.googleapis.com/auth/meetings.space.created` - Create meeting spaces
+- `https://www.googleapis.com/auth/meetings.space.readonly` - Read meeting spaces, recordings, and transcripts
+- `https://www.googleapis.com/auth/meetings.space.settings` - Edit and see settings for all your Google Meet calls
 
 **Google Tasks:**
 - `https://www.googleapis.com/auth/tasks` - Read and write tasks
