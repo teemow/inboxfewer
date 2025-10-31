@@ -7,6 +7,7 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/calendar"
 	"github.com/teemow/inboxfewer/internal/docs"
+	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/meet"
 	"github.com/teemow/inboxfewer/internal/tasks"
@@ -18,6 +19,7 @@ type ServerContext struct {
 	cancel          context.CancelFunc
 	gmailClients    map[string]*gmail.Client    // Maps account name to Gmail client
 	docsClients     map[string]*docs.Client     // Maps account name to Docs client
+	driveClients    map[string]*drive.Client    // Maps account name to Drive client
 	calendarClients map[string]*calendar.Client // Maps account name to Calendar client
 	meetClients     map[string]*meet.Client     // Maps account name to Meet client
 	tasksClients    map[string]*tasks.Client    // Maps account name to Tasks client
@@ -34,6 +36,7 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 	// Initialize client maps
 	gmailClients := make(map[string]*gmail.Client)
 	docsClients := make(map[string]*docs.Client)
+	driveClients := make(map[string]*drive.Client)
 	calendarClients := make(map[string]*calendar.Client)
 	meetClients := make(map[string]*meet.Client)
 	tasksClients := make(map[string]*tasks.Client)
@@ -55,6 +58,7 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 		cancel:          cancel,
 		gmailClients:    gmailClients,
 		docsClients:     docsClients,
+		driveClients:    driveClients,
 		calendarClients: calendarClients,
 		meetClients:     meetClients,
 		tasksClients:    tasksClients,
@@ -287,6 +291,50 @@ func (sc *ServerContext) SetTasksClientForAccount(account string, client *tasks.
 // SetTasksClient sets the Tasks client for the default account
 func (sc *ServerContext) SetTasksClient(client *tasks.Client) {
 	sc.SetTasksClientForAccount("default", client)
+}
+
+// DriveClientForAccount returns the Drive client for a specific account
+// Creates and caches the client if it doesn't exist yet
+// Returns nil if the account has no token
+func (sc *ServerContext) DriveClientForAccount(account string) *drive.Client {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	// Check if client already exists
+	if client, ok := sc.driveClients[account]; ok {
+		return client
+	}
+
+	// Try to create client if token exists
+	if !drive.HasTokenForAccount(account) {
+		return nil
+	}
+
+	client, err := drive.NewClientForAccount(sc.ctx, account)
+	if err != nil {
+		fmt.Printf("Warning: failed to create Drive client for account %s: %v\n", account, err)
+		return nil
+	}
+
+	sc.driveClients[account] = client
+	return client
+}
+
+// DriveClient returns the Drive client for the default account
+func (sc *ServerContext) DriveClient() *drive.Client {
+	return sc.DriveClientForAccount("default")
+}
+
+// SetDriveClientForAccount sets the Drive client for a specific account
+func (sc *ServerContext) SetDriveClientForAccount(account string, client *drive.Client) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.driveClients[account] = client
+}
+
+// SetDriveClient sets the Drive client for the default account
+func (sc *ServerContext) SetDriveClient(client *drive.Client) {
+	sc.SetDriveClientForAccount("default", client)
 }
 
 // GithubUser returns the GitHub username

@@ -10,6 +10,7 @@ Archives Gmail threads for closed GitHub issues and pull requests.
 - **Newsletter Unsubscribe**: Extract and use List-Unsubscribe headers to easily unsubscribe from newsletters
 - **Email Filters**: Create, list, and manage Gmail filters programmatically to automatically organize incoming emails
 - **Google Docs Integration**: Extract and retrieve Google Docs content from email messages, with full support for multi-tab documents (Oct 2024 feature)
+- **Google Drive Integration**: Full file and folder management including upload, download, search, organize, and share files with granular permissions
 - **Google Calendar Integration**: Full calendar management including event creation, modification, availability checking, and meeting scheduling with Google Meet support
 - **Google Meet Integration**: Retrieve meeting artifacts including recordings, transcripts, and Gemini notes from completed Google Meet sessions
 - **MCP Server**: Provides Model Context Protocol server for AI assistant integration
@@ -41,7 +42,7 @@ On first run, you'll be prompted to authenticate with Google services (Gmail, Go
 **Note:** Each OAuth token provides access to Gmail, Google Docs, Google Drive, Google Contacts, Google Calendar, Google Meet, and Google Tasks APIs with the following scopes:
 - Gmail: Read, modify, and send messages
 - Google Docs: Read document content
-- Google Drive: Read file metadata
+- Google Drive: Full read/write access to files and folders
 - Google Contacts: Read contact information (personal contacts, interaction history, and directory)
 - Google Calendar: Read and write calendar events, check availability, and manage calendars
 - Google Meet: Read meeting artifacts (recordings, transcripts) and configure meeting spaces (enable/disable auto-recording, transcription, note-taking)
@@ -423,6 +424,223 @@ Get metadata about a Google Doc or Drive file.
 **Returns:** JSON with document metadata including id, name, mimeType, createdTime, modifiedTime, size, and owners.
 
 **Use Case:** Get information about a document without downloading its full content.
+
+### Google Drive Tools
+
+**Note:** All Google Drive tools support an optional `account` parameter to specify which Google account to use (default: 'default').
+
+#### `drive_upload_file`
+Upload a file to Google Drive.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `name` (required): The name of the file
+- `content` (required): The file content (base64-encoded for binary files, or plain text)
+- `mimeType` (optional): The MIME type of the file (e.g., 'application/pdf', 'text/plain', 'image/png')
+- `parentFolders` (optional): Comma-separated list of parent folder IDs where the file should be placed
+- `description` (optional): A short description of the file
+- `isBase64` (optional): Whether the content is base64-encoded (default: true for binary files)
+
+**Returns:** File metadata including ID, name, webViewLink, and other properties.
+
+**Use Case:** Upload documents, images, PDFs, or any other files to your Google Drive programmatically.
+
+**Example:**
+```bash
+drive_upload_file(
+  account: "work",
+  name: "report.pdf",
+  content: "<base64-encoded-content>",
+  mimeType: "application/pdf",
+  parentFolders: "folder_id_123"
+)
+```
+
+#### `drive_list_files`
+List files in Google Drive with optional filtering.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `query` (optional): Query for filtering files using Google Drive's query language (e.g., "name contains 'report'", "mimeType='application/pdf'")
+- `maxResults` (optional): Maximum number of files to return (default: 100, max: 1000)
+- `orderBy` (optional): Sort order (e.g., 'folder,modifiedTime desc,name')
+- `includeTrashed` (optional): Include trashed files in results (default: false)
+- `pageToken` (optional): Page token for retrieving the next page of results
+
+**Returns:** List of files with metadata and nextPageToken for pagination.
+
+**Use Case:** Find files by name, type, owner, or other criteria. Search your entire Drive or specific folders.
+
+**Query Examples:**
+- Find PDFs: `"mimeType='application/pdf'"`
+- Find files modified today: `"modifiedTime > '2025-10-31T00:00:00'"`
+- Find files in a folder: `"'folder_id' in parents"`
+- Combine filters: `"name contains 'invoice' and mimeType='application/pdf' and trashed=false"`
+
+#### `drive_get_file`
+Get metadata for a specific file in Google Drive.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `fileId` (required): The ID of the file
+
+**Returns:** File metadata including name, mimeType, size, owners, sharing status, and permissions.
+
+**Use Case:** Get detailed information about a file including who owns it, when it was modified, and who has access.
+
+#### `drive_download_file`
+Download the content of a file from Google Drive.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `fileId` (required): The ID of the file to download
+- `asBase64` (optional): Return content as base64-encoded string (default: false for text)
+
+**Returns:** File content as text or base64-encoded string.
+
+**Use Case:** Download files to process their content, create backups, or transfer data.
+
+**Note:** For binary files (images, PDFs, etc.), use `asBase64: true` to get base64-encoded content.
+
+#### `drive_delete_file`
+Delete a file from Google Drive.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `fileId` (required): The ID of the file to delete
+
+**Returns:** Confirmation message.
+
+**Use Case:** Remove files that are no longer needed. The file is moved to trash and can be restored from there.
+
+#### `drive_create_folder`
+Create a new folder in Google Drive.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `name` (required): The name of the folder
+- `parentFolders` (optional): Comma-separated list of parent folder IDs where the folder should be created
+
+**Returns:** Folder metadata including ID and webViewLink.
+
+**Use Case:** Organize files by creating folder structures programmatically.
+
+**Example:**
+```bash
+drive_create_folder(
+  name: "Project Reports",
+  parentFolders: "root_folder_id"
+)
+```
+
+#### `drive_move_file`
+Move or rename a file in Google Drive.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `fileId` (required): The ID of the file to move or rename
+- `newName` (optional): The new name for the file (leave empty to keep current name)
+- `addParents` (optional): Comma-separated list of folder IDs to add as parents
+- `removeParents` (optional): Comma-separated list of folder IDs to remove as parents
+
+**Returns:** Updated file metadata.
+
+**Use Case:** Reorganize files by moving them between folders or renaming them. A file can have multiple parent folders in Drive.
+
+**Example:**
+```bash
+# Move file to different folder
+drive_move_file(
+  fileId: "file_123",
+  addParents: "new_folder_id",
+  removeParents: "old_folder_id"
+)
+
+# Rename file
+drive_move_file(
+  fileId: "file_123",
+  newName: "Updated Report.pdf"
+)
+```
+
+#### `drive_share_file`
+Share a file in Google Drive by granting permissions.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `fileId` (required): The ID of the file to share
+- `type` (required): The type of grantee: 'user', 'group', 'domain', or 'anyone'
+- `role` (required): The role to grant: 'owner', 'organizer', 'fileOrganizer', 'writer', 'commenter', or 'reader'
+- `emailAddress` (optional): Email address (required if type is 'user' or 'group')
+- `domain` (optional): Domain name (required if type is 'domain')
+- `sendNotificationEmail` (optional): Send a notification email to the grantee (default: false)
+- `emailMessage` (optional): Custom message to include in the notification email
+
+**Returns:** Permission details including ID and role.
+
+**Use Case:** Share files with specific people, groups, or make them publicly accessible.
+
+**Examples:**
+```bash
+# Share with specific user
+drive_share_file(
+  fileId: "file_123",
+  type: "user",
+  role: "reader",
+  emailAddress: "colleague@example.com",
+  sendNotificationEmail: true
+)
+
+# Make file public
+drive_share_file(
+  fileId: "file_123",
+  type: "anyone",
+  role: "reader"
+)
+
+# Share with entire domain
+drive_share_file(
+  fileId: "file_123",
+  type: "domain",
+  role: "reader",
+  domain: "example.com"
+)
+```
+
+#### `drive_list_permissions`
+List all permissions for a file in Google Drive.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `fileId` (required): The ID of the file
+
+**Returns:** List of permissions showing who has access to the file and their roles.
+
+**Use Case:** Audit file access, see who has permissions before removing them, or check sharing status.
+
+#### `drive_remove_permission`
+Remove a permission from a file in Google Drive.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `fileId` (required): The ID of the file
+- `permissionId` (required): The ID of the permission to remove (get this from `drive_list_permissions`)
+
+**Returns:** Confirmation message.
+
+**Use Case:** Revoke access from users, groups, or remove public sharing.
+
+**Example:**
+```bash
+# First, list permissions to get the permission ID
+permissions = drive_list_permissions(fileId: "file_123")
+
+# Then remove specific permission
+drive_remove_permission(
+  fileId: "file_123",
+  permissionId: "permission_456"
+)
+```
 
 ### Google Calendar Tools
 
@@ -1098,6 +1316,10 @@ inboxfewer/
 │   │   ├── converter.go   # Document to Markdown/text conversion
 │   │   ├── types.go       # Document metadata types
 │   │   └── doc.go         # Package documentation
+│   ├── drive/             # Google Drive client and utilities
+│   │   ├── client.go      # Drive API client
+│   │   ├── types.go       # File and permission types
+│   │   └── doc.go         # Package documentation
 │   ├── calendar/          # Google Calendar client and utilities
 │   │   ├── client.go      # Calendar API client
 │   │   ├── types.go       # Event and calendar types
@@ -1124,6 +1346,12 @@ inboxfewer/
 │       ├── docs_tools/    # Google Docs MCP tools
 │       │   ├── tools.go   # Docs retrieval tools
 │       │   └── doc.go     # Package documentation
+│       ├── drive_tools/   # Google Drive MCP tools
+│       │   ├── tools.go         # Tool registration
+│       │   ├── file_tools.go    # File operations
+│       │   ├── folder_tools.go  # Folder operations
+│       │   ├── share_tools.go   # Permission management
+│       │   └── doc.go           # Package documentation
 │       ├── calendar_tools/ # Google Calendar MCP tools
 │       │   ├── tools.go            # Tool registration
 │       │   ├── event_tools.go      # Event management tools

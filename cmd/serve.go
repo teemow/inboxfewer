@@ -15,6 +15,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/calendar_tools"
 	"github.com/teemow/inboxfewer/internal/tools/docs_tools"
+	"github.com/teemow/inboxfewer/internal/tools/drive_tools"
 	"github.com/teemow/inboxfewer/internal/tools/gmail_tools"
 	"github.com/teemow/inboxfewer/internal/tools/google_tools"
 	"github.com/teemow/inboxfewer/internal/tools/meet_tools"
@@ -92,6 +93,11 @@ func runServe(transport string, debugMode bool, httpAddr string) error {
 	// Register Docs tools
 	if err := docs_tools.RegisterDocsTools(mcpSrv, serverContext); err != nil {
 		return fmt.Errorf("failed to register Docs tools: %w", err)
+	}
+
+	// Register Drive tools
+	if err := drive_tools.RegisterDriveTools(mcpSrv, serverContext); err != nil {
+		return fmt.Errorf("failed to register Drive tools: %w", err)
 	}
 
 	// Register Calendar tools
