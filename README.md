@@ -7,6 +7,8 @@ Archives Gmail threads for closed GitHub issues and pull requests.
 - **Gmail Integration**: Automatically archives emails related to closed GitHub issues and PRs
 - **Contact Search**: Search for contacts in Google Contacts by name, email, or phone number
 - **Email Sending**: Send emails through Gmail API with support for CC, BCC, and HTML formatting
+- **Newsletter Unsubscribe**: Extract and use List-Unsubscribe headers to easily unsubscribe from newsletters
+- **Email Filters**: Create, list, and manage Gmail filters programmatically to automatically organize incoming emails
 - **Google Docs Integration**: Extract and retrieve Google Docs content from email messages, with full support for multi-tab documents (Oct 2024 feature)
 - **Google Calendar Integration**: Full calendar management including event creation, modification, availability checking, and meeting scheduling with Google Meet support
 - **Google Meet Integration**: Retrieve meeting artifacts including recordings, transcripts, and Gemini notes from completed Google Meet sessions
@@ -284,6 +286,91 @@ Forward an existing email message to new recipients.
 **Returns:** Confirmation message with the forwarded message ID.
 
 **Use Case:** Forward emails to other recipients. The tool automatically includes the original message content with proper formatting, including the original sender, date, subject, and body. Adds "Fwd:" prefix to the subject if not already present. You can optionally add your own message before the forwarded content.
+
+#### `gmail_get_unsubscribe_info`
+Extract unsubscribe information from a Gmail message.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `messageId` (required): The ID of the Gmail message to check for unsubscribe information
+
+**Returns:** Available unsubscribe methods (mailto or HTTP) extracted from the List-Unsubscribe header.
+
+**Use Case:** Check if a newsletter or promotional email has unsubscribe information before attempting to unsubscribe. Many marketing emails include RFC 2369 compliant List-Unsubscribe headers that provide one-click unsubscribe options.
+
+#### `gmail_unsubscribe_via_http`
+Unsubscribe from a newsletter using an HTTP unsubscribe link.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `url` (required): The HTTP/HTTPS unsubscribe URL (obtained from `gmail_get_unsubscribe_info`)
+
+**Returns:** Confirmation message indicating success or failure.
+
+**Use Case:** Automatically unsubscribe from newsletters and promotional emails by visiting the HTTP unsubscribe link. Use `gmail_get_unsubscribe_info` first to get available unsubscribe methods. For mailto unsubscribe links, use `gmail_send_email` to send the unsubscribe request.
+
+**Note:** This follows RFC 2369 List-Unsubscribe specification. Some senders may require email confirmation after visiting the unsubscribe link.
+
+#### `gmail_create_filter`
+Create a new Gmail filter to automatically organize incoming emails.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- **Criteria** (at least one required):
+  - `from` (optional): Filter emails from this sender (e.g., 'newsletter@example.com')
+  - `to` (optional): Filter emails sent to this recipient (e.g., 'myalias@example.com')
+  - `subject` (optional): Filter emails with this subject (e.g., 'Weekly Report')
+  - `query` (optional): Gmail search query for advanced filtering (e.g., 'has:attachment larger:10M')
+  - `hasAttachment` (optional): Filter emails that have attachments
+- **Actions** (at least one required):
+  - `addLabelIds` (optional): Comma-separated list of label IDs to add (use `gmail_list_labels` to get IDs)
+  - `removeLabelIds` (optional): Comma-separated list of label IDs to remove
+  - `archive` (optional): Remove from inbox (archive)
+  - `markAsRead` (optional): Mark as read
+  - `star` (optional): Add star
+  - `markAsSpam` (optional): Mark as spam
+  - `delete` (optional): Send to trash
+  - `forward` (optional): Forward to this email address
+
+**Returns:** Details of the created filter including its ID and configuration.
+
+**Use Case:** Automatically organize emails by sender, subject, or content. Create filters to archive newsletters, label important emails, forward specific messages, or delete spam. Filters apply to both existing and future emails.
+
+**Examples:**
+- Archive all emails from a specific sender: `from="newsletter@example.com", archive=true`
+- Label and star important emails: `subject="Urgent", addLabelIds="Label_1", star=true`
+- Auto-delete spam: `from="spam@example.com", delete=true`
+
+#### `gmail_list_filters`
+List all existing Gmail filters for the account.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+
+**Returns:** List of all filters with their IDs, criteria, and actions.
+
+**Use Case:** Review existing filters to understand current email organization rules. Get filter IDs for deletion. Audit and manage your email automation setup.
+
+#### `gmail_delete_filter`
+Delete a Gmail filter by its ID.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `filterId` (required): The ID of the filter to delete (obtained from `gmail_list_filters`)
+
+**Returns:** Confirmation message.
+
+**Use Case:** Remove outdated or incorrect filters. Clean up email automation rules that are no longer needed.
+
+#### `gmail_list_labels`
+List all Gmail labels for the account.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+
+**Returns:** List of all labels with their IDs, names, and types (system or user).
+
+**Use Case:** Get label IDs needed for creating filters. Browse available labels before organizing emails. System labels include INBOX, SENT, DRAFT, SPAM, TRASH, UNREAD, STARRED, and IMPORTANT.
 
 ### Google OAuth Tools
 
