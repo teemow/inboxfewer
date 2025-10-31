@@ -18,6 +18,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/tools/gmail_tools"
 	"github.com/teemow/inboxfewer/internal/tools/google_tools"
 	"github.com/teemow/inboxfewer/internal/tools/meet_tools"
+	"github.com/teemow/inboxfewer/internal/tools/tasks_tools"
 )
 
 func newServeCmd() *cobra.Command {
@@ -101,6 +102,11 @@ func runServe(transport string, debugMode bool, httpAddr string) error {
 	// Register Meet tools
 	if err := meet_tools.RegisterMeetTools(mcpSrv, serverContext); err != nil {
 		return fmt.Errorf("failed to register Meet tools: %w", err)
+	}
+
+	// Register Tasks tools
+	if err := tasks_tools.RegisterTasksTools(mcpSrv, serverContext); err != nil {
+		return fmt.Errorf("failed to register Tasks tools: %w", err)
 	}
 
 	// Start the appropriate server based on transport type

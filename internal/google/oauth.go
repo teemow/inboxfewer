@@ -17,6 +17,7 @@ import (
 	calendar "google.golang.org/api/calendar/v3"
 	gmail "google.golang.org/api/gmail/v1"
 	meet "google.golang.org/api/meet/v2"
+	tasks "google.golang.org/api/tasks/v1"
 )
 
 const defaultAccount = "default"
@@ -141,6 +142,7 @@ func getOAuthConfig() *oauth2.Config {
 			calendar.CalendarScope,                                    // Google Calendar access (read/write)
 			meet.MeetingsSpaceReadonlyScope,                           // Google Meet access (read-only artifacts)
 			"https://www.googleapis.com/auth/meetings.space.settings", // Google Meet settings (configure spaces)
+			tasks.TasksScope, // Google Tasks access (read/write)
 		},
 	}
 }
