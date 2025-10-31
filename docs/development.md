@@ -17,7 +17,7 @@ This document provides information for developers who want to contribute to inbo
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.23 or later
 - Make (optional, for using Makefile targets)
 - Git
 
@@ -70,7 +70,7 @@ make build-windows
 make build-all
 ```
 
-Binaries are created in the `dist/` directory.
+Binaries are created in the current directory with platform-specific names (`inboxfewer-linux`, `inboxfewer-darwin`, `inboxfewer-windows.exe`).
 
 ## Running Tests
 
@@ -86,7 +86,7 @@ make test
 make test-coverage
 ```
 
-This generates a coverage report and opens it in your browser.
+This generates a coverage report at `coverage.html`.
 
 ### Run Specific Tests
 
@@ -247,12 +247,12 @@ inboxfewer/
 The project uses GitHub Actions for automated releases:
 
 1. **CI Checks** (`.github/workflows/ci.yaml`)
-   - Runs on every PR and push to master
+   - Runs on every PR and push to main
    - Executes tests, linting, and formatting checks
    - Validates the release process with a dry-run
 
 2. **Auto Release** (`.github/workflows/auto-release.yaml`)
-   - Triggers on merged PRs to master
+   - Triggers on merged PRs to main
    - Automatically increments the patch version
    - Creates a git tag
    - Builds binaries for multiple platforms using GoReleaser
