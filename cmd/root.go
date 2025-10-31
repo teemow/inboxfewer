@@ -55,4 +55,5 @@ func init() {
 	rootCmd.AddCommand(newCleanupCmd())
 	rootCmd.AddCommand(newServeCmd())
 	rootCmd.AddCommand(newVersionCmd())
+	rootCmd.AddCommand(newGenerateDocsCmd())
 }
