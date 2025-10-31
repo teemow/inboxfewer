@@ -1,5 +1,14 @@
 # Debugging the MCP Server
 
+This guide explains how to debug inboxfewer using [giantswarm/mcp-debug](https://github.com/giantswarm/mcp-debug), a powerful debugging tool for MCP servers.
+
+## Prerequisites
+
+Install mcp-debug:
+```bash
+go install github.com/giantswarm/mcp-debug@latest
+```
+
 ## Quick Start
 
 1. **Start the inboxfewer MCP server:**
@@ -41,11 +50,16 @@ This will:
 
 ## Available Tools
 
+For a complete list of all available tools (Gmail, Calendar, Docs, Drive, Meet, Tasks, and OAuth), see [tools.md](tools.md).
+
+**Quick examples:**
 - `gmail_list_threads` - List Gmail threads
 - `gmail_archive_thread` - Archive a thread
-- `gmail_classify_thread` - Classify if GitHub-related
-- `gmail_check_stale` - Check if stale (closed issue/PR)
-- `gmail_archive_stale_threads` - Archive all stale threads
+- `calendar_list_events` - List calendar events
+- `docs_get_document` - Get Google Docs content
+- `drive_list_files` - List files in Google Drive
+- `meet_list_recordings` - List Meet recordings
+- `tasks_list_tasks` - List tasks from Google Tasks
 
 ## REPL Examples
 
