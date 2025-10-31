@@ -99,6 +99,9 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 		mcp.WithString("eventType",
 			mcp.Description("Event type: 'default', 'outOfOffice', 'focusTime', 'workingLocation'"),
 		),
+		mcp.WithBoolean("allDay",
+			mcp.Description("Create as all-day event (ignores time portion of start/end)"),
+		),
 		mcp.WithBoolean("addGoogleMeet",
 			mcp.Description("Automatically add a Google Meet link to the event"),
 		),
@@ -153,6 +156,9 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 		),
 		mcp.WithString("eventType",
 			mcp.Description("New event type: 'default', 'outOfOffice', 'focusTime', 'workingLocation'"),
+		),
+		mcp.WithBoolean("allDay",
+			mcp.Description("Update to be an all-day event (ignores time portion of start/end)"),
 		),
 		mcp.WithBoolean("guestsCanModify",
 			mcp.Description("Allow guests to modify the event"),
@@ -419,6 +425,9 @@ func handleCreateEvent(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		input.Recurrence = []string{recurrence}
 	}
 
+	if allDay, ok := args["allDay"].(bool); ok {
+		input.AllDay = allDay
+	}
 	if addMeet, ok := args["addGoogleMeet"].(bool); ok {
 		input.UseDefaultConferenceData = addMeet
 	}
@@ -508,6 +517,9 @@ func handleUpdateEvent(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		}
 	}
 
+	if allDay, ok := args["allDay"].(bool); ok {
+		input.AllDay = allDay
+	}
 	if guestsCanModify, ok := args["guestsCanModify"].(bool); ok {
 		input.GuestsCanModify = guestsCanModify
 	}
