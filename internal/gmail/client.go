@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"os"
 	"strings"
 
@@ -22,6 +23,7 @@ type Client struct {
 	svc       *gmail.UsersService
 	peopleSvc *people.Service
 	account   string // The account this client is associated with
+	signature string // Cached signature for this account
 }
 
 // Account returns the account name this client is associated with
@@ -160,13 +162,50 @@ func (c *Client) PopulateThread(t *gmail.Thread) error {
 }
 
 // ListThreads lists threads matching the query with pagination
+// It will fetch up to maxResults threads, making multiple API calls if necessary
 func (c *Client) ListThreads(q string, maxResults int64) ([]*gmail.Thread, error) {
-	req := c.svc.Threads.List("me").Q(q).MaxResults(maxResults)
-	res, err := req.Do()
-	if err != nil {
-		return nil, err
+	var allThreads []*gmail.Thread
+	pageToken := ""
+
+	for {
+		// Request the remaining number of threads needed
+		remaining := maxResults - int64(len(allThreads))
+		if remaining <= 0 {
+			break
+		}
+
+		// Gmail API has a max page size, typically 100
+		pageSize := remaining
+		if pageSize > 100 {
+			pageSize = 100
+		}
+
+		req := c.svc.Threads.List("me").Q(q).MaxResults(pageSize)
+		if pageToken != "" {
+			req = req.PageToken(pageToken)
+		}
+
+		res, err := req.Do()
+		if err != nil {
+			return nil, err
+		}
+
+		allThreads = append(allThreads, res.Threads...)
+
+		// If there's no next page or we have enough results, stop
+		if res.NextPageToken == "" || int64(len(allThreads)) >= maxResults {
+			break
+		}
+
+		pageToken = res.NextPageToken
 	}
-	return res.Threads, nil
+
+	// Trim to exact maxResults if we got more
+	if int64(len(allThreads)) > maxResults {
+		allThreads = allThreads[:maxResults]
+	}
+
+	return allThreads, nil
 }
 
 // isTerminal checks if stdin is connected to a terminal (CLI mode)
@@ -355,6 +394,69 @@ type EmailMessage struct {
 	IsHTML  bool
 }
 
+// encodeRFC2047 encodes a string for use in email headers according to RFC 2047
+// This is necessary for non-ASCII characters (like German umlauts) in subjects
+func encodeRFC2047(s string) string {
+	// Check if the string contains only ASCII characters
+	needsEncoding := false
+	for _, r := range s {
+		if r > 127 {
+			needsEncoding = true
+			break
+		}
+	}
+
+	// If it's all ASCII, return as-is
+	if !needsEncoding {
+		return s
+	}
+
+	// Use Go's mime package which implements RFC 2047 encoding
+	return mime.BEncoding.Encode("UTF-8", s)
+}
+
+// GetSignature fetches the user's Gmail signature (primary send-as address)
+// The signature is cached after the first fetch
+func (c *Client) GetSignature() (string, error) {
+	// Return cached signature if available
+	if c.signature != "" {
+		return c.signature, nil
+	}
+
+	// Fetch send-as settings to get the signature
+	sendAs, err := c.svc.Settings.SendAs.Get("me", "me").Do()
+	if err != nil {
+		// If we can't fetch the signature, return empty string (not an error)
+		// This allows emails to be sent even if signature fetching fails
+		return "", nil
+	}
+
+	// Cache the signature
+	if sendAs.Signature != "" {
+		c.signature = sendAs.Signature
+	}
+
+	return c.signature, nil
+}
+
+// appendSignature adds the user's signature to the email body
+func (c *Client) appendSignature(body string, isHTML bool) string {
+	signature, err := c.GetSignature()
+	if err != nil || signature == "" {
+		// No signature or error fetching it, return body as-is
+		return body
+	}
+
+	// Append signature with appropriate formatting
+	if isHTML {
+		// Add signature with line breaks for HTML
+		return body + "<br><br>-- <br>" + signature
+	}
+
+	// Add signature with line breaks for plain text
+	return body + "\n\n-- \n" + signature
+}
+
 // SendEmail sends an email through Gmail API
 func (c *Client) SendEmail(msg *EmailMessage) (string, error) {
 	if len(msg.To) == 0 {
@@ -389,9 +491,9 @@ func (c *Client) SendEmail(msg *EmailMessage) (string, error) {
 		emailBuilder.WriteString("\r\n")
 	}
 
-	// Add Subject
+	// Add Subject (encode for non-ASCII characters like umlauts)
 	emailBuilder.WriteString("Subject: ")
-	emailBuilder.WriteString(msg.Subject)
+	emailBuilder.WriteString(encodeRFC2047(msg.Subject))
 	emailBuilder.WriteString("\r\n")
 
 	// Add Content-Type
@@ -403,8 +505,9 @@ func (c *Client) SendEmail(msg *EmailMessage) (string, error) {
 	emailBuilder.WriteString("MIME-Version: 1.0\r\n")
 	emailBuilder.WriteString("\r\n")
 
-	// Add body
-	emailBuilder.WriteString(msg.Body)
+	// Add body with signature
+	bodyWithSignature := c.appendSignature(msg.Body, msg.IsHTML)
+	emailBuilder.WriteString(bodyWithSignature)
 
 	// Encode the message in base64url format
 	rawMessage := base64.URLEncoding.EncodeToString([]byte(emailBuilder.String()))
@@ -417,6 +520,235 @@ func (c *Client) SendEmail(msg *EmailMessage) (string, error) {
 	sent, err := c.svc.Messages.Send("me", gmailMsg).Do()
 	if err != nil {
 		return "", fmt.Errorf("failed to send email: %w", err)
+	}
+
+	return sent.Id, nil
+}
+
+// ReplyToEmail sends a reply to an existing email message
+func (c *Client) ReplyToEmail(messageID, threadID, body string, cc, bcc []string, isHTML bool) (string, error) {
+	if messageID == "" {
+		return "", fmt.Errorf("messageID is required")
+	}
+	if threadID == "" {
+		return "", fmt.Errorf("threadID is required")
+	}
+	if body == "" {
+		return "", fmt.Errorf("body is required")
+	}
+
+	// Get the original message to extract headers
+	msg, err := c.GetMessage(messageID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get original message: %w", err)
+	}
+
+	// Extract necessary headers
+	originalFrom := HeaderValue(msg, "From")
+	originalSubject := HeaderValue(msg, "Subject")
+	originalMessageID := HeaderValue(msg, "Message-ID")
+	originalReferences := HeaderValue(msg, "References")
+
+	if originalFrom == "" {
+		return "", fmt.Errorf("original message has no From header")
+	}
+
+	// Build reply subject (add "Re: " if not already present)
+	replySubject := originalSubject
+	if !strings.HasPrefix(strings.ToLower(replySubject), "re:") {
+		replySubject = "Re: " + replySubject
+	}
+
+	// Build References header for proper threading
+	var references string
+	if originalReferences != "" {
+		references = originalReferences + " " + originalMessageID
+	} else {
+		references = originalMessageID
+	}
+
+	// Build the email message in RFC 2822 format
+	var emailBuilder strings.Builder
+
+	// Add To header (reply to original sender)
+	emailBuilder.WriteString("To: ")
+	emailBuilder.WriteString(originalFrom)
+	emailBuilder.WriteString("\r\n")
+
+	// Add Cc header if present
+	if len(cc) > 0 {
+		emailBuilder.WriteString("Cc: ")
+		emailBuilder.WriteString(strings.Join(cc, ", "))
+		emailBuilder.WriteString("\r\n")
+	}
+
+	// Add Bcc header if present
+	if len(bcc) > 0 {
+		emailBuilder.WriteString("Bcc: ")
+		emailBuilder.WriteString(strings.Join(bcc, ", "))
+		emailBuilder.WriteString("\r\n")
+	}
+
+	// Add Subject (encode for non-ASCII characters like umlauts)
+	emailBuilder.WriteString("Subject: ")
+	emailBuilder.WriteString(encodeRFC2047(replySubject))
+	emailBuilder.WriteString("\r\n")
+
+	// Add threading headers for proper email threading
+	if originalMessageID != "" {
+		emailBuilder.WriteString("In-Reply-To: ")
+		emailBuilder.WriteString(originalMessageID)
+		emailBuilder.WriteString("\r\n")
+	}
+
+	if references != "" {
+		emailBuilder.WriteString("References: ")
+		emailBuilder.WriteString(references)
+		emailBuilder.WriteString("\r\n")
+	}
+
+	// Add Content-Type
+	if isHTML {
+		emailBuilder.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
+	} else {
+		emailBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	}
+	emailBuilder.WriteString("MIME-Version: 1.0\r\n")
+	emailBuilder.WriteString("\r\n")
+
+	// Add body with signature
+	bodyWithSignature := c.appendSignature(body, isHTML)
+	emailBuilder.WriteString(bodyWithSignature)
+
+	// Encode the message in base64url format
+	rawMessage := base64.URLEncoding.EncodeToString([]byte(emailBuilder.String()))
+
+	// Send the reply with threadID to maintain threading
+	gmailMsg := &gmail.Message{
+		Raw:      rawMessage,
+		ThreadId: threadID,
+	}
+
+	sent, err := c.svc.Messages.Send("me", gmailMsg).Do()
+	if err != nil {
+		return "", fmt.Errorf("failed to send reply: %w", err)
+	}
+
+	return sent.Id, nil
+}
+
+// ForwardEmail forwards an existing email message to new recipients
+func (c *Client) ForwardEmail(messageID string, to, cc, bcc []string, additionalBody string, isHTML bool) (string, error) {
+	if messageID == "" {
+		return "", fmt.Errorf("messageID is required")
+	}
+	if len(to) == 0 {
+		return "", fmt.Errorf("at least one recipient is required")
+	}
+
+	// Get the original message
+	msg, err := c.GetMessage(messageID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get original message: %w", err)
+	}
+
+	// Extract headers from original message
+	originalFrom := HeaderValue(msg, "From")
+	originalTo := HeaderValue(msg, "To")
+	originalSubject := HeaderValue(msg, "Subject")
+	originalDate := HeaderValue(msg, "Date")
+
+	// Build forwarded subject (add "Fwd: " if not already present)
+	fwdSubject := originalSubject
+	if !strings.HasPrefix(strings.ToLower(fwdSubject), "fwd:") && !strings.HasPrefix(strings.ToLower(fwdSubject), "fw:") {
+		fwdSubject = "Fwd: " + fwdSubject
+	}
+
+	// Get the original message body
+	var originalBody string
+	// Try to get HTML body first, then fall back to text
+	if isHTML {
+		originalBody, _ = c.GetMessageBody(messageID, "html")
+		if originalBody == "" {
+			originalBody, _ = c.GetMessageBody(messageID, "text")
+		}
+	} else {
+		originalBody, _ = c.GetMessageBody(messageID, "text")
+	}
+
+	// Add signature to additional body (the part before the forwarded content)
+	additionalBodyWithSignature := c.appendSignature(additionalBody, isHTML)
+
+	// Build the forwarded message body
+	var forwardedBody string
+	if isHTML {
+		forwardedBody = additionalBodyWithSignature + "<br><br>"
+		forwardedBody += "---------- Forwarded message ---------<br>"
+		forwardedBody += fmt.Sprintf("From: %s<br>", originalFrom)
+		forwardedBody += fmt.Sprintf("Date: %s<br>", originalDate)
+		forwardedBody += fmt.Sprintf("Subject: %s<br>", originalSubject)
+		forwardedBody += fmt.Sprintf("To: %s<br><br>", originalTo)
+		forwardedBody += originalBody
+	} else {
+		forwardedBody = additionalBodyWithSignature + "\n\n"
+		forwardedBody += "---------- Forwarded message ---------\n"
+		forwardedBody += fmt.Sprintf("From: %s\n", originalFrom)
+		forwardedBody += fmt.Sprintf("Date: %s\n", originalDate)
+		forwardedBody += fmt.Sprintf("Subject: %s\n", originalSubject)
+		forwardedBody += fmt.Sprintf("To: %s\n\n", originalTo)
+		forwardedBody += originalBody
+	}
+
+	// Build the email message in RFC 2822 format
+	var emailBuilder strings.Builder
+
+	// Add To header
+	emailBuilder.WriteString("To: ")
+	emailBuilder.WriteString(strings.Join(to, ", "))
+	emailBuilder.WriteString("\r\n")
+
+	// Add Cc header if present
+	if len(cc) > 0 {
+		emailBuilder.WriteString("Cc: ")
+		emailBuilder.WriteString(strings.Join(cc, ", "))
+		emailBuilder.WriteString("\r\n")
+	}
+
+	// Add Bcc header if present
+	if len(bcc) > 0 {
+		emailBuilder.WriteString("Bcc: ")
+		emailBuilder.WriteString(strings.Join(bcc, ", "))
+		emailBuilder.WriteString("\r\n")
+	}
+
+	// Add Subject (encode for non-ASCII characters like umlauts)
+	emailBuilder.WriteString("Subject: ")
+	emailBuilder.WriteString(encodeRFC2047(fwdSubject))
+	emailBuilder.WriteString("\r\n")
+
+	// Add Content-Type
+	if isHTML {
+		emailBuilder.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
+	} else {
+		emailBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	}
+	emailBuilder.WriteString("MIME-Version: 1.0\r\n")
+	emailBuilder.WriteString("\r\n")
+
+	// Add forwarded body
+	emailBuilder.WriteString(forwardedBody)
+
+	// Encode the message in base64url format
+	rawMessage := base64.URLEncoding.EncodeToString([]byte(emailBuilder.String()))
+
+	// Send the forwarded message
+	gmailMsg := &gmail.Message{
+		Raw: rawMessage,
+	}
+
+	sent, err := c.svc.Messages.Send("me", gmailMsg).Do()
+	if err != nil {
+		return "", fmt.Errorf("failed to forward email: %w", err)
 	}
 
 	return sent.Id, nil
