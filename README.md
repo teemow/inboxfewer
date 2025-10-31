@@ -255,6 +255,36 @@ Send an email through Gmail.
 
 **Use Case:** Send emails programmatically through your Gmail account. Supports both plain text and HTML emails, with CC and BCC options.
 
+#### `gmail_reply_to_email`
+Reply to an existing email message in a thread.
+
+**Arguments:**
+- `messageId` (required): The ID of the message to reply to
+- `threadId` (required): The ID of the email thread
+- `body` (required): Reply body content
+- `cc` (optional): CC email address(es), comma-separated for multiple recipients
+- `bcc` (optional): BCC email address(es), comma-separated for multiple recipients
+- `isHTML` (optional): Whether the body is HTML (default: false for plain text)
+
+**Returns:** Confirmation message with the reply message ID and thread ID.
+
+**Use Case:** Reply to emails while maintaining proper email threading. The tool automatically extracts the original sender, subject, and threading headers (In-Reply-To, References) to ensure the reply appears correctly in the email thread. Adds "Re:" prefix to the subject if not already present.
+
+#### `gmail_forward_email`
+Forward an existing email message to new recipients.
+
+**Arguments:**
+- `messageId` (required): The ID of the message to forward
+- `to` (required): Recipient email address(es), comma-separated for multiple recipients
+- `additionalBody` (optional): Additional message to add before the forwarded content
+- `cc` (optional): CC email address(es), comma-separated for multiple recipients
+- `bcc` (optional): BCC email address(es), comma-separated for multiple recipients
+- `isHTML` (optional): Whether the body is HTML (default: false for plain text)
+
+**Returns:** Confirmation message with the forwarded message ID.
+
+**Use Case:** Forward emails to other recipients. The tool automatically includes the original message content with proper formatting, including the original sender, date, subject, and body. Adds "Fwd:" prefix to the subject if not already present. You can optionally add your own message before the forwarded content.
+
 ### Google OAuth Tools
 
 #### `google_get_auth_url`
