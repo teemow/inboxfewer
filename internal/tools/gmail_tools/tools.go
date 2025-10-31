@@ -38,6 +38,16 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 		return fmt.Errorf("failed to register email tools: %w", err)
 	}
 
+	// Register unsubscribe tools
+	if err := RegisterUnsubscribeTools(s, sc); err != nil {
+		return fmt.Errorf("failed to register unsubscribe tools: %w", err)
+	}
+
+	// Register filter tools
+	if err := RegisterFilterTools(s, sc); err != nil {
+		return fmt.Errorf("failed to register filter tools: %w", err)
+	}
+
 	// List threads tool
 	listThreadsTool := mcp.NewTool("gmail_list_threads",
 		mcp.WithDescription("List Gmail threads matching a query"),
