@@ -52,19 +52,19 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 }
 
 // RegisterDriveTools registers all Google Drive-related tools with the MCP server
-func RegisterDriveTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
+func RegisterDriveTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
 	// Register file operation tools
-	if err := registerFileTools(s, sc); err != nil {
+	if err := registerFileTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register file tools: %w", err)
 	}
 
 	// Register folder operation tools
-	if err := registerFolderTools(s, sc); err != nil {
+	if err := registerFolderTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register folder tools: %w", err)
 	}
 
 	// Register permission/sharing tools
-	if err := registerShareTools(s, sc); err != nil {
+	if err := registerShareTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register share tools: %w", err)
 	}
 

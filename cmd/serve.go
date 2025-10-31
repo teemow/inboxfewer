@@ -27,6 +27,7 @@ func newServeCmd() *cobra.Command {
 		debugMode bool
 		transport string
 		httpAddr  string
+		yolo      bool
 	)
 
 	cmd := &cobra.Command{
@@ -38,20 +39,25 @@ integration tools for AI assistants.
 Supports multiple transport types:
   - stdio: Standard input/output (default)
   - sse: Server-Sent Events over HTTP
-  - streamable-http: Streamable HTTP transport`,
+  - streamable-http: Streamable HTTP transport
+
+Safety Mode:
+  By default, the server operates in read-only mode, providing only safe operations.
+  Use --yolo to enable write operations (email sending, file deletion, etc.)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runServe(transport, debugMode, httpAddr)
+			return runServe(transport, debugMode, httpAddr, yolo)
 		},
 	}
 
 	cmd.Flags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
 	cmd.Flags().StringVar(&transport, "transport", "stdio", "Transport type: stdio, sse, or streamable-http")
 	cmd.Flags().StringVar(&httpAddr, "http-addr", ":8080", "HTTP server address (for sse and streamable-http transports)")
+	cmd.Flags().BoolVar(&yolo, "yolo", false, "Enable write operations (email sending, file deletion, etc.). Default is read-only mode.")
 
 	return cmd
 }
 
-func runServe(transport string, debugMode bool, httpAddr string) error {
+func runServe(transport string, debugMode bool, httpAddr string, yolo bool) error {
 	// Setup graceful shutdown
 	shutdownCtx, cancel := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
@@ -80,38 +86,50 @@ func runServe(transport string, debugMode bool, httpAddr string) error {
 		mcpserver.WithToolCapabilities(true),
 	)
 
-	// Register Google OAuth tools
+	// readOnly is the inverse of yolo
+	readOnly := !yolo
+
+	// Log the mode for visibility (only for non-stdio transports)
+	if transport != "stdio" {
+		if readOnly {
+			log.Println("Starting server in READ-ONLY mode (use --yolo to enable write operations)")
+		} else {
+			log.Println("Starting server with WRITE operations enabled (--yolo flag is set)")
+		}
+	}
+
+	// Register Google OAuth tools (always available for authentication)
 	if err := google_tools.RegisterGoogleTools(mcpSrv, serverContext); err != nil {
 		return fmt.Errorf("failed to register Google OAuth tools: %w", err)
 	}
 
 	// Register Gmail tools
-	if err := gmail_tools.RegisterGmailTools(mcpSrv, serverContext); err != nil {
+	if err := gmail_tools.RegisterGmailTools(mcpSrv, serverContext, readOnly); err != nil {
 		return fmt.Errorf("failed to register Gmail tools: %w", err)
 	}
 
-	// Register Docs tools
+	// Register Docs tools (read-only by nature)
 	if err := docs_tools.RegisterDocsTools(mcpSrv, serverContext); err != nil {
 		return fmt.Errorf("failed to register Docs tools: %w", err)
 	}
 
 	// Register Drive tools
-	if err := drive_tools.RegisterDriveTools(mcpSrv, serverContext); err != nil {
+	if err := drive_tools.RegisterDriveTools(mcpSrv, serverContext, readOnly); err != nil {
 		return fmt.Errorf("failed to register Drive tools: %w", err)
 	}
 
 	// Register Calendar tools
-	if err := calendar_tools.RegisterCalendarTools(mcpSrv, serverContext); err != nil {
+	if err := calendar_tools.RegisterCalendarTools(mcpSrv, serverContext, readOnly); err != nil {
 		return fmt.Errorf("failed to register Calendar tools: %w", err)
 	}
 
 	// Register Meet tools
-	if err := meet_tools.RegisterMeetTools(mcpSrv, serverContext); err != nil {
+	if err := meet_tools.RegisterMeetTools(mcpSrv, serverContext, readOnly); err != nil {
 		return fmt.Errorf("failed to register Meet tools: %w", err)
 	}
 
 	// Register Tasks tools
-	if err := tasks_tools.RegisterTasksTools(mcpSrv, serverContext); err != nil {
+	if err := tasks_tools.RegisterTasksTools(mcpSrv, serverContext, readOnly); err != nil {
 		return fmt.Errorf("failed to register Tasks tools: %w", err)
 	}
 

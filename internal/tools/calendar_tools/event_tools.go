@@ -14,8 +14,8 @@ import (
 )
 
 // RegisterEventTools registers event-related tools with the MCP server
-func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// List events tool
+func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// List events tool (read-only, always available)
 	listEventsTool := mcp.NewTool("calendar_list_events",
 		mcp.WithDescription("List/search calendar events within a time range"),
 		mcp.WithString("account",
@@ -120,81 +120,84 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 		return handleCreateEvent(ctx, request, sc)
 	})
 
-	// Update event tool
-	updateEventTool := mcp.NewTool("calendar_update_event",
-		mcp.WithDescription("Update an existing calendar event"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("calendarId",
-			mcp.Description("Calendar ID (use 'primary' for primary calendar)"),
-		),
-		mcp.WithString("eventId",
-			mcp.Required(),
-			mcp.Description("The ID of the event to update"),
-		),
-		mcp.WithString("summary",
-			mcp.Description("New event title/summary"),
-		),
-		mcp.WithString("description",
-			mcp.Description("New event description"),
-		),
-		mcp.WithString("location",
-			mcp.Description("New event location"),
-		),
-		mcp.WithString("start",
-			mcp.Description("New start time (RFC3339 format)"),
-		),
-		mcp.WithString("end",
-			mcp.Description("New end time (RFC3339 format)"),
-		),
-		mcp.WithString("timeZone",
-			mcp.Description("Time zone (e.g., 'America/New_York')"),
-		),
-		mcp.WithString("attendees",
-			mcp.Description("New comma-separated list of attendee email addresses"),
-		),
-		mcp.WithString("eventType",
-			mcp.Description("New event type: 'default', 'outOfOffice', 'focusTime', 'workingLocation'"),
-		),
-		mcp.WithBoolean("allDay",
-			mcp.Description("Update to be an all-day event (ignores time portion of start/end)"),
-		),
-		mcp.WithBoolean("guestsCanModify",
-			mcp.Description("Allow guests to modify the event"),
-		),
-		mcp.WithBoolean("guestsCanInviteOthers",
-			mcp.Description("Allow guests to invite others"),
-		),
-		mcp.WithBoolean("guestsCanSeeOtherGuests",
-			mcp.Description("Allow guests to see other guests"),
-		),
-	)
+	// Register update/delete tools only if not in read-only mode
+	if !readOnly {
+		// Update event tool
+		updateEventTool := mcp.NewTool("calendar_update_event",
+			mcp.WithDescription("Update an existing calendar event"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("calendarId",
+				mcp.Description("Calendar ID (use 'primary' for primary calendar)"),
+			),
+			mcp.WithString("eventId",
+				mcp.Required(),
+				mcp.Description("The ID of the event to update"),
+			),
+			mcp.WithString("summary",
+				mcp.Description("New event title/summary"),
+			),
+			mcp.WithString("description",
+				mcp.Description("New event description"),
+			),
+			mcp.WithString("location",
+				mcp.Description("New event location"),
+			),
+			mcp.WithString("start",
+				mcp.Description("New start time (RFC3339 format)"),
+			),
+			mcp.WithString("end",
+				mcp.Description("New end time (RFC3339 format)"),
+			),
+			mcp.WithString("timeZone",
+				mcp.Description("Time zone (e.g., 'America/New_York')"),
+			),
+			mcp.WithString("attendees",
+				mcp.Description("New comma-separated list of attendee email addresses"),
+			),
+			mcp.WithString("eventType",
+				mcp.Description("New event type: 'default', 'outOfOffice', 'focusTime', 'workingLocation'"),
+			),
+			mcp.WithBoolean("allDay",
+				mcp.Description("Update to be an all-day event (ignores time portion of start/end)"),
+			),
+			mcp.WithBoolean("guestsCanModify",
+				mcp.Description("Allow guests to modify the event"),
+			),
+			mcp.WithBoolean("guestsCanInviteOthers",
+				mcp.Description("Allow guests to invite others"),
+			),
+			mcp.WithBoolean("guestsCanSeeOtherGuests",
+				mcp.Description("Allow guests to see other guests"),
+			),
+		)
 
-	s.AddTool(updateEventTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleUpdateEvent(ctx, request, sc)
-	})
+		s.AddTool(updateEventTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleUpdateEvent(ctx, request, sc)
+		})
 
-	// Delete event tool
-	deleteEventTool := mcp.NewTool("calendar_delete_event",
-		mcp.WithDescription("Delete a calendar event"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("calendarId",
-			mcp.Description("Calendar ID (use 'primary' for primary calendar)"),
-		),
-		mcp.WithString("eventId",
-			mcp.Required(),
-			mcp.Description("The ID of the event to delete"),
-		),
-	)
+		// Delete event tool
+		deleteEventTool := mcp.NewTool("calendar_delete_event",
+			mcp.WithDescription("Delete a calendar event"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("calendarId",
+				mcp.Description("Calendar ID (use 'primary' for primary calendar)"),
+			),
+			mcp.WithString("eventId",
+				mcp.Required(),
+				mcp.Description("The ID of the event to delete"),
+			),
+		)
 
-	s.AddTool(deleteEventTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleDeleteEvent(ctx, request, sc)
-	})
+		s.AddTool(deleteEventTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleDeleteEvent(ctx, request, sc)
+		})
+	}
 
-	// Extract docs links tool
+	// Extract docs links tool (read-only, always available)
 	extractDocsLinksTool := mcp.NewTool("calendar_extract_docs_links",
 		mcp.WithDescription("Extract Google Docs/Drive links from a calendar event"),
 		mcp.WithString("account",

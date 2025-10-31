@@ -52,18 +52,18 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 }
 
 // RegisterCalendarTools registers all Calendar-related tools with the MCP server
-func RegisterCalendarTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// Register event tools
-	if err := RegisterEventTools(s, sc); err != nil {
+func RegisterCalendarTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Register event tools (some write operations require !readOnly)
+	if err := RegisterEventTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register event tools: %w", err)
 	}
 
-	// Register calendar list tools
+	// Register calendar list tools (read-only)
 	if err := RegisterCalendarListTools(s, sc); err != nil {
 		return fmt.Errorf("failed to register calendar list tools: %w", err)
 	}
 
-	// Register scheduling tools
+	// Register scheduling tools (read-only)
 	if err := RegisterSchedulingTools(s, sc); err != nil {
 		return fmt.Errorf("failed to register scheduling tools: %w", err)
 	}

@@ -55,8 +55,8 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 }
 
 // RegisterMeetTools registers all Meet-related tools with the MCP server
-func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// Get conference record
+func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Get conference record (read-only, always available)
 	getConferenceTool := mcp.NewTool("meet_get_conference",
 		mcp.WithDescription("Get details about a Google Meet conference record"),
 		mcp.WithString("account",
@@ -152,31 +152,34 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 		return handleGetTranscriptText(ctx, request, sc)
 	})
 
-	// Create space
-	createSpaceTool := mcp.NewTool("meet_create_space",
-		mcp.WithDescription("Create a new Google Meet space with optional auto-recording, transcription, and note-taking configuration"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("access_type",
-			mcp.Description("Who can join without knocking: 'OPEN', 'TRUSTED', 'RESTRICTED' (optional)"),
-		),
-		mcp.WithBoolean("enable_recording",
-			mcp.Description("Enable automatic recording (default: false)"),
-		),
-		mcp.WithBoolean("enable_transcription",
-			mcp.Description("Enable automatic transcription (default: false)"),
-		),
-		mcp.WithBoolean("enable_smart_notes",
-			mcp.Description("Enable automatic note-taking with Gemini (default: false). Requires Gemini add-on."),
-		),
-	)
+	// Register create/update space tools only if not in read-only mode
+	if !readOnly {
+		// Create space
+		createSpaceTool := mcp.NewTool("meet_create_space",
+			mcp.WithDescription("Create a new Google Meet space with optional auto-recording, transcription, and note-taking configuration"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("access_type",
+				mcp.Description("Who can join without knocking: 'OPEN', 'TRUSTED', 'RESTRICTED' (optional)"),
+			),
+			mcp.WithBoolean("enable_recording",
+				mcp.Description("Enable automatic recording (default: false)"),
+			),
+			mcp.WithBoolean("enable_transcription",
+				mcp.Description("Enable automatic transcription (default: false)"),
+			),
+			mcp.WithBoolean("enable_smart_notes",
+				mcp.Description("Enable automatic note-taking with Gemini (default: false). Requires Gemini add-on."),
+			),
+		)
 
-	s.AddTool(createSpaceTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleCreateSpace(ctx, request, sc)
-	})
+		s.AddTool(createSpaceTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleCreateSpace(ctx, request, sc)
+		})
+	}
 
-	// Get space
+	// Get space (read-only, always available)
 	getSpaceTool := mcp.NewTool("meet_get_space",
 		mcp.WithDescription("Get details about a Google Meet space including its configuration"),
 		mcp.WithString("account",
@@ -192,33 +195,36 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 		return handleGetSpace(ctx, request, sc)
 	})
 
-	// Update space configuration
-	updateSpaceConfigTool := mcp.NewTool("meet_update_space_config",
-		mcp.WithDescription("Update the configuration of an existing Google Meet space (enable/disable auto-recording, transcription, notes)"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("space_name",
-			mcp.Required(),
-			mcp.Description("The resource name of the space to update (e.g., 'spaces/SPACE_ID')"),
-		),
-		mcp.WithString("access_type",
-			mcp.Description("Who can join without knocking: 'OPEN', 'TRUSTED', 'RESTRICTED' (optional)"),
-		),
-		mcp.WithBoolean("enable_recording",
-			mcp.Description("Enable automatic recording"),
-		),
-		mcp.WithBoolean("enable_transcription",
-			mcp.Description("Enable automatic transcription"),
-		),
-		mcp.WithBoolean("enable_smart_notes",
-			mcp.Description("Enable automatic note-taking with Gemini. Requires Gemini add-on."),
-		),
-	)
+	// Register update space config tool only if not in read-only mode
+	if !readOnly {
+		// Update space configuration
+		updateSpaceConfigTool := mcp.NewTool("meet_update_space_config",
+			mcp.WithDescription("Update the configuration of an existing Google Meet space (enable/disable auto-recording, transcription, notes)"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("space_name",
+				mcp.Required(),
+				mcp.Description("The resource name of the space to update (e.g., 'spaces/SPACE_ID')"),
+			),
+			mcp.WithString("access_type",
+				mcp.Description("Who can join without knocking: 'OPEN', 'TRUSTED', 'RESTRICTED' (optional)"),
+			),
+			mcp.WithBoolean("enable_recording",
+				mcp.Description("Enable automatic recording"),
+			),
+			mcp.WithBoolean("enable_transcription",
+				mcp.Description("Enable automatic transcription"),
+			),
+			mcp.WithBoolean("enable_smart_notes",
+				mcp.Description("Enable automatic note-taking with Gemini. Requires Gemini add-on."),
+			),
+		)
 
-	s.AddTool(updateSpaceConfigTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleUpdateSpaceConfig(ctx, request, sc)
-	})
+		s.AddTool(updateSpaceConfigTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleUpdateSpaceConfig(ctx, request, sc)
+		})
+	}
 
 	return nil
 }

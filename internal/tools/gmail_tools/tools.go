@@ -22,29 +22,29 @@ func getAccountFromArgs(args map[string]interface{}) string {
 }
 
 // RegisterGmailTools registers all Gmail-related tools with the MCP server
-func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// Register attachment tools
+func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Register attachment tools (read-only)
 	if err := RegisterAttachmentTools(s, sc); err != nil {
 		return fmt.Errorf("failed to register attachment tools: %w", err)
 	}
 
-	// Register contact tools
+	// Register contact tools (read-only)
 	if err := RegisterContactTools(s, sc); err != nil {
 		return fmt.Errorf("failed to register contact tools: %w", err)
 	}
 
-	// Register email tools
-	if err := RegisterEmailTools(s, sc); err != nil {
+	// Register email tools (write operations require !readOnly)
+	if err := RegisterEmailTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register email tools: %w", err)
 	}
 
-	// Register unsubscribe tools
-	if err := RegisterUnsubscribeTools(s, sc); err != nil {
+	// Register unsubscribe tools (write operations require !readOnly)
+	if err := RegisterUnsubscribeTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register unsubscribe tools: %w", err)
 	}
 
-	// Register filter tools
-	if err := RegisterFilterTools(s, sc); err != nil {
+	// Register filter tools (write operations require !readOnly)
+	if err := RegisterFilterTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register filter tools: %w", err)
 	}
 

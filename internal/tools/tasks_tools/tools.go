@@ -56,14 +56,14 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 }
 
 // RegisterTasksTools registers all Tasks-related tools with the MCP server
-func RegisterTasksTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// Register task list tools
-	if err := registerTaskListTools(s, sc); err != nil {
+func RegisterTasksTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// Register task list tools (some operations require !readOnly)
+	if err := registerTaskListTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register task list tools: %w", err)
 	}
 
-	// Register task tools
-	if err := registerTaskTools(s, sc); err != nil {
+	// Register task tools (some operations require !readOnly)
+	if err := registerTaskTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register task tools: %w", err)
 	}
 
@@ -71,8 +71,8 @@ func RegisterTasksTools(s *mcpserver.MCPServer, sc *server.ServerContext) error 
 }
 
 // registerTaskListTools registers task list management tools
-func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// List task lists tool
+func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
+	// List task lists tool (read-only, always available)
 	listTaskListsTool := mcp.NewTool("tasks_list_task_lists",
 		mcp.WithDescription("List all task lists for the authenticated user"),
 		mcp.WithString("account",
@@ -168,89 +168,92 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext) err
 		return mcp.NewToolResultText(fmt.Sprintf("Task list created successfully:\n%s", string(result))), nil
 	})
 
-	// Update task list tool
-	updateTaskListTool := mcp.NewTool("tasks_update_task_list",
-		mcp.WithDescription("Update a task list's title"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("taskListId",
-			mcp.Required(),
-			mcp.Description("The ID of the task list to update"),
-		),
-		mcp.WithString("title",
-			mcp.Required(),
-			mcp.Description("The new title for the task list"),
-		),
-	)
+	// Register update/delete task list tools only if not in read-only mode
+	if !readOnly {
+		// Update task list tool
+		updateTaskListTool := mcp.NewTool("tasks_update_task_list",
+			mcp.WithDescription("Update a task list's title"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("taskListId",
+				mcp.Required(),
+				mcp.Description("The ID of the task list to update"),
+			),
+			mcp.WithString("title",
+				mcp.Required(),
+				mcp.Description("The new title for the task list"),
+			),
+		)
 
-	s.AddTool(updateTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		s.AddTool(updateTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := getAccountFromArgs(args)
 
-		taskListID, ok := args["taskListID"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
+			taskListID, ok := args["taskListID"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
+			}
 
-		title, ok := args["title"].(string)
-		if !ok || title == "" {
-			return mcp.NewToolResultError("title is required"), nil
-		}
+			title, ok := args["title"].(string)
+			if !ok || title == "" {
+				return mcp.NewToolResultError("title is required"), nil
+			}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		taskList, err := client.UpdateTaskList(taskListID, title)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to update task list: %v", err)), nil
-		}
+			taskList, err := client.UpdateTaskList(taskListID, title)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to update task list: %v", err)), nil
+			}
 
-		result, _ := json.MarshalIndent(taskList, "", "  ")
-		return mcp.NewToolResultText(fmt.Sprintf("Task list updated successfully:\n%s", string(result))), nil
-	})
+			result, _ := json.MarshalIndent(taskList, "", "  ")
+			return mcp.NewToolResultText(fmt.Sprintf("Task list updated successfully:\n%s", string(result))), nil
+		})
 
-	// Delete task list tool
-	deleteTaskListTool := mcp.NewTool("tasks_delete_task_list",
-		mcp.WithDescription("Delete a task list"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("taskListId",
-			mcp.Required(),
-			mcp.Description("The ID of the task list to delete"),
-		),
-	)
+		// Delete task list tool
+		deleteTaskListTool := mcp.NewTool("tasks_delete_task_list",
+			mcp.WithDescription("Delete a task list"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("taskListId",
+				mcp.Required(),
+				mcp.Description("The ID of the task list to delete"),
+			),
+		)
 
-	s.AddTool(deleteTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		s.AddTool(deleteTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := getAccountFromArgs(args)
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
+			}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		err = client.DeleteTaskList(taskListID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to delete task list: %v", err)), nil
-		}
+			err = client.DeleteTaskList(taskListID)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to delete task list: %v", err)), nil
+			}
 
-		return mcp.NewToolResultText(fmt.Sprintf("Task list %s deleted successfully", taskListID)), nil
-	})
+			return mcp.NewToolResultText(fmt.Sprintf("Task list %s deleted successfully", taskListID)), nil
+		})
+	}
 
 	return nil
 }
 
 // registerTaskTools registers task management tools
-func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
+func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
 	// List tasks tool
 	listTasksTool := mcp.NewTool("tasks_list_tasks",
 		mcp.WithDescription("List tasks in a task list with optional filters"),
@@ -435,262 +438,265 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 		return mcp.NewToolResultText(fmt.Sprintf("Task created successfully:\n%s", string(result))), nil
 	})
 
-	// Update task tool
-	updateTaskTool := mcp.NewTool("tasks_update_task",
-		mcp.WithDescription("Update an existing task"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("taskListId",
-			mcp.Required(),
-			mcp.Description("The ID of the task list"),
-		),
-		mcp.WithString("taskId",
-			mcp.Required(),
-			mcp.Description("The ID of the task to update"),
-		),
-		mcp.WithString("title",
-			mcp.Description("New title for the task"),
-		),
-		mcp.WithString("notes",
-			mcp.Description("New notes or description for the task"),
-		),
-		mcp.WithString("status",
-			mcp.Description("New status: 'needsAction' or 'completed'"),
-		),
-		mcp.WithString("due",
-			mcp.Description("New due date for the task (RFC3339 format)"),
-		),
-	)
+	// Register update/delete/complete/move/clear tools only if not in read-only mode
+	if !readOnly {
+		// Update task tool
+		updateTaskTool := mcp.NewTool("tasks_update_task",
+			mcp.WithDescription("Update an existing task"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("taskListId",
+				mcp.Required(),
+				mcp.Description("The ID of the task list"),
+			),
+			mcp.WithString("taskId",
+				mcp.Required(),
+				mcp.Description("The ID of the task to update"),
+			),
+			mcp.WithString("title",
+				mcp.Description("New title for the task"),
+			),
+			mcp.WithString("notes",
+				mcp.Description("New notes or description for the task"),
+			),
+			mcp.WithString("status",
+				mcp.Description("New status: 'needsAction' or 'completed'"),
+			),
+			mcp.WithString("due",
+				mcp.Description("New due date for the task (RFC3339 format)"),
+			),
+		)
 
-	s.AddTool(updateTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		s.AddTool(updateTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := getAccountFromArgs(args)
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
-
-		taskID, ok := args["taskId"].(string)
-		if !ok || taskID == "" {
-			return mcp.NewToolResultError("taskId is required"), nil
-		}
-
-		input := tasks.TaskInput{}
-
-		if title, ok := args["title"].(string); ok {
-			input.Title = title
-		}
-
-		if notes, ok := args["notes"].(string); ok {
-			input.Notes = notes
-		}
-
-		if status, ok := args["status"].(string); ok {
-			input.Status = status
-		}
-
-		if dueStr, ok := args["due"].(string); ok && dueStr != "" {
-			if due, err := time.Parse(time.RFC3339, dueStr); err == nil {
-				input.Due = due
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
 			}
-		}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			taskID, ok := args["taskId"].(string)
+			if !ok || taskID == "" {
+				return mcp.NewToolResultError("taskId is required"), nil
+			}
 
-		task, err := client.UpdateTask(taskListID, taskID, input)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to update task: %v", err)), nil
-		}
+			input := tasks.TaskInput{}
 
-		result, _ := json.MarshalIndent(task, "", "  ")
-		return mcp.NewToolResultText(fmt.Sprintf("Task updated successfully:\n%s", string(result))), nil
-	})
+			if title, ok := args["title"].(string); ok {
+				input.Title = title
+			}
 
-	// Delete task tool
-	deleteTaskTool := mcp.NewTool("tasks_delete_task",
-		mcp.WithDescription("Delete a task"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("taskListId",
-			mcp.Required(),
-			mcp.Description("The ID of the task list"),
-		),
-		mcp.WithString("taskId",
-			mcp.Required(),
-			mcp.Description("The ID of the task to delete"),
-		),
-	)
+			if notes, ok := args["notes"].(string); ok {
+				input.Notes = notes
+			}
 
-	s.AddTool(deleteTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+			if status, ok := args["status"].(string); ok {
+				input.Status = status
+			}
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
+			if dueStr, ok := args["due"].(string); ok && dueStr != "" {
+				if due, err := time.Parse(time.RFC3339, dueStr); err == nil {
+					input.Due = due
+				}
+			}
 
-		taskID, ok := args["taskId"].(string)
-		if !ok || taskID == "" {
-			return mcp.NewToolResultError("taskId is required"), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			task, err := client.UpdateTask(taskListID, taskID, input)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to update task: %v", err)), nil
+			}
 
-		err = client.DeleteTask(taskListID, taskID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to delete task: %v", err)), nil
-		}
+			result, _ := json.MarshalIndent(task, "", "  ")
+			return mcp.NewToolResultText(fmt.Sprintf("Task updated successfully:\n%s", string(result))), nil
+		})
 
-		return mcp.NewToolResultText(fmt.Sprintf("Task %s deleted successfully", taskID)), nil
-	})
+		// Delete task tool
+		deleteTaskTool := mcp.NewTool("tasks_delete_task",
+			mcp.WithDescription("Delete a task"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("taskListId",
+				mcp.Required(),
+				mcp.Description("The ID of the task list"),
+			),
+			mcp.WithString("taskId",
+				mcp.Required(),
+				mcp.Description("The ID of the task to delete"),
+			),
+		)
 
-	// Complete task tool
-	completeTaskTool := mcp.NewTool("tasks_complete_task",
-		mcp.WithDescription("Mark a task as completed"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("taskListId",
-			mcp.Required(),
-			mcp.Description("The ID of the task list"),
-		),
-		mcp.WithString("taskId",
-			mcp.Required(),
-			mcp.Description("The ID of the task to complete"),
-		),
-	)
+		s.AddTool(deleteTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := getAccountFromArgs(args)
 
-	s.AddTool(completeTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
+			}
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
+			taskID, ok := args["taskId"].(string)
+			if !ok || taskID == "" {
+				return mcp.NewToolResultError("taskId is required"), nil
+			}
 
-		taskID, ok := args["taskId"].(string)
-		if !ok || taskID == "" {
-			return mcp.NewToolResultError("taskId is required"), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			err = client.DeleteTask(taskListID, taskID)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to delete task: %v", err)), nil
+			}
 
-		task, err := client.CompleteTask(taskListID, taskID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to complete task: %v", err)), nil
-		}
+			return mcp.NewToolResultText(fmt.Sprintf("Task %s deleted successfully", taskID)), nil
+		})
 
-		result, _ := json.MarshalIndent(task, "", "  ")
-		return mcp.NewToolResultText(fmt.Sprintf("Task completed successfully:\n%s", string(result))), nil
-	})
+		// Complete task tool
+		completeTaskTool := mcp.NewTool("tasks_complete_task",
+			mcp.WithDescription("Mark a task as completed"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("taskListId",
+				mcp.Required(),
+				mcp.Description("The ID of the task list"),
+			),
+			mcp.WithString("taskId",
+				mcp.Required(),
+				mcp.Description("The ID of the task to complete"),
+			),
+		)
 
-	// Move task tool
-	moveTaskTool := mcp.NewTool("tasks_move_task",
-		mcp.WithDescription("Move a task to a different position or parent"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("taskListId",
-			mcp.Required(),
-			mcp.Description("The ID of the task list"),
-		),
-		mcp.WithString("taskId",
-			mcp.Required(),
-			mcp.Description("The ID of the task to move"),
-		),
-		mcp.WithString("parent",
-			mcp.Description("New parent task ID (empty string to move to root level)"),
-		),
-		mcp.WithString("previous",
-			mcp.Description("Previous sibling task ID for positioning"),
-		),
-	)
+		s.AddTool(completeTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := getAccountFromArgs(args)
 
-	s.AddTool(moveTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
+			}
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
+			taskID, ok := args["taskId"].(string)
+			if !ok || taskID == "" {
+				return mcp.NewToolResultError("taskId is required"), nil
+			}
 
-		taskID, ok := args["taskId"].(string)
-		if !ok || taskID == "" {
-			return mcp.NewToolResultError("taskId is required"), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		parent := ""
-		if p, ok := args["parent"].(string); ok {
-			parent = p
-		}
+			task, err := client.CompleteTask(taskListID, taskID)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to complete task: %v", err)), nil
+			}
 
-		previous := ""
-		if p, ok := args["previous"].(string); ok {
-			previous = p
-		}
+			result, _ := json.MarshalIndent(task, "", "  ")
+			return mcp.NewToolResultText(fmt.Sprintf("Task completed successfully:\n%s", string(result))), nil
+		})
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+		// Move task tool
+		moveTaskTool := mcp.NewTool("tasks_move_task",
+			mcp.WithDescription("Move a task to a different position or parent"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("taskListId",
+				mcp.Required(),
+				mcp.Description("The ID of the task list"),
+			),
+			mcp.WithString("taskId",
+				mcp.Required(),
+				mcp.Description("The ID of the task to move"),
+			),
+			mcp.WithString("parent",
+				mcp.Description("New parent task ID (empty string to move to root level)"),
+			),
+			mcp.WithString("previous",
+				mcp.Description("Previous sibling task ID for positioning"),
+			),
+		)
 
-		task, err := client.MoveTask(taskListID, taskID, parent, previous)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to move task: %v", err)), nil
-		}
+		s.AddTool(moveTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := getAccountFromArgs(args)
 
-		result, _ := json.MarshalIndent(task, "", "  ")
-		return mcp.NewToolResultText(fmt.Sprintf("Task moved successfully:\n%s", string(result))), nil
-	})
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
+			}
 
-	// Clear completed tasks tool
-	clearCompletedTool := mcp.NewTool("tasks_clear_completed",
-		mcp.WithDescription("Clear all completed tasks from a task list"),
-		mcp.WithString("account",
-			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-		),
-		mcp.WithString("taskListId",
-			mcp.Required(),
-			mcp.Description("The ID of the task list to clear completed tasks from"),
-		),
-	)
+			taskID, ok := args["taskId"].(string)
+			if !ok || taskID == "" {
+				return mcp.NewToolResultError("taskId is required"), nil
+			}
 
-	s.AddTool(clearCompletedTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+			parent := ""
+			if p, ok := args["parent"].(string); ok {
+				parent = p
+			}
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
+			previous := ""
+			if p, ok := args["previous"].(string); ok {
+				previous = p
+			}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		err = client.ClearCompletedTasks(taskListID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to clear completed tasks: %v", err)), nil
-		}
+			task, err := client.MoveTask(taskListID, taskID, parent, previous)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to move task: %v", err)), nil
+			}
 
-		return mcp.NewToolResultText(fmt.Sprintf("Completed tasks cleared from list %s", taskListID)), nil
-	})
+			result, _ := json.MarshalIndent(task, "", "  ")
+			return mcp.NewToolResultText(fmt.Sprintf("Task moved successfully:\n%s", string(result))), nil
+		})
+
+		// Clear completed tasks tool
+		clearCompletedTool := mcp.NewTool("tasks_clear_completed",
+			mcp.WithDescription("Clear all completed tasks from a task list"),
+			mcp.WithString("account",
+				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+			),
+			mcp.WithString("taskListId",
+				mcp.Required(),
+				mcp.Description("The ID of the task list to clear completed tasks from"),
+			),
+		)
+
+		s.AddTool(clearCompletedTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := getAccountFromArgs(args)
+
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
+			}
+
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			err = client.ClearCompletedTasks(taskListID)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to clear completed tasks: %v", err)), nil
+			}
+
+			return mcp.NewToolResultText(fmt.Sprintf("Completed tasks cleared from list %s", taskListID)), nil
+		})
+	}
 
 	return nil
 }
