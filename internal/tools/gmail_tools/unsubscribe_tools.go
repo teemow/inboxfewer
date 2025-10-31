@@ -30,23 +30,21 @@ func RegisterUnsubscribeTools(s *mcpserver.MCPServer, sc *server.ServerContext, 
 		return handleGetUnsubscribeInfo(ctx, request, sc)
 	})
 
-	// Unsubscribe via HTTP tool (write operation, only available with !readOnly)
-	if !readOnly {
-		unsubscribeViaHTTPTool := mcp.NewTool("gmail_unsubscribe_via_http",
-			mcp.WithDescription("Unsubscribe from a newsletter using an HTTP unsubscribe link. Use gmail_get_unsubscribe_info first to get available unsubscribe methods."),
-			mcp.WithString("account",
-				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-			),
-			mcp.WithString("url",
-				mcp.Required(),
-				mcp.Description("The HTTP/HTTPS unsubscribe URL (obtained from gmail_get_unsubscribe_info)"),
-			),
-		)
+	// Unsubscribe via HTTP tool (safe operation, always available)
+	unsubscribeViaHTTPTool := mcp.NewTool("gmail_unsubscribe_via_http",
+		mcp.WithDescription("Unsubscribe from a newsletter using an HTTP unsubscribe link. Use gmail_get_unsubscribe_info first to get available unsubscribe methods."),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
+		mcp.WithString("url",
+			mcp.Required(),
+			mcp.Description("The HTTP/HTTPS unsubscribe URL (obtained from gmail_get_unsubscribe_info)"),
+		),
+	)
 
-		s.AddTool(unsubscribeViaHTTPTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return handleUnsubscribeViaHTTP(ctx, request, sc)
-		})
-	}
+	s.AddTool(unsubscribeViaHTTPTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleUnsubscribeViaHTTP(ctx, request, sc)
+	})
 
 	return nil
 }

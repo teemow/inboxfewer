@@ -14,77 +14,75 @@ import (
 
 // RegisterFilterTools registers filter-related tools with the MCP server
 func RegisterFilterTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
-	// Register create/delete filter tools only if not in read-only mode
-	if !readOnly {
-		// Create filter tool
-		createFilterTool := mcp.NewTool("gmail_create_filter",
-			mcp.WithDescription("Create a new Gmail filter to automatically organize incoming emails. Filters can match on sender, recipient, subject, or custom queries, and perform actions like labeling, archiving, or marking as read."),
-			mcp.WithString("account",
-				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-			),
-			// Criteria fields
-			mcp.WithString("from",
-				mcp.Description("Filter emails from this sender (e.g., 'newsletter@example.com')"),
-			),
-			mcp.WithString("to",
-				mcp.Description("Filter emails sent to this recipient (e.g., 'myalias@example.com')"),
-			),
-			mcp.WithString("subject",
-				mcp.Description("Filter emails with this subject (e.g., 'Weekly Report')"),
-			),
-			mcp.WithString("query",
-				mcp.Description("Gmail search query for advanced filtering (e.g., 'has:attachment larger:10M')"),
-			),
-			mcp.WithBoolean("hasAttachment",
-				mcp.Description("Filter emails that have attachments"),
-			),
-			// Action fields
-			mcp.WithString("addLabelIds",
-				mcp.Description("Comma-separated list of label IDs to add (e.g., 'Label_1,Label_2'). Use gmail_list_labels to get label IDs."),
-			),
-			mcp.WithString("removeLabelIds",
-				mcp.Description("Comma-separated list of label IDs to remove (e.g., 'INBOX,UNREAD')"),
-			),
-			mcp.WithBoolean("archive",
-				mcp.Description("Remove from inbox (archive)"),
-			),
-			mcp.WithBoolean("markAsRead",
-				mcp.Description("Mark as read"),
-			),
-			mcp.WithBoolean("star",
-				mcp.Description("Add star"),
-			),
-			mcp.WithBoolean("markAsSpam",
-				mcp.Description("Mark as spam"),
-			),
-			mcp.WithBoolean("delete",
-				mcp.Description("Send to trash"),
-			),
-			mcp.WithString("forward",
-				mcp.Description("Forward to this email address"),
-			),
-		)
+	// Filter tools are safe operations (organizing email, not sending)
+	// Create filter tool
+	createFilterTool := mcp.NewTool("gmail_create_filter",
+		mcp.WithDescription("Create a new Gmail filter to automatically organize incoming emails. Filters can match on sender, recipient, subject, or custom queries, and perform actions like labeling, archiving, or marking as read."),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
+		// Criteria fields
+		mcp.WithString("from",
+			mcp.Description("Filter emails from this sender (e.g., 'newsletter@example.com')"),
+		),
+		mcp.WithString("to",
+			mcp.Description("Filter emails sent to this recipient (e.g., 'myalias@example.com')"),
+		),
+		mcp.WithString("subject",
+			mcp.Description("Filter emails with this subject (e.g., 'Weekly Report')"),
+		),
+		mcp.WithString("query",
+			mcp.Description("Gmail search query for advanced filtering (e.g., 'has:attachment larger:10M')"),
+		),
+		mcp.WithBoolean("hasAttachment",
+			mcp.Description("Filter emails that have attachments"),
+		),
+		// Action fields
+		mcp.WithString("addLabelIds",
+			mcp.Description("Comma-separated list of label IDs to add (e.g., 'Label_1,Label_2'). Use gmail_list_labels to get label IDs."),
+		),
+		mcp.WithString("removeLabelIds",
+			mcp.Description("Comma-separated list of label IDs to remove (e.g., 'INBOX,UNREAD')"),
+		),
+		mcp.WithBoolean("archive",
+			mcp.Description("Remove from inbox (archive)"),
+		),
+		mcp.WithBoolean("markAsRead",
+			mcp.Description("Mark as read"),
+		),
+		mcp.WithBoolean("star",
+			mcp.Description("Add star"),
+		),
+		mcp.WithBoolean("markAsSpam",
+			mcp.Description("Mark as spam"),
+		),
+		mcp.WithBoolean("delete",
+			mcp.Description("Send to trash"),
+		),
+		mcp.WithString("forward",
+			mcp.Description("Forward to this email address"),
+		),
+	)
 
-		s.AddTool(createFilterTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return handleCreateFilter(ctx, request, sc)
-		})
+	s.AddTool(createFilterTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleCreateFilter(ctx, request, sc)
+	})
 
-		// Delete filter tool
-		deleteFilterTool := mcp.NewTool("gmail_delete_filter",
-			mcp.WithDescription("Delete a Gmail filter by its ID (obtain ID from gmail_list_filters)"),
-			mcp.WithString("account",
-				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
-			),
-			mcp.WithString("filterId",
-				mcp.Required(),
-				mcp.Description("The ID of the filter to delete (obtained from gmail_list_filters)"),
-			),
-		)
+	// Delete filter tool
+	deleteFilterTool := mcp.NewTool("gmail_delete_filter",
+		mcp.WithDescription("Delete a Gmail filter by its ID (obtain ID from gmail_list_filters)"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
+		mcp.WithString("filterId",
+			mcp.Required(),
+			mcp.Description("The ID of the filter to delete (obtained from gmail_list_filters)"),
+		),
+	)
 
-		s.AddTool(deleteFilterTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return handleDeleteFilter(ctx, request, sc)
-		})
-	}
+	s.AddTool(deleteFilterTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleDeleteFilter(ctx, request, sc)
+	})
 
 	// List filters tool (always available, even in read-only mode)
 	listFiltersTool := mcp.NewTool("gmail_list_filters",

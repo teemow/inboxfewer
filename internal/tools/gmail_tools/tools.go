@@ -38,12 +38,12 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		return fmt.Errorf("failed to register email tools: %w", err)
 	}
 
-	// Register unsubscribe tools (write operations require !readOnly)
+	// Register unsubscribe tools (safe operations, always available)
 	if err := RegisterUnsubscribeTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register unsubscribe tools: %w", err)
 	}
 
-	// Register filter tools (write operations require !readOnly)
+	// Register filter tools (safe operations, always available)
 	if err := RegisterFilterTools(s, sc, readOnly); err != nil {
 		return fmt.Errorf("failed to register filter tools: %w", err)
 	}

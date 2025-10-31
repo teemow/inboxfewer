@@ -108,20 +108,20 @@ The HTTP server will expose:
 
 **By default, the MCP server operates in read-only mode** for AI safety. Only safe, non-destructive operations are available:
 
-**Always Available (Read-Only Operations):**
+**Always Available (Safe Operations):**
 - List, get, search, and query operations
 - Archive threads (safe cleanup)
 - Create tasks and task lists (safe planning)
 - Create calendar entries (safe scheduling)
+- Unsubscribe from emails (safe inbox cleanup)
+- Create and delete Gmail filters (safe email organization)
+- Create and configure Meet spaces (safe meeting setup)
 
 **Requires `--yolo` Flag (Write Operations):**
 - Email sending, replying, and forwarding
-- Unsubscribing from emails
-- Creating and deleting Gmail filters
 - Drive file operations (upload, delete, move, share)
 - Calendar event deletion and updates
 - Task deletion and updates
-- Meet space configuration changes
 
 #### Enable Write Operations
 
