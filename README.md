@@ -38,13 +38,14 @@ On first run, you'll be prompted to authenticate with Google services (Gmail, Go
 - macOS: `~/Library/Caches/inboxfewer/google-{account}.token`
 - Windows: `%TEMP%/inboxfewer/google-{account}.token`
 
-**Note:** Each OAuth token provides access to Gmail, Google Docs, Google Drive, Google Contacts, Google Calendar, and Google Meet APIs with the following scopes:
+**Note:** Each OAuth token provides access to Gmail, Google Docs, Google Drive, Google Contacts, Google Calendar, Google Meet, and Google Tasks APIs with the following scopes:
 - Gmail: Read, modify, and send messages
 - Google Docs: Read document content
 - Google Drive: Read file metadata
 - Google Contacts: Read contact information (personal contacts, interaction history, and directory)
 - Google Calendar: Read and write calendar events, check availability, and manage calendars
 - Google Meet: Read meeting artifacts (recordings, transcripts) and configure meeting spaces (enable/disable auto-recording, transcription, note-taking)
+- Google Tasks: Read and write tasks and task lists
 
 ### Multi-Account Support
 
@@ -704,6 +705,182 @@ Get the full text content of a Google Meet transcript with timestamps and speake
 **Returns:** Full transcript text with timestamps and speaker names for each entry.
 
 **Use Case:** Retrieve the complete conversation from a meeting for review or analysis.
+
+### Google Tasks Tools
+
+**Note:** All Google Tasks tools support an optional `account` parameter to specify which Google account to use (default: 'default').
+
+#### `tasks_list_task_lists`
+List all task lists for the authenticated user.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+
+**Returns:** List of all task lists with their IDs, titles, and last updated timestamps.
+
+**Use Case:** Discover all your task lists to choose which one to work with.
+
+#### `tasks_get_task_list`
+Get details of a specific task list.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list to retrieve
+
+**Returns:** Task list details including ID, title, and updated timestamp.
+
+**Use Case:** Retrieve metadata about a specific task list.
+
+#### `tasks_create_task_list`
+Create a new task list.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `title` (required): The title of the new task list
+
+**Returns:** Created task list with its ID and details.
+
+**Use Case:** Organize tasks by creating separate lists for different projects or categories (e.g., "Work", "Personal", "Shopping").
+
+#### `tasks_update_task_list`
+Update a task list's title.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list to update
+- `title` (required): The new title for the task list
+
+**Returns:** Updated task list details.
+
+**Use Case:** Rename a task list to better reflect its purpose.
+
+#### `tasks_delete_task_list`
+Delete a task list.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list to delete
+
+**Returns:** Confirmation message.
+
+**Use Case:** Remove task lists that are no longer needed.
+
+#### `tasks_list_tasks`
+List tasks in a task list with optional filters.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list
+- `showCompleted` (optional): Include completed tasks (default: false)
+- `dueMin` (optional): Only return tasks with due date after this time (RFC3339 format)
+- `dueMax` (optional): Only return tasks with due date before this time (RFC3339 format)
+
+**Returns:** List of tasks with full details including title, notes, status, due date, and completion time.
+
+**Use Case:** View all pending tasks, or filter tasks by due date to focus on what's coming up soon.
+
+#### `tasks_get_task`
+Get details of a specific task.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list
+- `taskId` (required): The ID of the task to retrieve
+
+**Returns:** Full task details including all fields and related links.
+
+**Use Case:** Retrieve complete information about a specific task.
+
+#### `tasks_create_task`
+Create a new task in a task list.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list
+- `title` (required): The title of the new task
+- `notes` (optional): Notes or description for the task
+- `due` (optional): Due date for the task (RFC3339 format, e.g., '2025-11-07T09:00:00Z')
+- `parent` (optional): Parent task ID to create a subtask
+- `previous` (optional): Previous sibling task ID for positioning
+
+**Returns:** Created task with its ID and details.
+
+**Use Case:** Add new tasks to track work items, errands, or reminders. Create subtasks to break down larger tasks.
+
+**Example:**
+```bash
+tasks_create_task(
+  taskListId: "MTIzNDU2Nzg5MDEyMzQ1Njc4OTA",
+  title: "Review pull request #123",
+  notes: "Check tests and documentation",
+  due: "2025-11-07T17:00:00Z"
+)
+```
+
+#### `tasks_update_task`
+Update an existing task.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list
+- `taskId` (required): The ID of the task to update
+- `title` (optional): New title for the task
+- `notes` (optional): New notes or description
+- `status` (optional): New status: 'needsAction' or 'completed'
+- `due` (optional): New due date (RFC3339 format)
+
+**Returns:** Updated task details.
+
+**Use Case:** Modify task details, change due dates, or update notes with progress information.
+
+#### `tasks_delete_task`
+Delete a task.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list
+- `taskId` (required): The ID of the task to delete
+
+**Returns:** Confirmation message.
+
+**Use Case:** Remove tasks that are no longer relevant or were created by mistake.
+
+#### `tasks_complete_task`
+Mark a task as completed.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list
+- `taskId` (required): The ID of the task to complete
+
+**Returns:** Updated task with completed status and completion timestamp.
+
+**Use Case:** Mark tasks as done when you finish them. The completion time is automatically recorded.
+
+#### `tasks_move_task`
+Move a task to a different position or parent.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list
+- `taskId` (required): The ID of the task to move
+- `parent` (optional): New parent task ID (empty string to move to root level)
+- `previous` (optional): Previous sibling task ID for positioning
+
+**Returns:** Moved task with updated position information.
+
+**Use Case:** Reorganize tasks by changing their order or making them subtasks of other tasks.
+
+#### `tasks_clear_completed`
+Clear all completed tasks from a task list.
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default')
+- `taskListId` (required): The ID of the task list to clear completed tasks from
+
+**Returns:** Confirmation message.
+
+**Use Case:** Clean up your task list by removing all completed tasks at once. This is useful for maintaining a clean, focused list.
 
 ### Workflow Examples
 

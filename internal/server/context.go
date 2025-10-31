@@ -9,6 +9,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/docs"
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/meet"
+	"github.com/teemow/inboxfewer/internal/tasks"
 )
 
 // ServerContext holds the context for the MCP server
@@ -19,6 +20,7 @@ type ServerContext struct {
 	docsClients     map[string]*docs.Client     // Maps account name to Docs client
 	calendarClients map[string]*calendar.Client // Maps account name to Calendar client
 	meetClients     map[string]*meet.Client     // Maps account name to Meet client
+	tasksClients    map[string]*tasks.Client    // Maps account name to Tasks client
 	githubUser      string
 	githubToken     string
 	mu              sync.RWMutex
@@ -34,6 +36,7 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 	docsClients := make(map[string]*docs.Client)
 	calendarClients := make(map[string]*calendar.Client)
 	meetClients := make(map[string]*meet.Client)
+	tasksClients := make(map[string]*tasks.Client)
 
 	// Try to create default Gmail client, but don't fail if token is missing
 	// Clients will be lazily initialized when first needed
@@ -54,6 +57,7 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 		docsClients:     docsClients,
 		calendarClients: calendarClients,
 		meetClients:     meetClients,
+		tasksClients:    tasksClients,
 		githubUser:      githubUser,
 		githubToken:     githubToken,
 		shutdown:        false,
@@ -239,6 +243,50 @@ func (sc *ServerContext) SetMeetClientForAccount(account string, client *meet.Cl
 // SetMeetClient sets the Meet client for the default account
 func (sc *ServerContext) SetMeetClient(client *meet.Client) {
 	sc.SetMeetClientForAccount("default", client)
+}
+
+// TasksClientForAccount returns the Tasks client for a specific account
+// Creates and caches the client if it doesn't exist yet
+// Returns nil if the account has no token
+func (sc *ServerContext) TasksClientForAccount(account string) *tasks.Client {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	// Check if client already exists
+	if client, ok := sc.tasksClients[account]; ok {
+		return client
+	}
+
+	// Try to create client if token exists
+	if !tasks.HasTokenForAccount(account) {
+		return nil
+	}
+
+	client, err := tasks.NewClientForAccount(sc.ctx, account)
+	if err != nil {
+		fmt.Printf("Warning: failed to create Tasks client for account %s: %v\n", account, err)
+		return nil
+	}
+
+	sc.tasksClients[account] = client
+	return client
+}
+
+// TasksClient returns the Tasks client for the default account
+func (sc *ServerContext) TasksClient() *tasks.Client {
+	return sc.TasksClientForAccount("default")
+}
+
+// SetTasksClientForAccount sets the Tasks client for a specific account
+func (sc *ServerContext) SetTasksClientForAccount(account string, client *tasks.Client) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.tasksClients[account] = client
+}
+
+// SetTasksClient sets the Tasks client for the default account
+func (sc *ServerContext) SetTasksClient(client *tasks.Client) {
+	sc.SetTasksClientForAccount("default", client)
 }
 
 // GithubUser returns the GitHub username
