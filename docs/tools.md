@@ -42,6 +42,15 @@ Archive one or more Gmail threads by removing them from the inbox
 - `threadIds` (required): Thread ID (string) or array of thread IDs to archive
 
 
+### gmail_unarchive_threads
+
+Move one or more archived Gmail threads back to inbox by adding the INBOX label
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
+- `threadIds` (required): Thread ID (string) or array of thread IDs to unarchive
+
+
 ### gmail_check_stale
 
 Check if a Gmail thread is stale (GitHub issue/PR is closed)
