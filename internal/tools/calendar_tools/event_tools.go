@@ -2,6 +2,7 @@ package calendar_tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/calendar"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
 
 // RegisterEventTools registers event-related tools with the MCP server
@@ -41,23 +43,23 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		return handleListEvents(ctx, request, sc)
 	})
 
-	// Get event tool
-	getEventTool := mcp.NewTool("calendar_get_event",
-		mcp.WithDescription("Get details of a specific calendar event"),
+	// Get events tool
+	getEventsTool := mcp.NewTool("calendar_get_events",
+		mcp.WithDescription("Get details of one or more calendar events"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
 		mcp.WithString("calendarId",
 			mcp.Description("Calendar ID (use 'primary' for primary calendar)"),
 		),
-		mcp.WithString("eventId",
+		mcp.WithString("eventIds",
 			mcp.Required(),
-			mcp.Description("The ID of the event to retrieve"),
+			mcp.Description("Event ID (string) or array of event IDs to retrieve"),
 		),
 	)
 
-	s.AddTool(getEventTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetEvent(ctx, request, sc)
+	s.AddTool(getEventsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleGetEvents(ctx, request, sc)
 	})
 
 	// Create event tool
@@ -177,23 +179,23 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 			return handleUpdateEvent(ctx, request, sc)
 		})
 
-		// Delete event tool
-		deleteEventTool := mcp.NewTool("calendar_delete_event",
-			mcp.WithDescription("Delete a calendar event"),
+		// Delete events tool
+		deleteEventsTool := mcp.NewTool("calendar_delete_events",
+			mcp.WithDescription("Delete one or more calendar events"),
 			mcp.WithString("account",
 				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 			),
 			mcp.WithString("calendarId",
 				mcp.Description("Calendar ID (use 'primary' for primary calendar)"),
 			),
-			mcp.WithString("eventId",
+			mcp.WithString("eventIds",
 				mcp.Required(),
-				mcp.Description("The ID of the event to delete"),
+				mcp.Description("Event ID (string) or array of event IDs to delete"),
 			),
 		)
 
-		s.AddTool(deleteEventTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return handleDeleteEvent(ctx, request, sc)
+		s.AddTool(deleteEventsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleDeleteEvents(ctx, request, sc)
 		})
 	}
 
@@ -301,7 +303,7 @@ func handleListEvents(ctx context.Context, request mcp.CallToolRequest, sc *serv
 	return mcp.NewToolResultText(result), nil
 }
 
-func handleGetEvent(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+func handleGetEvents(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 	account := getAccountFromArgs(args)
 
@@ -310,9 +312,9 @@ func handleGetEvent(ctx context.Context, request mcp.CallToolRequest, sc *server
 		calendarID = calIDVal
 	}
 
-	eventID, ok := args["eventId"].(string)
-	if !ok || eventID == "" {
-		return mcp.NewToolResultError("eventId is required"), nil
+	eventIDs, err := batch.ParseStringOrArray(args["eventIds"], "eventIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	client, err := getCalendarClient(ctx, account, sc)
@@ -320,50 +322,41 @@ func handleGetEvent(ctx context.Context, request mcp.CallToolRequest, sc *server
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	event, err := client.GetEvent(calendarID, eventID)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to get event: %v", err)), nil
-	}
-
-	result := fmt.Sprintf("Event: %s\n", event.Summary)
-	result += fmt.Sprintf("ID: %s\n", event.ID)
-	result += fmt.Sprintf("Start: %s\n", event.Start.Format(time.RFC3339))
-	result += fmt.Sprintf("End: %s\n", event.End.Format(time.RFC3339))
-	result += fmt.Sprintf("Status: %s\n", event.Status)
-	if event.Description != "" {
-		result += fmt.Sprintf("Description: %s\n", event.Description)
-	}
-	if event.Location != "" {
-		result += fmt.Sprintf("Location: %s\n", event.Location)
-	}
-	if event.Creator != "" {
-		result += fmt.Sprintf("Creator: %s\n", event.Creator)
-	}
-	if event.Organizer != "" {
-		result += fmt.Sprintf("Organizer: %s\n", event.Organizer)
-	}
-	if event.MeetLink != "" {
-		result += fmt.Sprintf("Google Meet: %s\n", event.MeetLink)
-	}
-	if event.EventType != "" {
-		result += fmt.Sprintf("Type: %s\n", event.EventType)
-	}
-
-	if len(event.Attendees) > 0 {
-		result += fmt.Sprintf("\nAttendees (%d):\n", len(event.Attendees))
-		for _, att := range event.Attendees {
-			result += fmt.Sprintf("  - %s (%s)", att.Email, att.ResponseStatus)
-			if att.DisplayName != "" {
-				result += fmt.Sprintf(" - %s", att.DisplayName)
-			}
-			if att.Optional {
-				result += " [optional]"
-			}
-			result += "\n"
+	results := batch.ProcessBatch(eventIDs, func(eventID string) (string, error) {
+		event, err := client.GetEvent(calendarID, eventID)
+		if err != nil {
+			return "", err
 		}
-	}
 
-	return mcp.NewToolResultText(result), nil
+		// Convert event to JSON for structured output
+		eventData := map[string]interface{}{
+			"id":      event.ID,
+			"summary": event.Summary,
+			"start":   event.Start.Format(time.RFC3339),
+			"end":     event.End.Format(time.RFC3339),
+			"status":  event.Status,
+		}
+		if event.Description != "" {
+			eventData["description"] = event.Description
+		}
+		if event.Location != "" {
+			eventData["location"] = event.Location
+		}
+		if event.MeetLink != "" {
+			eventData["meetLink"] = event.MeetLink
+		}
+		if event.EventType != "" {
+			eventData["eventType"] = event.EventType
+		}
+		if len(event.Attendees) > 0 {
+			eventData["attendeesCount"] = len(event.Attendees)
+		}
+
+		jsonBytes, _ := json.Marshal(eventData)
+		return string(jsonBytes), nil
+	})
+
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }
 
 func handleCreateEvent(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
@@ -551,7 +544,7 @@ func handleUpdateEvent(ctx context.Context, request mcp.CallToolRequest, sc *ser
 	return mcp.NewToolResultText(result), nil
 }
 
-func handleDeleteEvent(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+func handleDeleteEvents(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 	account := getAccountFromArgs(args)
 
@@ -560,9 +553,9 @@ func handleDeleteEvent(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		calendarID = calIDVal
 	}
 
-	eventID, ok := args["eventId"].(string)
-	if !ok || eventID == "" {
-		return mcp.NewToolResultError("eventId is required"), nil
+	eventIDs, err := batch.ParseStringOrArray(args["eventIds"], "eventIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	client, err := getCalendarClient(ctx, account, sc)
@@ -570,11 +563,14 @@ func handleDeleteEvent(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	if err := client.DeleteEvent(calendarID, eventID); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to delete event: %v", err)), nil
-	}
+	results := batch.ProcessBatch(eventIDs, func(eventID string) (string, error) {
+		if err := client.DeleteEvent(calendarID, eventID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Event %s deleted successfully", eventID), nil
+	})
 
-	return mcp.NewToolResultText(fmt.Sprintf("Successfully deleted event %s", eventID)), nil
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }
 
 func handleExtractDocsLinks(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {

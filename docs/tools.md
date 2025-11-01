@@ -251,14 +251,14 @@ Create a new calendar event (supports recurring, out-of-office, and Google Meet)
 - `timeZone` (optional): Time zone (e.g., 'America/New_York'). Defaults to UTC.
 
 
-### calendar_delete_event
+### calendar_delete_events
 
-Delete a calendar event
+Delete one or more calendar events
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `calendarId` (optional): Calendar ID (use 'primary' for primary calendar)
-- `eventId` (required): The ID of the event to delete
+- `eventIds` (required): Event ID (string) or array of event IDs to delete
 
 
 ### calendar_extract_docs_links
@@ -293,14 +293,14 @@ Get information about a specific calendar
 - `calendarId` (required): Calendar ID (use 'primary' for primary calendar)
 
 
-### calendar_get_event
+### calendar_get_events
 
-Get details of a specific calendar event
+Get details of one or more calendar events
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `calendarId` (optional): Calendar ID (use 'primary' for primary calendar)
-- `eventId` (required): The ID of the event to retrieve
+- `eventIds` (required): Event ID (string) or array of event IDs to retrieve
 
 
 ### calendar_get_meet_link
@@ -399,13 +399,13 @@ Create a new folder in Google Drive
 - `parentFolders` (optional): Comma-separated list of parent folder IDs where the folder should be created
 
 
-### drive_delete_file
+### drive_delete_files
 
-Delete a file from Google Drive
+Delete one or more files from Google Drive
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `fileId` (required): The ID of the file to delete
+- `fileIds` (required): File ID (string) or array of file IDs to delete
 
 
 ### drive_download_file
@@ -418,13 +418,13 @@ Download the content of a file from Google Drive
 - `fileId` (required): The ID of the file to download
 
 
-### drive_get_file
+### drive_get_files
 
-Get metadata for a specific file in Google Drive
+Get metadata for one or more files in Google Drive
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `fileId` (required): The ID of the file
+- `fileIds` (required): File ID (string) or array of file IDs to retrieve
 
 
 ### drive_list_files
@@ -449,15 +449,15 @@ List all permissions for a file in Google Drive
 - `fileId` (required): The ID of the file
 
 
-### drive_move_file
+### drive_move_files
 
-Move or rename a file in Google Drive
+Move or rename one or more files in Google Drive
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `addParents` (optional): Comma-separated list of folder IDs to add as parents
-- `fileId` (required): The ID of the file to move or rename
-- `newName` (optional): The new name for the file (leave empty to keep current name)
+- `fileIds` (required): File ID (string) or array of file IDs to move or rename
+- `newName` (optional): The new name for the file (single file only, leave empty to keep current name)
 - `removeParents` (optional): Comma-separated list of folder IDs to remove as parents
 
 
@@ -471,16 +471,16 @@ Remove a permission from a file in Google Drive
 - `permissionId` (required): The ID of the permission to remove (get this from drive_list_permissions)
 
 
-### drive_share_file
+### drive_share_files
 
-Share a file in Google Drive by granting permissions
+Share one or more files in Google Drive by granting permissions
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `domain` (optional): Domain name (required if type is 'domain')
 - `emailAddress` (optional): Email address (required if type is 'user' or 'group')
 - `emailMessage` (optional): Custom message to include in the notification email
-- `fileId` (required): The ID of the file to share
+- `fileIds` (required): File ID (string) or array of file IDs to share
 - `role` (required): The role to grant: 'owner', 'organizer', 'fileOrganizer', 'writer', 'commenter', or 'reader'
 - `sendNotificationEmail` (optional): Send a notification email to the grantee (default: false)
 - `type` (required): The type of grantee: 'user', 'group', 'domain', or 'anyone'
@@ -611,20 +611,6 @@ Mark one or more tasks as completed
 - `taskListId` (required): The ID of the task list
 
 
-### tasks_create_task
-
-Create a new task in a task list
-
-**Arguments:**
-- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `due` (optional): Due date for the task (RFC3339 format, e.g., '2025-11-07T09:00:00Z')
-- `notes` (optional): Notes or description for the task
-- `parent` (optional): Parent task ID to create a subtask
-- `previous` (optional): Previous sibling task ID for positioning
-- `taskListId` (required): The ID of the task list
-- `title` (required): The title of the new task
-
-
 ### tasks_create_task_list
 
 Create a new task list
@@ -632,6 +618,21 @@ Create a new task list
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `title` (required): The title of the new task list
+
+
+### tasks_create_tasks
+
+Create one or more tasks in a task list
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
+- `due` (optional): Due date for the task (RFC3339 format, single task only)
+- `notes` (optional): Notes or description for the task (single task only)
+- `parent` (optional): Parent task ID to create a subtask (single task only)
+- `previous` (optional): Previous sibling task ID for positioning (single task only)
+- `taskListId` (required): The ID of the task list
+- `title` (optional): Task title (for single task creation)
+- `titles` (optional): Array of task titles (for batch task creation)
 
 
 ### tasks_delete_task_list
@@ -653,16 +654,6 @@ Delete one or more tasks
 - `taskListId` (required): The ID of the task list
 
 
-### tasks_get_task
-
-Get details of a specific task
-
-**Arguments:**
-- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `taskId` (required): The ID of the task to retrieve
-- `taskListId` (required): The ID of the task list
-
-
 ### tasks_get_task_list
 
 Get details of a specific task list
@@ -670,6 +661,16 @@ Get details of a specific task list
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `taskListId` (required): The ID of the task list to retrieve
+
+
+### tasks_get_tasks
+
+Get details of one or more tasks
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
+- `taskIds` (required): Task ID (string) or array of task IDs to retrieve
+- `taskListId` (required): The ID of the task list
 
 
 ### tasks_list_task_lists

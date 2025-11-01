@@ -13,6 +13,7 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
 
 // registerFileTools registers file management tools
@@ -177,25 +178,25 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		return mcp.NewToolResultText(string(result)), nil
 	})
 
-	// Get file tool
-	getFileTool := mcp.NewTool("drive_get_file",
-		mcp.WithDescription("Get metadata for a specific file in Google Drive"),
+	// Get files tool
+	getFilesTool := mcp.NewTool("drive_get_files",
+		mcp.WithDescription("Get metadata for one or more files in Google Drive"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
-		mcp.WithString("fileId",
+		mcp.WithString("fileIds",
 			mcp.Required(),
-			mcp.Description("The ID of the file"),
+			mcp.Description("File ID (string) or array of file IDs to retrieve"),
 		),
 	)
 
-	s.AddTool(getFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(getFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
 		account := getAccountFromArgs(args)
 
-		fileID, ok := args["fileId"].(string)
-		if !ok || fileID == "" {
-			return mcp.NewToolResultError("fileId is required"), nil
+		fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		client, err := getDriveClient(ctx, account, sc)
@@ -203,13 +204,16 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		fileInfo, err := client.GetFile(ctx, fileID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to get file: %v", err)), nil
-		}
+		results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
+			fileInfo, err := client.GetFile(ctx, fileID)
+			if err != nil {
+				return "", err
+			}
+			jsonBytes, _ := json.Marshal(fileInfo)
+			return string(jsonBytes), nil
+		})
 
-		result, _ := json.MarshalIndent(fileInfo, "", "  ")
-		return mcp.NewToolResultText(string(result)), nil
+		return mcp.NewToolResultText(batch.FormatResults(results)), nil
 	})
 
 	// Download file tool
@@ -265,26 +269,26 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		return mcp.NewToolResultText(string(content)), nil
 	})
 
-	// Delete file tool (write operation, only available with !readOnly)
+	// Delete files tool (write operation, only available with !readOnly)
 	if !readOnly {
-		deleteFileTool := mcp.NewTool("drive_delete_file",
-			mcp.WithDescription("Delete a file from Google Drive"),
+		deleteFilesTool := mcp.NewTool("drive_delete_files",
+			mcp.WithDescription("Delete one or more files from Google Drive"),
 			mcp.WithString("account",
 				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 			),
-			mcp.WithString("fileId",
+			mcp.WithString("fileIds",
 				mcp.Required(),
-				mcp.Description("The ID of the file to delete"),
+				mcp.Description("File ID (string) or array of file IDs to delete"),
 			),
 		)
 
-		s.AddTool(deleteFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		s.AddTool(deleteFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
 			account := getAccountFromArgs(args)
 
-			fileID, ok := args["fileId"].(string)
-			if !ok || fileID == "" {
-				return mcp.NewToolResultError("fileId is required"), nil
+			fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
 			}
 
 			client, err := getDriveClient(ctx, account, sc)
@@ -292,12 +296,14 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			err = client.DeleteFile(ctx, fileID)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to delete file: %v", err)), nil
-			}
+			results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
+				if err := client.DeleteFile(ctx, fileID); err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("File %s deleted successfully", fileID), nil
+			})
 
-			return mcp.NewToolResultText(fmt.Sprintf("File %s deleted successfully", fileID)), nil
+			return mcp.NewToolResultText(batch.FormatResults(results)), nil
 		})
 	}
 

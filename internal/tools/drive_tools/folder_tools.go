@@ -10,6 +10,7 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
 
 // registerFolderTools registers folder management tools
@@ -62,18 +63,18 @@ func registerFolderTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 		return mcp.NewToolResultText(fmt.Sprintf("Folder created successfully:\n%s", string(result))), nil
 	})
 
-	// Move/rename file tool
-	moveFileTool := mcp.NewTool("drive_move_file",
-		mcp.WithDescription("Move or rename a file in Google Drive"),
+	// Move/rename files tool
+	moveFilesTool := mcp.NewTool("drive_move_files",
+		mcp.WithDescription("Move or rename one or more files in Google Drive"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
-		mcp.WithString("fileId",
+		mcp.WithString("fileIds",
 			mcp.Required(),
-			mcp.Description("The ID of the file to move or rename"),
+			mcp.Description("File ID (string) or array of file IDs to move or rename"),
 		),
 		mcp.WithString("newName",
-			mcp.Description("The new name for the file (leave empty to keep current name)"),
+			mcp.Description("The new name for the file (single file only, leave empty to keep current name)"),
 		),
 		mcp.WithString("addParents",
 			mcp.Description("Comma-separated list of folder IDs to add as parents"),
@@ -83,13 +84,13 @@ func registerFolderTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 		),
 	)
 
-	s.AddTool(moveFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(moveFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
 		account := getAccountFromArgs(args)
 
-		fileID, ok := args["fileId"].(string)
-		if !ok || fileID == "" {
-			return mcp.NewToolResultError("fileId is required"), nil
+		fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		client, err := getDriveClient(ctx, account, sc)
@@ -101,6 +102,10 @@ func registerFolderTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 
 		if newName, ok := args["newName"].(string); ok && newName != "" {
 			options.NewName = newName
+			// newName only makes sense for a single file
+			if len(fileIDs) > 1 {
+				return mcp.NewToolResultError("newName can only be used when moving a single file"), nil
+			}
 		}
 
 		if addParents, ok := args["addParents"].(string); ok && addParents != "" {
@@ -116,13 +121,15 @@ func registerFolderTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 			return mcp.NewToolResultError("At least one of newName, addParents, or removeParents must be specified"), nil
 		}
 
-		fileInfo, err := client.MoveFile(ctx, fileID, options)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to move file: %v", err)), nil
-		}
+		results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
+			fileInfo, err := client.MoveFile(ctx, fileID, options)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("File %s moved/renamed successfully to %s", fileID, fileInfo.Name), nil
+		})
 
-		result, _ := json.MarshalIndent(fileInfo, "", "  ")
-		return mcp.NewToolResultText(fmt.Sprintf("File moved/renamed successfully:\n%s", string(result))), nil
+		return mcp.NewToolResultText(batch.FormatResults(results)), nil
 	})
 
 	return nil

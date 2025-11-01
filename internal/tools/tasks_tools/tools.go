@@ -316,9 +316,9 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		return mcp.NewToolResultText(string(result)), nil
 	})
 
-	// Get task tool
-	getTaskTool := mcp.NewTool("tasks_get_task",
-		mcp.WithDescription("Get details of a specific task"),
+	// Get tasks tool
+	getTasksTool := mcp.NewTool("tasks_get_tasks",
+		mcp.WithDescription("Get details of one or more tasks"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
@@ -326,13 +326,13 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			mcp.Required(),
 			mcp.Description("The ID of the task list"),
 		),
-		mcp.WithString("taskId",
+		mcp.WithString("taskIds",
 			mcp.Required(),
-			mcp.Description("The ID of the task to retrieve"),
+			mcp.Description("Task ID (string) or array of task IDs to retrieve"),
 		),
 	)
 
-	s.AddTool(getTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(getTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
 		account := getAccountFromArgs(args)
 
@@ -341,9 +341,9 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			return mcp.NewToolResultError("taskListId is required"), nil
 		}
 
-		taskID, ok := args["taskId"].(string)
-		if !ok || taskID == "" {
-			return mcp.NewToolResultError("taskId is required"), nil
+		taskIDs, err := batch.ParseStringOrArray(args["taskIds"], "taskIds")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		client, err := getTasksClient(ctx, account, sc)
@@ -351,18 +351,21 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		task, err := client.GetTask(taskListID, taskID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to get task: %v", err)), nil
-		}
+		results := batch.ProcessBatch(taskIDs, func(taskID string) (string, error) {
+			task, err := client.GetTask(taskListID, taskID)
+			if err != nil {
+				return "", err
+			}
+			jsonBytes, _ := json.Marshal(task)
+			return string(jsonBytes), nil
+		})
 
-		result, _ := json.MarshalIndent(task, "", "  ")
-		return mcp.NewToolResultText(string(result)), nil
+		return mcp.NewToolResultText(batch.FormatResults(results)), nil
 	})
 
-	// Create task tool
-	createTaskTool := mcp.NewTool("tasks_create_task",
-		mcp.WithDescription("Create a new task in a task list"),
+	// Create tasks tool
+	createTasksTool := mcp.NewTool("tasks_create_tasks",
+		mcp.WithDescription("Create one or more tasks in a task list"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
@@ -371,24 +374,26 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			mcp.Description("The ID of the task list"),
 		),
 		mcp.WithString("title",
-			mcp.Required(),
-			mcp.Description("The title of the new task"),
+			mcp.Description("Task title (for single task creation)"),
+		),
+		mcp.WithString("titles",
+			mcp.Description("Array of task titles (for batch task creation)"),
 		),
 		mcp.WithString("notes",
-			mcp.Description("Notes or description for the task"),
+			mcp.Description("Notes or description for the task (single task only)"),
 		),
 		mcp.WithString("due",
-			mcp.Description("Due date for the task (RFC3339 format, e.g., '2025-11-07T09:00:00Z')"),
+			mcp.Description("Due date for the task (RFC3339 format, single task only)"),
 		),
 		mcp.WithString("parent",
-			mcp.Description("Parent task ID to create a subtask"),
+			mcp.Description("Parent task ID to create a subtask (single task only)"),
 		),
 		mcp.WithString("previous",
-			mcp.Description("Previous sibling task ID for positioning"),
+			mcp.Description("Previous sibling task ID for positioning (single task only)"),
 		),
 	)
 
-	s.AddTool(createTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(createTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
 		account := getAccountFromArgs(args)
 
@@ -397,13 +402,44 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			return mcp.NewToolResultError("taskListId is required"), nil
 		}
 
-		title, ok := args["title"].(string)
-		if !ok || title == "" {
-			return mcp.NewToolResultError("title is required"), nil
+		client, err := getTasksClient(ctx, account, sc)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
 
+		// Check if batch mode (titles array) or single mode (title string)
+		var titles []string
+		if titlesArg, ok := args["titles"]; ok {
+			parsedTitles, err := batch.ParseStringOrArray(titlesArg, "titles")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			titles = parsedTitles
+		} else if title, ok := args["title"].(string); ok && title != "" {
+			titles = []string{title}
+		} else {
+			return mcp.NewToolResultError("either 'title' or 'titles' is required"), nil
+		}
+
+		// For batch mode with simple titles, create tasks with just titles
+		if len(titles) > 1 || (len(titles) == 1 && args["titles"] != nil) {
+			results := batch.ProcessBatch(titles, func(title string) (string, error) {
+				input := tasks.TaskInput{
+					Title:  title,
+					Status: "needsAction",
+				}
+				task, err := client.CreateTask(taskListID, input)
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("Task '%s' created with ID: %s", task.Title, task.ID), nil
+			})
+			return mcp.NewToolResultText(batch.FormatResults(results)), nil
+		}
+
+		// Single task creation with full parameters
 		input := tasks.TaskInput{
-			Title:  title,
+			Title:  titles[0],
 			Status: "needsAction",
 		}
 
@@ -423,11 +459,6 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 		if previous, ok := args["previous"].(string); ok {
 			input.Previous = previous
-		}
-
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		task, err := client.CreateTask(taskListID, input)
