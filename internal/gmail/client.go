@@ -134,6 +134,24 @@ func (c *Client) UnarchiveThread(tid string) error {
 	return err
 }
 
+// MarkThreadAsSpam marks a thread as spam by adding the SPAM label and removing the INBOX label
+func (c *Client) MarkThreadAsSpam(tid string) error {
+	_, err := c.svc.Threads.Modify("me", tid, &gmail.ModifyThreadRequest{
+		AddLabelIds:    []string{"SPAM"},
+		RemoveLabelIds: []string{"INBOX"},
+	}).Do()
+	return err
+}
+
+// UnmarkThreadAsSpam removes the spam label from a thread, moving it back to inbox
+func (c *Client) UnmarkThreadAsSpam(tid string) error {
+	_, err := c.svc.Threads.Modify("me", tid, &gmail.ModifyThreadRequest{
+		AddLabelIds:    []string{"INBOX"},
+		RemoveLabelIds: []string{"SPAM"},
+	}).Do()
+	return err
+}
+
 // ForeachThread iterates over all threads matching the query
 func (c *Client) ForeachThread(q string, fn func(*gmail.Thread) error) error {
 	pageToken := ""

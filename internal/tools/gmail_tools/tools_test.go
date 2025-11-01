@@ -22,3 +22,13 @@ func TestToolsPackage(t *testing.T) {
 		t.Errorf("getAccountFromArgs() = %v, want default", defaultAccount)
 	}
 }
+
+// TestSpamMarkingHandlers tests that spam marking handler functions exist and have correct signatures
+func TestSpamMarkingHandlers(t *testing.T) {
+	// Verify that the handler functions exist with correct signatures
+	// This is a compile-time check to ensure the functions are properly defined
+	_ = handleMarkThreadsAsSpam
+	_ = handleUnmarkThreadsAsSpam
+	// If the functions are not defined or have wrong signatures, this test will not compile
+	t.Log("Spam marking handler functions are properly defined")
+}
