@@ -100,6 +100,38 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		return handleUnarchiveThreads(ctx, request, sc)
 	})
 
+	// Mark threads as spam tool (supports single or multiple threads)
+	markThreadsAsSpamTool := mcp.NewTool("gmail_mark_threads_as_spam",
+		mcp.WithDescription("Mark one or more Gmail threads as spam by adding the SPAM label and removing them from inbox"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
+		mcp.WithString("threadIds",
+			mcp.Required(),
+			mcp.Description("Thread ID (string) or array of thread IDs to mark as spam"),
+		),
+	)
+
+	s.AddTool(markThreadsAsSpamTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleMarkThreadsAsSpam(ctx, request, sc)
+	})
+
+	// Unmark threads as spam tool (supports single or multiple threads)
+	unmarkThreadsAsSpamTool := mcp.NewTool("gmail_unmark_threads_as_spam",
+		mcp.WithDescription("Remove spam label from one or more Gmail threads and move them back to inbox"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
+		mcp.WithString("threadIds",
+			mcp.Required(),
+			mcp.Description("Thread ID (string) or array of thread IDs to unmark as spam"),
+		),
+	)
+
+	s.AddTool(unmarkThreadsAsSpamTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleUnmarkThreadsAsSpam(ctx, request, sc)
+	})
+
 	// Classify thread tool
 	classifyThreadTool := mcp.NewTool("gmail_classify_thread",
 		mcp.WithDescription("Classify a Gmail thread to determine if it's related to GitHub issues or PRs"),
@@ -495,4 +527,104 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Checked %d threads, archived %d stale threads", checked, archived)), nil
+}
+
+func handleMarkThreadsAsSpam(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+	account := getAccountFromArgs(args)
+
+	// Parse threadIds - can be string or array
+	threadIDs, err := batch.ParseStringOrArray(args["threadIds"], "threadIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	// Get or create Gmail client for the specified account
+	client := sc.GmailClientForAccount(account)
+	if client == nil {
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Google services (Gmail, Docs, Drive)
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClientForAccount(ctx, account)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client for account %s: %v", account, err)), nil
+		}
+		sc.SetGmailClientForAccount(account, client)
+	}
+
+	// Process batch
+	results := batch.ProcessBatch(threadIDs, func(threadID string) (string, error) {
+		if err := client.MarkThreadAsSpam(threadID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Thread %s marked as spam successfully", threadID), nil
+	})
+
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
+}
+
+func handleUnmarkThreadsAsSpam(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+	account := getAccountFromArgs(args)
+
+	// Parse threadIds - can be string or array
+	threadIDs, err := batch.ParseStringOrArray(args["threadIds"], "threadIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	// Get or create Gmail client for the specified account
+	client := sc.GmailClientForAccount(account)
+	if client == nil {
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Google services (Gmail, Docs, Drive)
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		client, err = gmail.NewClientForAccount(ctx, account)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client for account %s: %v", account, err)), nil
+		}
+		sc.SetGmailClientForAccount(account, client)
+	}
+
+	// Process batch
+	results := batch.ProcessBatch(threadIDs, func(threadID string) (string, error) {
+		if err := client.UnmarkThreadAsSpam(threadID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Thread %s unmarked as spam successfully (moved to inbox)", threadID), nil
+	})
+
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }
