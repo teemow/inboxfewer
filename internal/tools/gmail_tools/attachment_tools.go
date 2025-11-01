@@ -107,7 +107,7 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 		),
 		mcp.WithString("attachmentIds",
 			mcp.Required(),
-			mcp.Description("Attachment ID (string) or array of attachment IDs to transfer"),
+			mcp.Description("Attachment identifier(s) to transfer. Can be: attachment ID from gmail_list_attachments, exact filename, or numeric index (0, 1, 2, etc.). Supports single string or array of strings."),
 		),
 		mcp.WithString("parentFolders",
 			mcp.Description("Comma-separated list of parent folder IDs in Google Drive where files should be placed"),
@@ -395,6 +395,13 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 // handleTransferAttachmentsToDrive transfers Gmail attachments directly to Google Drive
 // This handler fetches attachment(s) from Gmail and uploads them to Drive in a single operation,
 // preserving the original filename and MIME type. Supports batch processing for multiple attachments.
+//
+// Attachment matching uses a fallback strategy:
+// 1. Try matching by attachment ID (from gmail_list_attachments)
+// 2. If not found, try matching by exact filename
+// 3. If still not found, try parsing as numeric index (0, 1, 2, etc.)
+//
+// This multi-strategy approach ensures robustness against Gmail API attachment ID inconsistencies.
 func handleTransferAttachmentsToDrive(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 
@@ -505,20 +512,45 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 		// Trim whitespace from attachment ID to handle any formatting issues
 		attachmentID = strings.TrimSpace(attachmentID)
 
-		// Get attachment metadata
+		// Strategy 1: Try to match by AttachmentID
 		attInfo, ok := attachmentMap[attachmentID]
+
+		// Strategy 2: If not found by ID, try matching by filename
 		if !ok {
-			// Build a helpful error message showing available IDs
-			var availableIDs []string
-			for id := range attachmentMap {
-				availableIDs = append(availableIDs, id)
+			for _, att := range allAttachments {
+				if att.Filename == attachmentID {
+					attInfo = att
+					ok = true
+					break
+				}
 			}
-			return "", fmt.Errorf("attachment %s not found in message %s. Available attachment IDs: %v",
-				attachmentID, messageID, availableIDs)
 		}
 
-		// Fetch attachment data from Gmail
-		data, err := gmailClient.GetAttachment(messageID, attachmentID)
+		// Strategy 3: If still not found, check if it's an index number (0, 1, 2, etc.)
+		if !ok {
+			// Try parsing as index
+			if idx, err := fmt.Sscanf(attachmentID, "%d", new(int)); err == nil && idx == 1 {
+				var index int
+				fmt.Sscanf(attachmentID, "%d", &index)
+				if index >= 0 && index < len(allAttachments) {
+					attInfo = allAttachments[index]
+					ok = true
+				}
+			}
+		}
+
+		if !ok {
+			// Build a detailed error message for debugging
+			var availableInfo []string
+			for i, att := range allAttachments {
+				availableInfo = append(availableInfo, fmt.Sprintf("[%d] ID=%s, Name=%s", i, att.AttachmentID, att.Filename))
+			}
+			return "", fmt.Errorf("attachment '%s' not found in message %s. Available attachments:\n%s",
+				attachmentID, messageID, strings.Join(availableInfo, "\n"))
+		}
+
+		// Fetch attachment data from Gmail using the actual attachment ID
+		data, err := gmailClient.GetAttachment(messageID, attInfo.AttachmentID)
 		if err != nil {
 			return "", fmt.Errorf("failed to fetch attachment: %w", err)
 		}
@@ -546,7 +578,8 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 			"sizeHuman":    formatSize(fileInfo.Size),
 			"mimeType":     fileInfo.MimeType,
 			"webViewLink":  fileInfo.WebViewLink,
-			"attachmentId": attachmentID,
+			"attachmentId": attInfo.AttachmentID,
+			"identifier":   attachmentID, // What the user provided (ID, filename, or index)
 		}
 
 		jsonBytes, _ := json.Marshal(result)
