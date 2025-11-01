@@ -10,27 +10,28 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/docs"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
 
 // RegisterDocsTools registers all Google Docs-related tools with the MCP server
 func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
-	// Get document tool
-	getDocumentTool := mcp.NewTool("docs_get_document",
-		mcp.WithDescription("Get Google Docs content by document ID"),
+	// Get documents tool
+	getDocumentsTool := mcp.NewTool("docs_get_documents",
+		mcp.WithDescription("Get Google Docs content for one or more documents"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
-		mcp.WithString("documentId",
+		mcp.WithString("documentIds",
 			mcp.Required(),
-			mcp.Description("The ID of the Google Doc"),
+			mcp.Description("Document ID (string) or array of document IDs"),
 		),
 		mcp.WithString("format",
 			mcp.Description("Output format: 'markdown' (default), 'text', or 'json'"),
 		),
 	)
 
-	s.AddTool(getDocumentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetDocument(ctx, request, sc)
+	s.AddTool(getDocumentsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleGetDocuments(ctx, request, sc)
 	})
 
 	// Get document metadata tool
@@ -52,7 +53,7 @@ func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 	return nil
 }
 
-func handleGetDocument(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+func handleGetDocuments(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 
 	// Get account name, default to "default"
@@ -61,9 +62,9 @@ func handleGetDocument(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		account = accountVal
 	}
 
-	documentID, ok := args["documentId"].(string)
-	if !ok || documentID == "" {
-		return mcp.NewToolResultError("documentId is required"), nil
+	documentIDs, err := batch.ParseStringOrArray(args["documentIds"], "documentIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	format := "markdown"
@@ -101,38 +102,39 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 		sc.SetDocsClientForAccount(account, docsClient)
 	}
 
-	switch format {
-	case "markdown":
-		content, err := docsClient.GetDocumentAsMarkdown(documentID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to get document: %v", err)), nil
-		}
-		result := fmt.Sprintf("Document content (Markdown, %d bytes):\n%s", len(content), content)
-		return mcp.NewToolResultText(result), nil
+	results := batch.ProcessBatch(documentIDs, func(documentID string) (string, error) {
+		switch format {
+		case "markdown":
+			content, err := docsClient.GetDocumentAsMarkdown(documentID)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Markdown content (%d bytes):\n%s", len(content), content), nil
 
-	case "text":
-		content, err := docsClient.GetDocumentAsPlainText(documentID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to get document: %v", err)), nil
-		}
-		result := fmt.Sprintf("Document content (plain text, %d bytes):\n%s", len(content), content)
-		return mcp.NewToolResultText(result), nil
+		case "text":
+			content, err := docsClient.GetDocumentAsPlainText(documentID)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Plain text content (%d bytes):\n%s", len(content), content), nil
 
-	case "json":
-		doc, err := docsClient.GetDocument(documentID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to get document: %v", err)), nil
-		}
-		jsonBytes, err := json.MarshalIndent(doc, "", "  ")
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to serialize document: %v", err)), nil
-		}
-		result := fmt.Sprintf("Document content (JSON, %d bytes):\n%s", len(jsonBytes), string(jsonBytes))
-		return mcp.NewToolResultText(result), nil
+		case "json":
+			doc, err := docsClient.GetDocument(documentID)
+			if err != nil {
+				return "", err
+			}
+			jsonBytes, err := json.MarshalIndent(doc, "", "  ")
+			if err != nil {
+				return "", fmt.Errorf("failed to serialize: %w", err)
+			}
+			return fmt.Sprintf("JSON content (%d bytes):\n%s", len(jsonBytes), string(jsonBytes)), nil
 
-	default:
-		return mcp.NewToolResultError(fmt.Sprintf("Invalid format '%s', must be 'markdown', 'text', or 'json'", format)), nil
-	}
+		default:
+			return "", fmt.Errorf("invalid format '%s', must be 'markdown', 'text', or 'json'", format)
+		}
+	})
+
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }
 
 func handleGetMetadata(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {

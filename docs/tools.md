@@ -368,16 +368,6 @@ Update an existing calendar event
 
 ## Google Docs Tools
 
-### docs_get_document
-
-Get Google Docs content by document ID
-
-**Arguments:**
-- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `documentId` (required): The ID of the Google Doc
-- `format` (optional): Output format: 'markdown' (default), 'text', or 'json'
-
-
 ### docs_get_document_metadata
 
 Get metadata about a Google Doc or Drive file
@@ -385,6 +375,16 @@ Get metadata about a Google Doc or Drive file
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `documentId` (required): The ID of the Google Doc or Drive file
+
+
+### docs_get_documents
+
+Get Google Docs content for one or more documents
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
+- `documentIds` (required): Document ID (string) or array of document IDs
+- `format` (optional): Output format: 'markdown' (default), 'text', or 'json'
 
 
 ## Google Drive Tools
