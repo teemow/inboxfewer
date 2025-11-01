@@ -61,6 +61,7 @@ Each token provides access to the following Google APIs with these scopes:
 
 **Gmail:**
 - `https://mail.google.com/` - Full Gmail access (read, compose, send, and permanently delete all your email)
+- `https://www.googleapis.com/auth/gmail.settings.basic` - Manage basic mail settings (create/delete filters and labels)
 
 **Google Docs:**
 - `https://www.googleapis.com/auth/documents.readonly` - Read document content
@@ -258,6 +259,25 @@ If you're having trouble with multiple accounts:
 If you see "Permission Denied" errors:
 
 1. Verify the OAuth token has the required scopes
-2. Re-authenticate to grant additional permissions
+2. Re-authenticate to grant additional permissions (see "Reauthorization" below)
 3. Check that you've enabled `--yolo` if using write operations
+
+### Reauthorization for New Scopes
+
+When new features are added that require additional OAuth scopes (e.g., Gmail filter management), you'll need to reauthorize:
+
+1. Delete your existing token file:
+   ```bash
+   # For default account
+   rm ~/.cache/inboxfewer/google-default.token
+   
+   # For specific account
+   rm ~/.cache/inboxfewer/google-{account}.token
+   ```
+
+2. Restart the application or server
+
+3. Complete the OAuth flow again to grant the new permissions
+
+**Note:** The new authorization will include all previously granted scopes plus any newly added ones.
 

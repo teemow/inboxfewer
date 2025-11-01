@@ -134,6 +134,7 @@ func getOAuthConfig() *oauth2.Config {
 		RedirectURL:  OOB,
 		Scopes: []string{
 			gmail.MailGoogleComScope,                                  // Gmail access (includes send)
+			gmail.GmailSettingsBasicScope,                             // Gmail settings (filters, labels, etc.)
 			"https://www.googleapis.com/auth/documents.readonly",      // Google Docs access
 			"https://www.googleapis.com/auth/drive",                   // Google Drive access (read/write)
 			"https://www.googleapis.com/auth/contacts.readonly",       // Google Contacts access
@@ -142,7 +143,7 @@ func getOAuthConfig() *oauth2.Config {
 			calendar.CalendarScope,                                    // Google Calendar access (read/write)
 			meet.MeetingsSpaceReadonlyScope,                           // Google Meet access (read-only artifacts)
 			"https://www.googleapis.com/auth/meetings.space.settings", // Google Meet settings (configure spaces)
-			tasks.TasksScope, // Google Tasks access (read/write)
+			tasks.TasksScope,                                          // Google Tasks access (read/write)
 		},
 	}
 }

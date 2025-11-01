@@ -10,21 +10,22 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
 
 // registerShareTools registers file sharing and permission management tools
 func registerShareTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
 	// Register write tools only if not in read-only mode
 	if !readOnly {
-		// Share file tool
-		shareFileTool := mcp.NewTool("drive_share_file",
-			mcp.WithDescription("Share a file in Google Drive by granting permissions"),
+		// Share files tool
+		shareFilesTool := mcp.NewTool("drive_share_files",
+			mcp.WithDescription("Share one or more files in Google Drive by granting permissions"),
 			mcp.WithString("account",
 				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 			),
-			mcp.WithString("fileId",
+			mcp.WithString("fileIds",
 				mcp.Required(),
-				mcp.Description("The ID of the file to share"),
+				mcp.Description("File ID (string) or array of file IDs to share"),
 			),
 			mcp.WithString("type",
 				mcp.Required(),
@@ -48,13 +49,13 @@ func registerShareTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 			),
 		)
 
-		s.AddTool(shareFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		s.AddTool(shareFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
 			account := getAccountFromArgs(args)
 
-			fileID, ok := args["fileId"].(string)
-			if !ok || fileID == "" {
-				return mcp.NewToolResultError("fileId is required"), nil
+			fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
 			}
 
 			permType, ok := args["type"].(string)
@@ -93,13 +94,15 @@ func registerShareTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 				options.EmailMessage = emailMsg
 			}
 
-			permission, err := client.ShareFile(ctx, fileID, options)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to share file: %v", err)), nil
-			}
+			results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
+				permission, err := client.ShareFile(ctx, fileID, options)
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("File %s shared with %s (%s)", fileID, options.EmailAddress, permission.Role), nil
+			})
 
-			result, _ := json.MarshalIndent(permission, "", "  ")
-			return mcp.NewToolResultText(fmt.Sprintf("File shared successfully:\n%s", string(result))), nil
+			return mcp.NewToolResultText(batch.FormatResults(results)), nil
 		})
 	}
 

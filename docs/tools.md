@@ -33,13 +33,13 @@ Archive all Gmail threads in inbox that are related to closed GitHub issues/PRs
 - `query` (optional): Gmail search query (default: 'in:inbox')
 
 
-### gmail_archive_thread
+### gmail_archive_threads
 
-Archive a Gmail thread by removing it from the inbox
+Archive one or more Gmail threads by removing them from the inbox
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `threadId` (required): The ID of the thread to archive
+- `threadIds` (required): Thread ID (string) or array of thread IDs to archive
 
 
 ### gmail_check_stale
@@ -125,14 +125,14 @@ Get the content of an attachment
 - `messageId` (required): The ID of the Gmail message
 
 
-### gmail_get_message_body
+### gmail_get_message_bodies
 
-Extract text or HTML body from a Gmail message
+Extract text or HTML body from one or more Gmail messages
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `format` (optional): Body format: 'text' (default) or 'html'
-- `messageId` (required): The ID of the Gmail message
+- `messageIds` (required): Message ID (string) or array of message IDs
 
 
 ### gmail_get_unsubscribe_info
@@ -251,14 +251,14 @@ Create a new calendar event (supports recurring, out-of-office, and Google Meet)
 - `timeZone` (optional): Time zone (e.g., 'America/New_York'). Defaults to UTC.
 
 
-### calendar_delete_event
+### calendar_delete_events
 
-Delete a calendar event
+Delete one or more calendar events
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `calendarId` (optional): Calendar ID (use 'primary' for primary calendar)
-- `eventId` (required): The ID of the event to delete
+- `eventIds` (required): Event ID (string) or array of event IDs to delete
 
 
 ### calendar_extract_docs_links
@@ -293,24 +293,24 @@ Get information about a specific calendar
 - `calendarId` (required): Calendar ID (use 'primary' for primary calendar)
 
 
-### calendar_get_event
+### calendar_get_events
 
-Get details of a specific calendar event
-
-**Arguments:**
-- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `calendarId` (optional): Calendar ID (use 'primary' for primary calendar)
-- `eventId` (required): The ID of the event to retrieve
-
-
-### calendar_get_meet_link
-
-Get the Google Meet link from a calendar event
+Get details of one or more calendar events
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `calendarId` (optional): Calendar ID (use 'primary' for primary calendar)
-- `eventId` (required): The ID of the event
+- `eventIds` (required): Event ID (string) or array of event IDs to retrieve
+
+
+### calendar_get_meet_links
+
+Get the Google Meet link from one or more calendar events
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
+- `calendarId` (optional): Calendar ID (use 'primary' for primary calendar)
+- `eventIds` (required): Event ID (string) or array of event IDs
 
 
 ### calendar_list_calendars
@@ -368,23 +368,23 @@ Update an existing calendar event
 
 ## Google Docs Tools
 
-### docs_get_document
+### docs_get_documents
 
-Get Google Docs content by document ID
+Get Google Docs content for one or more documents
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `documentId` (required): The ID of the Google Doc
+- `documentIds` (required): Document ID (string) or array of document IDs
 - `format` (optional): Output format: 'markdown' (default), 'text', or 'json'
 
 
-### docs_get_document_metadata
+### docs_get_documents_metadata
 
-Get metadata about a Google Doc or Drive file
+Get metadata about one or more Google Docs or Drive files
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `documentId` (required): The ID of the Google Doc or Drive file
+- `documentIds` (required): Document ID (string) or array of document IDs
 
 
 ## Google Drive Tools
@@ -399,32 +399,32 @@ Create a new folder in Google Drive
 - `parentFolders` (optional): Comma-separated list of parent folder IDs where the folder should be created
 
 
-### drive_delete_file
+### drive_delete_files
 
-Delete a file from Google Drive
+Delete one or more files from Google Drive
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `fileId` (required): The ID of the file to delete
+- `fileIds` (required): File ID (string) or array of file IDs to delete
 
 
-### drive_download_file
+### drive_download_files
 
-Download the content of a file from Google Drive
+Download the content of one or more files from Google Drive
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `asBase64` (optional): Return content as base64-encoded string (default: false for text)
-- `fileId` (required): The ID of the file to download
+- `fileIds` (required): File ID (string) or array of file IDs to download
 
 
-### drive_get_file
+### drive_get_files
 
-Get metadata for a specific file in Google Drive
+Get metadata for one or more files in Google Drive
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `fileId` (required): The ID of the file
+- `fileIds` (required): File ID (string) or array of file IDs to retrieve
 
 
 ### drive_list_files
@@ -449,15 +449,15 @@ List all permissions for a file in Google Drive
 - `fileId` (required): The ID of the file
 
 
-### drive_move_file
+### drive_move_files
 
-Move or rename a file in Google Drive
+Move or rename one or more files in Google Drive
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `addParents` (optional): Comma-separated list of folder IDs to add as parents
-- `fileId` (required): The ID of the file to move or rename
-- `newName` (optional): The new name for the file (leave empty to keep current name)
+- `fileIds` (required): File ID (string) or array of file IDs to move or rename
+- `newName` (optional): The new name for the file (single file only, leave empty to keep current name)
 - `removeParents` (optional): Comma-separated list of folder IDs to remove as parents
 
 
@@ -471,16 +471,16 @@ Remove a permission from a file in Google Drive
 - `permissionId` (required): The ID of the permission to remove (get this from drive_list_permissions)
 
 
-### drive_share_file
+### drive_share_files
 
-Share a file in Google Drive by granting permissions
+Share one or more files in Google Drive by granting permissions
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `domain` (optional): Domain name (required if type is 'domain')
 - `emailAddress` (optional): Email address (required if type is 'user' or 'group')
 - `emailMessage` (optional): Custom message to include in the notification email
-- `fileId` (required): The ID of the file to share
+- `fileIds` (required): File ID (string) or array of file IDs to share
 - `role` (required): The role to grant: 'owner', 'organizer', 'fileOrganizer', 'writer', 'commenter', or 'reader'
 - `sendNotificationEmail` (optional): Send a notification email to the grantee (default: false)
 - `type` (required): The type of grantee: 'user', 'group', 'domain', or 'anyone'
@@ -601,28 +601,14 @@ Clear all completed tasks from a task list
 - `taskListId` (required): The ID of the task list to clear completed tasks from
 
 
-### tasks_complete_task
+### tasks_complete_tasks
 
-Mark a task as completed
-
-**Arguments:**
-- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `taskId` (required): The ID of the task to complete
-- `taskListId` (required): The ID of the task list
-
-
-### tasks_create_task
-
-Create a new task in a task list
+Mark one or more tasks as completed
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `due` (optional): Due date for the task (RFC3339 format, e.g., '2025-11-07T09:00:00Z')
-- `notes` (optional): Notes or description for the task
-- `parent` (optional): Parent task ID to create a subtask
-- `previous` (optional): Previous sibling task ID for positioning
+- `taskIds` (required): Task ID (string) or array of task IDs to complete
 - `taskListId` (required): The ID of the task list
-- `title` (required): The title of the new task
 
 
 ### tasks_create_task_list
@@ -634,14 +620,19 @@ Create a new task list
 - `title` (required): The title of the new task list
 
 
-### tasks_delete_task
+### tasks_create_tasks
 
-Delete a task
+Create one or more tasks in a task list
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `taskId` (required): The ID of the task to delete
+- `due` (optional): Due date for the task (RFC3339 format, single task only)
+- `notes` (optional): Notes or description for the task (single task only)
+- `parent` (optional): Parent task ID to create a subtask (single task only)
+- `previous` (optional): Previous sibling task ID for positioning (single task only)
 - `taskListId` (required): The ID of the task list
+- `title` (optional): Task title (for single task creation)
+- `titles` (optional): Array of task titles (for batch task creation)
 
 
 ### tasks_delete_task_list
@@ -653,13 +644,13 @@ Delete a task list
 - `taskListId` (required): The ID of the task list to delete
 
 
-### tasks_get_task
+### tasks_delete_tasks
 
-Get details of a specific task
+Delete one or more tasks
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `taskId` (required): The ID of the task to retrieve
+- `taskIds` (required): Task ID (string) or array of task IDs to delete
 - `taskListId` (required): The ID of the task list
 
 
@@ -670,6 +661,16 @@ Get details of a specific task list
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `taskListId` (required): The ID of the task list to retrieve
+
+
+### tasks_get_tasks
+
+Get details of one or more tasks
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
+- `taskIds` (required): Task ID (string) or array of task IDs to retrieve
+- `taskListId` (required): The ID of the task list
 
 
 ### tasks_list_task_lists

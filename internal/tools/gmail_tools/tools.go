@@ -10,6 +10,7 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
 
 // getAccountFromArgs extracts the account name from request arguments, defaulting to "default"
@@ -67,20 +68,20 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		return handleListThreads(ctx, request, sc)
 	})
 
-	// Archive thread tool
-	archiveThreadTool := mcp.NewTool("gmail_archive_thread",
-		mcp.WithDescription("Archive a Gmail thread by removing it from the inbox"),
+	// Archive threads tool (supports single or multiple threads)
+	archiveThreadsTool := mcp.NewTool("gmail_archive_threads",
+		mcp.WithDescription("Archive one or more Gmail threads by removing them from the inbox"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
-		mcp.WithString("threadId",
+		mcp.WithString("threadIds",
 			mcp.Required(),
-			mcp.Description("The ID of the thread to archive"),
+			mcp.Description("Thread ID (string) or array of thread IDs to archive"),
 		),
 	)
 
-	s.AddTool(archiveThreadTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleArchiveThread(ctx, request, sc)
+	s.AddTool(archiveThreadsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleArchiveThreads(ctx, request, sc)
 	})
 
 	// Classify thread tool
@@ -194,13 +195,14 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 	return mcp.NewToolResultText(result), nil
 }
 
-func handleArchiveThread(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+func handleArchiveThreads(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 	account := getAccountFromArgs(args)
 
-	threadID, ok := args["threadId"].(string)
-	if !ok || threadID == "" {
-		return mcp.NewToolResultError("threadId is required"), nil
+	// Parse threadIds - can be string or array
+	threadIDs, err := batch.ParseStringOrArray(args["threadIds"], "threadIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	// Get or create Gmail client for the specified account
@@ -232,11 +234,15 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 		sc.SetGmailClientForAccount(account, client)
 	}
 
-	if err := client.ArchiveThread(threadID); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to archive thread: %v", err)), nil
-	}
+	// Process batch
+	results := batch.ProcessBatch(threadIDs, func(threadID string) (string, error) {
+		if err := client.ArchiveThread(threadID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Thread %s archived successfully", threadID), nil
+	})
 
-	return mcp.NewToolResultText(fmt.Sprintf("Successfully archived thread %s", threadID)), nil
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }
 
 func handleClassifyThread(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
