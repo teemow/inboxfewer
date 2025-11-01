@@ -46,7 +46,7 @@
 //	}
 //
 //	// Search contacts
-//	contacts, err := client.SearchContacts("john", 10)
+//	contacts, err := client.SearchContacts("search query", 10)
 //	if err != nil {
 //	    log.Fatal(err)
 //	}

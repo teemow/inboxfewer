@@ -497,23 +497,23 @@ func TestAppendSignature(t *testing.T) {
 		{
 			name:      "plain text with signature",
 			body:      "Hello,\n\nThis is my message.",
-			signature: "Best regards,\nJohn Doe",
+			signature: "Best regards,\nSender Name",
 			isHTML:    false,
 			wantContains: []string{
 				"Hello,\n\nThis is my message.",
 				"\n\n-- \n",
-				"Best regards,\nJohn Doe",
+				"Best regards,\nSender Name",
 			},
 		},
 		{
 			name:      "HTML with signature",
 			body:      "<p>Hello,</p><p>This is my message.</p>",
-			signature: "<p>Best regards,<br>John Doe</p>",
+			signature: "<p>Best regards,<br>Sender Name</p>",
 			isHTML:    true,
 			wantContains: []string{
 				"<p>Hello,</p><p>This is my message.</p>",
 				"<br><br>-- <br>",
-				"<p>Best regards,<br>John Doe</p>",
+				"<p>Best regards,<br>Sender Name</p>",
 			},
 		},
 	}
