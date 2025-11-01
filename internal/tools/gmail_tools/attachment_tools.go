@@ -1,13 +1,16 @@
 package gmail_tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
@@ -90,6 +93,32 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 
 	s.AddTool(extractDocLinksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return handleExtractDocLinks(ctx, request, sc)
+	})
+
+	// Transfer attachments to Drive tool
+	transferAttachmentsTool := mcp.NewTool("gmail_transfer_attachments_to_drive",
+		mcp.WithDescription("Transfer Gmail attachments directly to Google Drive in a single operation"),
+		mcp.WithString("account",
+			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
+		),
+		mcp.WithString("messageId",
+			mcp.Required(),
+			mcp.Description("The ID of the Gmail message containing the attachments"),
+		),
+		mcp.WithString("attachmentIds",
+			mcp.Required(),
+			mcp.Description("Attachment identifier(s) to transfer. Can be: attachment ID from gmail_list_attachments, exact filename, or numeric index (0, 1, 2, etc.). Supports single string or array of strings."),
+		),
+		mcp.WithString("parentFolders",
+			mcp.Description("Comma-separated list of parent folder IDs in Google Drive where files should be placed"),
+		),
+		mcp.WithString("description",
+			mcp.Description("Optional description to add to the files in Google Drive"),
+		),
+	)
+
+	s.AddTool(transferAttachmentsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleTransferAttachmentsToDrive(ctx, request, sc)
 	})
 
 	return nil
@@ -361,6 +390,203 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 
 	result := fmt.Sprintf("Found %d Google Docs/Drive link(s):\n%s", len(docLinks), string(jsonBytes))
 	return mcp.NewToolResultText(result), nil
+}
+
+// handleTransferAttachmentsToDrive transfers Gmail attachments directly to Google Drive
+// This handler fetches attachment(s) from Gmail and uploads them to Drive in a single operation,
+// preserving the original filename and MIME type. Supports batch processing for multiple attachments.
+//
+// Attachment matching uses a fallback strategy:
+// 1. Try matching by attachment ID (from gmail_list_attachments)
+// 2. If not found, try matching by exact filename
+// 3. If still not found, try parsing as numeric index (0, 1, 2, etc.)
+//
+// This multi-strategy approach ensures robustness against Gmail API attachment ID inconsistencies.
+func handleTransferAttachmentsToDrive(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	messageID, ok := args["messageId"].(string)
+	if !ok || messageID == "" {
+		return mcp.NewToolResultError("messageId is required"), nil
+	}
+
+	// Parse attachmentIds - can be string or array
+	attachmentIDs, err := batch.ParseStringOrArray(args["attachmentIds"], "attachmentIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	// Get account name
+	account := getAccountFromArgs(args)
+
+	// Get or create Gmail client
+	gmailClient := sc.GmailClientForAccount(account)
+	if gmailClient == nil {
+		if !gmail.HasTokenForAccount(account) {
+			authURL := gmail.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Gmail OAuth token not found for account "%s". To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Gmail
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the google_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		gmailClient, err = gmail.NewClientForAccount(ctx, account)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Gmail client: %v", err)), nil
+		}
+		sc.SetGmailClientForAccount(account, gmailClient)
+	}
+
+	// Get or create Drive client
+	driveClient := sc.DriveClientForAccount(account)
+	if driveClient == nil {
+		if !drive.HasTokenForAccount(account) {
+			authURL := drive.GetAuthURLForAccount(account)
+			errorMsg := fmt.Sprintf(`Google Drive OAuth token not found for account "%s". To authorize access:
+
+1. Visit this URL in your browser:
+   %s
+
+2. Sign in with your Google account
+3. Grant access to Google Drive
+4. Copy the authorization code
+
+5. Provide the authorization code to your AI agent
+   The agent will use the google_save_auth_code tool to complete authentication.
+
+Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL)
+			return mcp.NewToolResultError(errorMsg), nil
+		}
+
+		var err error
+		driveClient, err = drive.NewClientForAccount(ctx, account)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create Drive client: %v", err)), nil
+		}
+		sc.SetDriveClientForAccount(account, driveClient)
+	}
+
+	// Parse optional parent folders
+	var parentFolders []string
+	if parentFoldersStr, ok := args["parentFolders"].(string); ok && parentFoldersStr != "" {
+		for _, folder := range strings.Split(parentFoldersStr, ",") {
+			folder = strings.TrimSpace(folder)
+			if folder != "" {
+				parentFolders = append(parentFolders, folder)
+			}
+		}
+	}
+
+	// Get optional description
+	description := ""
+	if desc, ok := args["description"].(string); ok {
+		description = desc
+	}
+
+	// First, get all attachments for the message to map IDs to metadata
+	allAttachments, err := gmailClient.ListAttachments(messageID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to list attachments: %v", err)), nil
+	}
+
+	// Create a map of attachment ID to attachment info
+	// Trim attachment IDs to handle any whitespace issues
+	attachmentMap := make(map[string]*gmail.AttachmentInfo)
+	for _, att := range allAttachments {
+		attachmentMap[strings.TrimSpace(att.AttachmentID)] = att
+	}
+
+	// Process each attachment
+	results := batch.ProcessBatch(attachmentIDs, func(attachmentID string) (string, error) {
+		// Trim whitespace from attachment ID to handle any formatting issues
+		attachmentID = strings.TrimSpace(attachmentID)
+
+		// Strategy 1: Try to match by AttachmentID
+		attInfo, ok := attachmentMap[attachmentID]
+
+		// Strategy 2: If not found by ID, try matching by filename
+		if !ok {
+			for _, att := range allAttachments {
+				if att.Filename == attachmentID {
+					attInfo = att
+					ok = true
+					break
+				}
+			}
+		}
+
+		// Strategy 3: If still not found, check if it's an index number (0, 1, 2, etc.)
+		if !ok {
+			// Try parsing as index
+			if idx, err := fmt.Sscanf(attachmentID, "%d", new(int)); err == nil && idx == 1 {
+				var index int
+				fmt.Sscanf(attachmentID, "%d", &index)
+				if index >= 0 && index < len(allAttachments) {
+					attInfo = allAttachments[index]
+					ok = true
+				}
+			}
+		}
+
+		if !ok {
+			// Build a detailed error message for debugging
+			var availableInfo []string
+			for i, att := range allAttachments {
+				availableInfo = append(availableInfo, fmt.Sprintf("[%d] ID=%s, Name=%s", i, att.AttachmentID, att.Filename))
+			}
+			return "", fmt.Errorf("attachment '%s' not found in message %s. Available attachments:\n%s",
+				attachmentID, messageID, strings.Join(availableInfo, "\n"))
+		}
+
+		// Fetch attachment data from Gmail using the actual attachment ID
+		data, err := gmailClient.GetAttachment(messageID, attInfo.AttachmentID)
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch attachment: %w", err)
+		}
+
+		// Prepare upload options
+		uploadOpts := &drive.UploadOptions{
+			MimeType:      attInfo.MimeType,
+			ParentFolders: parentFolders,
+		}
+		if description != "" {
+			uploadOpts.Description = description
+		}
+
+		// Upload to Drive
+		fileInfo, err := driveClient.UploadFile(ctx, attInfo.Filename, bytes.NewReader(data), uploadOpts)
+		if err != nil {
+			return "", fmt.Errorf("failed to upload to Drive: %w", err)
+		}
+
+		// Return formatted result
+		result := map[string]interface{}{
+			"filename":     fileInfo.Name,
+			"driveFileId":  fileInfo.ID,
+			"size":         fileInfo.Size,
+			"sizeHuman":    formatSize(fileInfo.Size),
+			"mimeType":     fileInfo.MimeType,
+			"webViewLink":  fileInfo.WebViewLink,
+			"attachmentId": attInfo.AttachmentID,
+			"identifier":   attachmentID, // What the user provided (ID, filename, or index)
+		}
+
+		jsonBytes, _ := json.Marshal(result)
+		return string(jsonBytes), nil
+	})
+
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }
 
 // formatSize formats a byte size into human-readable format

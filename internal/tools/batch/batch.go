@@ -34,6 +34,25 @@ func ParseStringOrArray(param interface{}, paramName string) ([]string, error) {
 		if v == "" {
 			return nil, fmt.Errorf("%s cannot be empty", paramName)
 		}
+
+		// Check if the string looks like a JSON array (starts with '[')
+		// This handles cases where the MCP client stringifies arrays
+		if len(v) > 0 && v[0] == '[' {
+			var arr []string
+			if err := json.Unmarshal([]byte(v), &arr); err == nil {
+				if len(arr) == 0 {
+					return nil, fmt.Errorf("%s cannot be empty", paramName)
+				}
+				for i, str := range arr {
+					if str == "" {
+						return nil, fmt.Errorf("%s[%d] cannot be empty", paramName, i)
+					}
+				}
+				return arr, nil
+			}
+			// If JSON parsing fails, treat it as a regular string (might be a filename starting with '[')
+		}
+
 		result = []string{v}
 	case []interface{}:
 		if len(v) == 0 {

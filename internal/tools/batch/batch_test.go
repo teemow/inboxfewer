@@ -70,6 +70,48 @@ func TestParseStringOrArray(t *testing.T) {
 			want:      nil,
 			wantErr:   true,
 		},
+		{
+			name:      "JSON string array",
+			input:     `["id1", "id2", "id3"]`,
+			paramName: "testParam",
+			want:      []string{"id1", "id2", "id3"},
+			wantErr:   false,
+		},
+		{
+			name:      "JSON string array with filenames",
+			input:     `["document1.pdf", "document2.pdf", "document3.pdf"]`,
+			paramName: "testParam",
+			want:      []string{"document1.pdf", "document2.pdf", "document3.pdf"},
+			wantErr:   false,
+		},
+		{
+			name:      "JSON string single element array",
+			input:     `["single.pdf"]`,
+			paramName: "testParam",
+			want:      []string{"single.pdf"},
+			wantErr:   false,
+		},
+		{
+			name:      "JSON string empty array",
+			input:     `[]`,
+			paramName: "testParam",
+			want:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "invalid JSON string",
+			input:     `[invalid json`,
+			paramName: "testParam",
+			want:      []string{`[invalid json`},
+			wantErr:   false,
+		},
+		{
+			name:      "string starting with bracket (not JSON)",
+			input:     `[test] file.pdf`,
+			paramName: "testParam",
+			want:      []string{`[test] file.pdf`},
+			wantErr:   false,
+		},
 	}
 
 	for _, tt := range tests {
