@@ -494,17 +494,27 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 	}
 
 	// Create a map of attachment ID to attachment info
+	// Trim attachment IDs to handle any whitespace issues
 	attachmentMap := make(map[string]*gmail.AttachmentInfo)
 	for _, att := range allAttachments {
-		attachmentMap[att.AttachmentID] = att
+		attachmentMap[strings.TrimSpace(att.AttachmentID)] = att
 	}
 
 	// Process each attachment
 	results := batch.ProcessBatch(attachmentIDs, func(attachmentID string) (string, error) {
+		// Trim whitespace from attachment ID to handle any formatting issues
+		attachmentID = strings.TrimSpace(attachmentID)
+
 		// Get attachment metadata
 		attInfo, ok := attachmentMap[attachmentID]
 		if !ok {
-			return "", fmt.Errorf("attachment %s not found in message %s", attachmentID, messageID)
+			// Build a helpful error message showing available IDs
+			var availableIDs []string
+			for id := range attachmentMap {
+				availableIDs = append(availableIDs, id)
+			}
+			return "", fmt.Errorf("attachment %s not found in message %s. Available attachment IDs: %v",
+				attachmentID, messageID, availableIDs)
 		}
 
 		// Fetch attachment data from Gmail
