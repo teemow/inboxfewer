@@ -265,3 +265,84 @@ func TestFolderMimeType(t *testing.T) {
 		t.Errorf("Expected FolderMimeType %s, got %s", expectedMimeType, FolderMimeType)
 	}
 }
+
+// TestBuildListFilesQuery tests the query building logic for listing files
+func TestBuildListFilesQuery(t *testing.T) {
+	tests := []struct {
+		name           string
+		userQuery      string
+		includeTrashed bool
+		expected       string
+	}{
+		{
+			name:           "user query with trashed excluded (default)",
+			userQuery:      "mimeType='application/pdf'",
+			includeTrashed: false,
+			expected:       "(mimeType='application/pdf') and trashed=false",
+		},
+		{
+			name:           "user query with trashed included",
+			userQuery:      "mimeType='application/pdf'",
+			includeTrashed: true,
+			expected:       "mimeType='application/pdf'",
+		},
+		{
+			name:           "no user query, exclude trashed (default)",
+			userQuery:      "",
+			includeTrashed: false,
+			expected:       "trashed=false",
+		},
+		{
+			name:           "no user query, include trashed",
+			userQuery:      "",
+			includeTrashed: true,
+			expected:       "",
+		},
+		{
+			name:           "complex query with name filter",
+			userQuery:      "name contains 'house' or name contains 'water'",
+			includeTrashed: false,
+			expected:       "(name contains 'house' or name contains 'water') and trashed=false",
+		},
+		{
+			name:           "query for folders only",
+			userQuery:      "mimeType='application/vnd.google-apps.folder'",
+			includeTrashed: false,
+			expected:       "(mimeType='application/vnd.google-apps.folder') and trashed=false",
+		},
+		{
+			name:           "query with multiple conditions",
+			userQuery:      "mimeType='application/pdf' and name contains 'report'",
+			includeTrashed: false,
+			expected:       "(mimeType='application/pdf' and name contains 'report') and trashed=false",
+		},
+		{
+			name:           "query with parentheses",
+			userQuery:      "(mimeType='application/pdf' or mimeType='image/jpeg') and starred=true",
+			includeTrashed: false,
+			expected:       "((mimeType='application/pdf' or mimeType='image/jpeg') and starred=true) and trashed=false",
+		},
+		{
+			name:           "query for owned files",
+			userQuery:      "'me' in owners",
+			includeTrashed: false,
+			expected:       "('me' in owners) and trashed=false",
+		},
+		{
+			name:           "query with date filter",
+			userQuery:      "modifiedTime > '2025-01-01T00:00:00'",
+			includeTrashed: false,
+			expected:       "(modifiedTime > '2025-01-01T00:00:00') and trashed=false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildListFilesQuery(tt.userQuery, tt.includeTrashed)
+			if result != tt.expected {
+				t.Errorf("buildListFilesQuery(%q, %v) = %q, want %q",
+					tt.userQuery, tt.includeTrashed, result, tt.expected)
+			}
+		})
+	}
+}
