@@ -33,13 +33,13 @@ Archive all Gmail threads in inbox that are related to closed GitHub issues/PRs
 - `query` (optional): Gmail search query (default: 'in:inbox')
 
 
-### gmail_archive_thread
+### gmail_archive_threads
 
-Archive a Gmail thread by removing it from the inbox
+Archive one or more Gmail threads by removing them from the inbox
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `threadId` (required): The ID of the thread to archive
+- `threadIds` (required): Thread ID (string) or array of thread IDs to archive
 
 
 ### gmail_check_stale
@@ -601,13 +601,13 @@ Clear all completed tasks from a task list
 - `taskListId` (required): The ID of the task list to clear completed tasks from
 
 
-### tasks_complete_task
+### tasks_complete_tasks
 
-Mark a task as completed
+Mark one or more tasks as completed
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `taskId` (required): The ID of the task to complete
+- `taskIds` (required): Task ID (string) or array of task IDs to complete
 - `taskListId` (required): The ID of the task list
 
 
@@ -634,16 +634,6 @@ Create a new task list
 - `title` (required): The title of the new task list
 
 
-### tasks_delete_task
-
-Delete a task
-
-**Arguments:**
-- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `taskId` (required): The ID of the task to delete
-- `taskListId` (required): The ID of the task list
-
-
 ### tasks_delete_task_list
 
 Delete a task list
@@ -651,6 +641,16 @@ Delete a task list
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `taskListId` (required): The ID of the task list to delete
+
+
+### tasks_delete_tasks
+
+Delete one or more tasks
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
+- `taskIds` (required): Task ID (string) or array of task IDs to delete
+- `taskListId` (required): The ID of the task list
 
 
 ### tasks_get_task

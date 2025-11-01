@@ -12,6 +12,7 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tasks"
+	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
 
 // getAccountFromArgs extracts the account name from request arguments, defaulting to "default"
@@ -516,9 +517,9 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			return mcp.NewToolResultText(fmt.Sprintf("Task updated successfully:\n%s", string(result))), nil
 		})
 
-		// Delete task tool
-		deleteTaskTool := mcp.NewTool("tasks_delete_task",
-			mcp.WithDescription("Delete a task"),
+		// Delete tasks tool
+		deleteTasksTool := mcp.NewTool("tasks_delete_tasks",
+			mcp.WithDescription("Delete one or more tasks"),
 			mcp.WithString("account",
 				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 			),
@@ -526,13 +527,13 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 				mcp.Required(),
 				mcp.Description("The ID of the task list"),
 			),
-			mcp.WithString("taskId",
+			mcp.WithString("taskIds",
 				mcp.Required(),
-				mcp.Description("The ID of the task to delete"),
+				mcp.Description("Task ID (string) or array of task IDs to delete"),
 			),
 		)
 
-		s.AddTool(deleteTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		s.AddTool(deleteTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
 			account := getAccountFromArgs(args)
 
@@ -541,9 +542,9 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 				return mcp.NewToolResultError("taskListId is required"), nil
 			}
 
-			taskID, ok := args["taskId"].(string)
-			if !ok || taskID == "" {
-				return mcp.NewToolResultError("taskId is required"), nil
+			taskIDs, err := batch.ParseStringOrArray(args["taskIds"], "taskIds")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
 			}
 
 			client, err := getTasksClient(ctx, account, sc)
@@ -551,17 +552,19 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			err = client.DeleteTask(taskListID, taskID)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to delete task: %v", err)), nil
-			}
+			results := batch.ProcessBatch(taskIDs, func(taskID string) (string, error) {
+				if err := client.DeleteTask(taskListID, taskID); err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("Task %s deleted successfully", taskID), nil
+			})
 
-			return mcp.NewToolResultText(fmt.Sprintf("Task %s deleted successfully", taskID)), nil
+			return mcp.NewToolResultText(batch.FormatResults(results)), nil
 		})
 
-		// Complete task tool
-		completeTaskTool := mcp.NewTool("tasks_complete_task",
-			mcp.WithDescription("Mark a task as completed"),
+		// Complete tasks tool
+		completeTasksTool := mcp.NewTool("tasks_complete_tasks",
+			mcp.WithDescription("Mark one or more tasks as completed"),
 			mcp.WithString("account",
 				mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 			),
@@ -569,13 +572,13 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 				mcp.Required(),
 				mcp.Description("The ID of the task list"),
 			),
-			mcp.WithString("taskId",
+			mcp.WithString("taskIds",
 				mcp.Required(),
-				mcp.Description("The ID of the task to complete"),
+				mcp.Description("Task ID (string) or array of task IDs to complete"),
 			),
 		)
 
-		s.AddTool(completeTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		s.AddTool(completeTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
 			account := getAccountFromArgs(args)
 
@@ -584,9 +587,9 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 				return mcp.NewToolResultError("taskListId is required"), nil
 			}
 
-			taskID, ok := args["taskId"].(string)
-			if !ok || taskID == "" {
-				return mcp.NewToolResultError("taskId is required"), nil
+			taskIDs, err := batch.ParseStringOrArray(args["taskIds"], "taskIds")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
 			}
 
 			client, err := getTasksClient(ctx, account, sc)
@@ -594,13 +597,15 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			task, err := client.CompleteTask(taskListID, taskID)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to complete task: %v", err)), nil
-			}
+			results := batch.ProcessBatch(taskIDs, func(taskID string) (string, error) {
+				task, err := client.CompleteTask(taskListID, taskID)
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("Task %s (%s) completed successfully", taskID, task.Title), nil
+			})
 
-			result, _ := json.MarshalIndent(task, "", "  ")
-			return mcp.NewToolResultText(fmt.Sprintf("Task completed successfully:\n%s", string(result))), nil
+			return mcp.NewToolResultText(batch.FormatResults(results)), nil
 		})
 
 		// Move task tool
