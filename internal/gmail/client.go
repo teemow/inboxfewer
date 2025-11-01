@@ -126,6 +126,14 @@ func (c *Client) ArchiveThread(tid string) error {
 	return err
 }
 
+// UnarchiveThread moves a thread back to inbox by adding the INBOX label
+func (c *Client) UnarchiveThread(tid string) error {
+	_, err := c.svc.Threads.Modify("me", tid, &gmail.ModifyThreadRequest{
+		AddLabelIds: []string{"INBOX"},
+	}).Do()
+	return err
+}
+
 // ForeachThread iterates over all threads matching the query
 func (c *Client) ForeachThread(q string, fn func(*gmail.Thread) error) error {
 	pageToken := ""
