@@ -218,23 +218,23 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		return handleExtractDocsLinks(ctx, request, sc)
 	})
 
-	// Get Meet link tool
-	getMeetLinkTool := mcp.NewTool("calendar_get_meet_link",
-		mcp.WithDescription("Get the Google Meet link from a calendar event"),
+	// Get Meet links tool
+	getMeetLinksTool := mcp.NewTool("calendar_get_meet_links",
+		mcp.WithDescription("Get the Google Meet link from one or more calendar events"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
 		mcp.WithString("calendarId",
 			mcp.Description("Calendar ID (use 'primary' for primary calendar)"),
 		),
-		mcp.WithString("eventId",
+		mcp.WithString("eventIds",
 			mcp.Required(),
-			mcp.Description("The ID of the event"),
+			mcp.Description("Event ID (string) or array of event IDs"),
 		),
 	)
 
-	s.AddTool(getMeetLinkTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetMeetLink(ctx, request, sc)
+	s.AddTool(getMeetLinksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleGetMeetLinks(ctx, request, sc)
 	})
 
 	return nil
@@ -609,7 +609,7 @@ func handleExtractDocsLinks(ctx context.Context, request mcp.CallToolRequest, sc
 	return mcp.NewToolResultText(result), nil
 }
 
-func handleGetMeetLink(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+func handleGetMeetLinks(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 	account := getAccountFromArgs(args)
 
@@ -618,9 +618,9 @@ func handleGetMeetLink(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		calendarID = calIDVal
 	}
 
-	eventID, ok := args["eventId"].(string)
-	if !ok || eventID == "" {
-		return mcp.NewToolResultError("eventId is required"), nil
+	eventIDs, err := batch.ParseStringOrArray(args["eventIds"], "eventIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	client, err := getCalendarClient(ctx, account, sc)
@@ -628,14 +628,18 @@ func handleGetMeetLink(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	meetLink, err := client.GetGoogleMeetLink(calendarID, eventID)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to get Meet link: %v", err)), nil
-	}
+	results := batch.ProcessBatch(eventIDs, func(eventID string) (string, error) {
+		meetLink, err := client.GetGoogleMeetLink(calendarID, eventID)
+		if err != nil {
+			return "", err
+		}
 
-	if meetLink == "" {
-		return mcp.NewToolResultText("No Google Meet link found for this event"), nil
-	}
+		if meetLink == "" {
+			return "No Google Meet link found for this event", nil
+		}
 
-	return mcp.NewToolResultText(fmt.Sprintf("Google Meet link: %s", meetLink)), nil
+		return fmt.Sprintf("Google Meet link: %s", meetLink), nil
+	})
+
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }

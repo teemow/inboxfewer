@@ -125,14 +125,14 @@ Get the content of an attachment
 - `messageId` (required): The ID of the Gmail message
 
 
-### gmail_get_message_body
+### gmail_get_message_bodies
 
-Extract text or HTML body from a Gmail message
+Extract text or HTML body from one or more Gmail messages
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `format` (optional): Body format: 'text' (default) or 'html'
-- `messageId` (required): The ID of the Gmail message
+- `messageIds` (required): Message ID (string) or array of message IDs
 
 
 ### gmail_get_unsubscribe_info
@@ -303,14 +303,14 @@ Get details of one or more calendar events
 - `eventIds` (required): Event ID (string) or array of event IDs to retrieve
 
 
-### calendar_get_meet_link
+### calendar_get_meet_links
 
-Get the Google Meet link from a calendar event
+Get the Google Meet link from one or more calendar events
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `calendarId` (optional): Calendar ID (use 'primary' for primary calendar)
-- `eventId` (required): The ID of the event
+- `eventIds` (required): Event ID (string) or array of event IDs
 
 
 ### calendar_list_calendars
@@ -368,15 +368,6 @@ Update an existing calendar event
 
 ## Google Docs Tools
 
-### docs_get_document_metadata
-
-Get metadata about a Google Doc or Drive file
-
-**Arguments:**
-- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `documentId` (required): The ID of the Google Doc or Drive file
-
-
 ### docs_get_documents
 
 Get Google Docs content for one or more documents
@@ -385,6 +376,15 @@ Get Google Docs content for one or more documents
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `documentIds` (required): Document ID (string) or array of document IDs
 - `format` (optional): Output format: 'markdown' (default), 'text', or 'json'
+
+
+### docs_get_documents_metadata
+
+Get metadata about one or more Google Docs or Drive files
+
+**Arguments:**
+- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
+- `documentIds` (required): Document ID (string) or array of document IDs
 
 
 ## Google Drive Tools
@@ -408,14 +408,14 @@ Delete one or more files from Google Drive
 - `fileIds` (required): File ID (string) or array of file IDs to delete
 
 
-### drive_download_file
+### drive_download_files
 
-Download the content of a file from Google Drive
+Download the content of one or more files from Google Drive
 
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `asBase64` (optional): Return content as base64-encoded string (default: false for text)
-- `fileId` (required): The ID of the file to download
+- `fileIds` (required): File ID (string) or array of file IDs to download
 
 
 ### drive_get_files

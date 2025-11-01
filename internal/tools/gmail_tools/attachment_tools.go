@@ -10,6 +10,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
 
 // RegisterAttachmentTools registers attachment-related tools with the MCP server
@@ -53,23 +54,23 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 		return handleGetAttachment(ctx, request, sc)
 	})
 
-	// Get message body tool
-	getMessageBodyTool := mcp.NewTool("gmail_get_message_body",
-		mcp.WithDescription("Extract text or HTML body from a Gmail message"),
+	// Get message bodies tool
+	getMessageBodiesTool := mcp.NewTool("gmail_get_message_bodies",
+		mcp.WithDescription("Extract text or HTML body from one or more Gmail messages"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
-		mcp.WithString("messageId",
+		mcp.WithString("messageIds",
 			mcp.Required(),
-			mcp.Description("The ID of the Gmail message"),
+			mcp.Description("Message ID (string) or array of message IDs"),
 		),
 		mcp.WithString("format",
 			mcp.Description("Body format: 'text' (default) or 'html'"),
 		),
 	)
 
-	s.AddTool(getMessageBodyTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetMessageBody(ctx, request, sc)
+	s.AddTool(getMessageBodiesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleGetMessageBodies(ctx, request, sc)
 	})
 
 	// Extract doc links tool
@@ -243,12 +244,12 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 	}
 }
 
-func handleGetMessageBody(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+func handleGetMessageBodies(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 
-	messageID, ok := args["messageId"].(string)
-	if !ok || messageID == "" {
-		return mcp.NewToolResultError("messageId is required"), nil
+	messageIDs, err := batch.ParseStringOrArray(args["messageIds"], "messageIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	format := "text"
@@ -286,13 +287,15 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 		sc.SetGmailClientForAccount(account, client)
 	}
 
-	body, err := client.GetMessageBody(messageID, format)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to get message body: %v", err)), nil
-	}
+	results := batch.ProcessBatch(messageIDs, func(messageID string) (string, error) {
+		body, err := client.GetMessageBody(messageID, format)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Message body (%s, %d bytes):\n%s", format, len(body), body), nil
+	})
 
-	result := fmt.Sprintf("Message body (%s, %d bytes):\n%s", format, len(body), body)
-	return mcp.NewToolResultText(result), nil
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }
 
 func handleExtractDocLinks(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {

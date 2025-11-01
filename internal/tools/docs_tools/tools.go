@@ -35,19 +35,19 @@ func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 	})
 
 	// Get document metadata tool
-	getMetadataTool := mcp.NewTool("docs_get_document_metadata",
-		mcp.WithDescription("Get metadata about a Google Doc or Drive file"),
+	getMetadataTool := mcp.NewTool("docs_get_documents_metadata",
+		mcp.WithDescription("Get metadata about one or more Google Docs or Drive files"),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
-		mcp.WithString("documentId",
+		mcp.WithString("documentIds",
 			mcp.Required(),
-			mcp.Description("The ID of the Google Doc or Drive file"),
+			mcp.Description("Document ID (string) or array of document IDs"),
 		),
 	)
 
 	s.AddTool(getMetadataTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetMetadata(ctx, request, sc)
+		return handleGetDocumentsMetadata(ctx, request, sc)
 	})
 
 	return nil
@@ -137,7 +137,7 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }
 
-func handleGetMetadata(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
+func handleGetDocumentsMetadata(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 
 	// Get account name, default to "default"
@@ -146,9 +146,9 @@ func handleGetMetadata(ctx context.Context, request mcp.CallToolRequest, sc *ser
 		account = accountVal
 	}
 
-	documentID, ok := args["documentId"].(string)
-	if !ok || documentID == "" {
-		return mcp.NewToolResultError("documentId is required"), nil
+	documentIDs, err := batch.ParseStringOrArray(args["documentIds"], "documentIds")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	// Get or create docs client for the specified account
@@ -181,16 +181,19 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 		sc.SetDocsClientForAccount(account, docsClient)
 	}
 
-	metadata, err := docsClient.GetFileMetadata(documentID)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to get metadata: %v", err)), nil
-	}
+	results := batch.ProcessBatch(documentIDs, func(documentID string) (string, error) {
+		metadata, err := docsClient.GetFileMetadata(documentID)
+		if err != nil {
+			return "", err
+		}
 
-	jsonBytes, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to serialize metadata: %v", err)), nil
-	}
+		jsonBytes, err := json.MarshalIndent(metadata, "", "  ")
+		if err != nil {
+			return "", fmt.Errorf("failed to serialize: %w", err)
+		}
 
-	result := fmt.Sprintf("Document metadata:\n%s", string(jsonBytes))
-	return mcp.NewToolResultText(result), nil
+		return fmt.Sprintf("Document metadata:\n%s", string(jsonBytes)), nil
+	})
+
+	return mcp.NewToolResultText(batch.FormatResults(results)), nil
 }
