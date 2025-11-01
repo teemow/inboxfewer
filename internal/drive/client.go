@@ -125,6 +125,25 @@ func (c *Client) UploadFile(ctx context.Context, name string, content io.Reader,
 	return convertToFileInfo(driveFile), nil
 }
 
+// buildListFilesQuery constructs the query string for listing files,
+// combining user-provided queries with the trashed filter as needed.
+// This function is extracted to make the query building logic testable.
+func buildListFilesQuery(userQuery string, includeTrashed bool) string {
+	if userQuery != "" {
+		if includeTrashed {
+			// User wants trashed files included, use their query as-is
+			return userQuery
+		}
+		// Combine user query with trashed=false filter
+		return fmt.Sprintf("(%s) and trashed=false", userQuery)
+	}
+	// No user query, just add trashed filter if needed
+	if !includeTrashed {
+		return "trashed=false"
+	}
+	return ""
+}
+
 // ListFiles lists files in Google Drive with optional filtering
 func (c *Client) ListFiles(ctx context.Context, options *ListOptions) ([]*FileInfo, string, error) {
 	call := c.service.Files.List().
@@ -132,9 +151,13 @@ func (c *Client) ListFiles(ctx context.Context, options *ListOptions) ([]*FileIn
 		Fields("nextPageToken, files(id, name, mimeType, size, createdTime, modifiedTime, webViewLink, webContentLink, parents, owners, shared, trashed, trashedTime)")
 
 	if options != nil {
-		if options.Query != "" {
-			call = call.Q(options.Query)
+		// Build the query string using the helper function
+		// Note: calling .Q() multiple times overwrites previous queries, so we must combine them
+		finalQuery := buildListFilesQuery(options.Query, options.IncludeTrashed)
+		if finalQuery != "" {
+			call = call.Q(finalQuery)
 		}
+
 		if options.MaxResults > 0 {
 			call = call.PageSize(int64(options.MaxResults))
 		}
@@ -143,11 +166,6 @@ func (c *Client) ListFiles(ctx context.Context, options *ListOptions) ([]*FileIn
 		}
 		if options.PageToken != "" {
 			call = call.PageToken(options.PageToken)
-		}
-		if options.IncludeTrashed {
-			call = call.IncludeItemsFromAllDrives(false) // Use standard behavior
-		} else {
-			call = call.Q("trashed=false")
 		}
 		if options.Spaces != "" {
 			call = call.Spaces(options.Spaces)
