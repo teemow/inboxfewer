@@ -176,6 +176,15 @@ func (c *Client) ForeachThread(q string, fn func(*gmail.Thread) error) error {
 	}
 }
 
+// GetThread retrieves a full Gmail thread with all its messages
+func (c *Client) GetThread(threadID string) (*gmail.Thread, error) {
+	thread, err := c.svc.Threads.Get("me", threadID).Format("full").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get thread %s: %w", threadID, err)
+	}
+	return thread, nil
+}
+
 // PopulateThread populates t with its full data. t.Id must be set initially.
 func (c *Client) PopulateThread(t *gmail.Thread) error {
 	req := c.svc.Threads.Get("me", t.Id).Format("full")

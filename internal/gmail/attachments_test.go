@@ -456,3 +456,165 @@ func TestBase64Decoding(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractBodyFromMessage(t *testing.T) {
+	// Create a mock client (we only test the extraction logic, not API calls)
+	client := &Client{}
+
+	tests := []struct {
+		name    string
+		message *gmail.Message
+		format  string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "simple text message",
+			message: &gmail.Message{
+				Id: "msg123",
+				Payload: &gmail.MessagePart{
+					MimeType: "text/plain",
+					Body: &gmail.MessagePartBody{
+						Data: base64.URLEncoding.EncodeToString([]byte("Hello, this is a test message")),
+					},
+				},
+			},
+			format:  "text",
+			want:    "Hello, this is a test message",
+			wantErr: false,
+		},
+		{
+			name: "html message",
+			message: &gmail.Message{
+				Id: "msg456",
+				Payload: &gmail.MessagePart{
+					MimeType: "text/html",
+					Body: &gmail.MessagePartBody{
+						Data: base64.URLEncoding.EncodeToString([]byte("<html><body>HTML content</body></html>")),
+					},
+				},
+			},
+			format:  "html",
+			want:    "<html><body>HTML content</body></html>",
+			wantErr: false,
+		},
+		{
+			name: "multipart message with text",
+			message: &gmail.Message{
+				Id: "msg789",
+				Payload: &gmail.MessagePart{
+					MimeType: "multipart/alternative",
+					Parts: []*gmail.MessagePart{
+						{
+							MimeType: "text/plain",
+							Body: &gmail.MessagePartBody{
+								Data: base64.URLEncoding.EncodeToString([]byte("Plain text body")),
+							},
+						},
+						{
+							MimeType: "text/html",
+							Body: &gmail.MessagePartBody{
+								Data: base64.URLEncoding.EncodeToString([]byte("<html>HTML body</html>")),
+							},
+						},
+					},
+				},
+			},
+			format:  "text",
+			want:    "Plain text body",
+			wantErr: false,
+		},
+		{
+			name: "message with no body",
+			message: &gmail.Message{
+				Id: "msg999",
+				Payload: &gmail.MessagePart{
+					MimeType: "text/plain",
+					Body:     &gmail.MessagePartBody{},
+				},
+			},
+			format:  "text",
+			wantErr: true,
+		},
+		{
+			name: "invalid format",
+			message: &gmail.Message{
+				Id: "msg111",
+				Payload: &gmail.MessagePart{
+					MimeType: "text/plain",
+					Body: &gmail.MessagePartBody{
+						Data: base64.URLEncoding.EncodeToString([]byte("Test")),
+					},
+				},
+			},
+			format:  "invalid",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := client.extractBodyFromMessage(tt.message, tt.format)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("extractBodyFromMessage() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("extractBodyFromMessage() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractBodyFromMessage_Formats(t *testing.T) {
+	client := &Client{}
+
+	// Test that both text and html formats work correctly with the same multipart message
+	message := &gmail.Message{
+		Id: "msg-multipart",
+		Payload: &gmail.MessagePart{
+			MimeType: "multipart/alternative",
+			Parts: []*gmail.MessagePart{
+				{
+					MimeType: "text/plain",
+					Body: &gmail.MessagePartBody{
+						Data: base64.URLEncoding.EncodeToString([]byte("Plain text version")),
+					},
+				},
+				{
+					MimeType: "text/html",
+					Body: &gmail.MessagePartBody{
+						Data: base64.URLEncoding.EncodeToString([]byte("<p>HTML version</p>")),
+					},
+				},
+			},
+		},
+	}
+
+	// Test text format
+	gotText, err := client.extractBodyFromMessage(message, "text")
+	if err != nil {
+		t.Errorf("extractBodyFromMessage(text) error = %v", err)
+	}
+	if gotText != "Plain text version" {
+		t.Errorf("extractBodyFromMessage(text) = %v, want 'Plain text version'", gotText)
+	}
+
+	// Test html format
+	gotHTML, err := client.extractBodyFromMessage(message, "html")
+	if err != nil {
+		t.Errorf("extractBodyFromMessage(html) error = %v", err)
+	}
+	if gotHTML != "<p>HTML version</p>" {
+		t.Errorf("extractBodyFromMessage(html) = %v, want '<p>HTML version</p>'", gotHTML)
+	}
+
+	// Test default format (should be text)
+	gotDefault, err := client.extractBodyFromMessage(message, "")
+	if err != nil {
+		t.Errorf("extractBodyFromMessage('') error = %v", err)
+	}
+	if gotDefault != "Plain text version" {
+		t.Errorf("extractBodyFromMessage('') = %v, want 'Plain text version'", gotDefault)
+	}
+}
