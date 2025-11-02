@@ -5,7 +5,10 @@
 //
 // Thread Management:
 //   - gmail_list_threads: List Gmail threads matching a search query
-//   - gmail_archive_thread: Archive a thread by removing it from inbox
+//   - gmail_archive_threads: Archive threads by removing them from inbox
+//   - gmail_unarchive_threads: Move archived threads back to inbox
+//   - gmail_mark_threads_as_spam: Mark threads as spam and remove from inbox
+//   - gmail_unmark_threads_as_spam: Remove spam label and move threads back to inbox
 //   - gmail_classify_thread: Classify threads based on GitHub issue/PR references
 //   - gmail_check_stale: Check if a thread is stale (linked issue/PR is closed)
 //   - gmail_archive_stale_threads: Bulk archive stale threads
