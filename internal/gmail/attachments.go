@@ -134,13 +134,29 @@ func (c *Client) GetThreadMessageBodies(threadID string, format string) (string,
 	return allBodies.String(), nil
 }
 
-// extractBodyFromMessage extracts body from a message object we already have
+// extractBodyFromMessage extracts body from a message object we already have.
+// When format is "text" and no text body is found, it automatically falls back to HTML.
+// This eliminates the need for manual retries when dealing with HTML-only emails.
 func (c *Client) extractBodyFromMessage(msg *gmail.Message, format string) (string, error) {
 	// Default to text format if empty
 	if format == "" {
 		format = "text"
 	}
 
+	// Try to extract with the requested format
+	body, err := c.extractBodyFromMessageInternal(msg, format)
+	
+	// Auto-fallback to HTML if text not available
+	// Only fallback when format is "text" to prevent infinite loops
+	if err != nil && format == "text" && strings.Contains(err.Error(), "no text body found") {
+		return c.extractBodyFromMessageInternal(msg, "html")
+	}
+
+	return body, err
+}
+
+// extractBodyFromMessageInternal is the internal implementation that extracts a specific format
+func (c *Client) extractBodyFromMessageInternal(msg *gmail.Message, format string) (string, error) {
 	var targetMimeType string
 	switch format {
 	case "text":
@@ -184,8 +200,9 @@ func (c *Client) extractBodyFromMessage(msg *gmail.Message, format string) (stri
 	return string(decoded), nil
 }
 
-// GetMessageBody extracts text/HTML body from a message or thread
-// It accepts both Message IDs and Thread IDs for convenience
+// GetMessageBody extracts text/HTML body from a message or thread.
+// It accepts both Message IDs and Thread IDs for convenience.
+// When format is "text" and no text body is found, it automatically falls back to HTML.
 func (c *Client) GetMessageBody(messageID string, format string) (string, error) {
 	if format == "" {
 		format = "text"
