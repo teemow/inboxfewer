@@ -59,13 +59,13 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 
 	// Get message bodies tool
 	getMessageBodiesTool := mcp.NewTool("gmail_get_message_bodies",
-		mcp.WithDescription("Extract text or HTML body from one or more Gmail messages"),
+		mcp.WithDescription("Extract text or HTML body from one or more Gmail messages or threads. Accepts both Message IDs and Thread IDs."),
 		mcp.WithString("account",
 			mcp.Description("Account name (default: 'default'). Used to manage multiple Google accounts."),
 		),
 		mcp.WithString("messageIds",
 			mcp.Required(),
-			mcp.Description("Message ID (string) or array of message IDs"),
+			mcp.Description("Message ID or Thread ID (string) or array of IDs. Thread IDs will automatically fetch all messages in the thread."),
 		),
 		mcp.WithString("format",
 			mcp.Description("Body format: 'text' (default) or 'html'"),

@@ -457,262 +457,164 @@ func TestBase64Decoding(t *testing.T) {
 	}
 }
 
-// TestGetMessageBodyInternal_TextOnly tests extracting a text-only body
-func TestGetMessageBodyInternal_TextOnly(t *testing.T) {
+func TestExtractBodyFromMessage(t *testing.T) {
+	// Create a mock client (we only test the extraction logic, not API calls)
 	client := &Client{}
 
-	// Create a mock message with only text/plain body
-	textContent := "This is a plain text email"
-	encodedText := base64.URLEncoding.EncodeToString([]byte(textContent))
-
-	mockMsg := &gmail.Message{
-		Payload: &gmail.MessagePart{
-			MimeType: "text/plain",
-			Body: &gmail.MessagePartBody{
-				Data: encodedText,
+	tests := []struct {
+		name    string
+		message *gmail.Message
+		format  string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "simple text message",
+			message: &gmail.Message{
+				Id: "msg123",
+				Payload: &gmail.MessagePart{
+					MimeType: "text/plain",
+					Body: &gmail.MessagePartBody{
+						Data: base64.URLEncoding.EncodeToString([]byte("Hello, this is a test message")),
+					},
+				},
 			},
+			format:  "text",
+			want:    "Hello, this is a test message",
+			wantErr: false,
+		},
+		{
+			name: "html message",
+			message: &gmail.Message{
+				Id: "msg456",
+				Payload: &gmail.MessagePart{
+					MimeType: "text/html",
+					Body: &gmail.MessagePartBody{
+						Data: base64.URLEncoding.EncodeToString([]byte("<html><body>HTML content</body></html>")),
+					},
+				},
+			},
+			format:  "html",
+			want:    "<html><body>HTML content</body></html>",
+			wantErr: false,
+		},
+		{
+			name: "multipart message with text",
+			message: &gmail.Message{
+				Id: "msg789",
+				Payload: &gmail.MessagePart{
+					MimeType: "multipart/alternative",
+					Parts: []*gmail.MessagePart{
+						{
+							MimeType: "text/plain",
+							Body: &gmail.MessagePartBody{
+								Data: base64.URLEncoding.EncodeToString([]byte("Plain text body")),
+							},
+						},
+						{
+							MimeType: "text/html",
+							Body: &gmail.MessagePartBody{
+								Data: base64.URLEncoding.EncodeToString([]byte("<html>HTML body</html>")),
+							},
+						},
+					},
+				},
+			},
+			format:  "text",
+			want:    "Plain text body",
+			wantErr: false,
+		},
+		{
+			name: "message with no body",
+			message: &gmail.Message{
+				Id: "msg999",
+				Payload: &gmail.MessagePart{
+					MimeType: "text/plain",
+					Body:     &gmail.MessagePartBody{},
+				},
+			},
+			format:  "text",
+			wantErr: true,
+		},
+		{
+			name: "invalid format",
+			message: &gmail.Message{
+				Id: "msg111",
+				Payload: &gmail.MessagePart{
+					MimeType: "text/plain",
+					Body: &gmail.MessagePartBody{
+						Data: base64.URLEncoding.EncodeToString([]byte("Test")),
+					},
+				},
+			},
+			format:  "invalid",
+			wantErr: true,
 		},
 	}
 
-	// We can't easily test this without mocking the GetMessage call
-	// But we can verify the structure is correct
-	_ = client
-	_ = mockMsg
-}
-
-// TestGetMessageBodyInternal_HTMLOnly tests extracting an HTML-only body
-func TestGetMessageBodyInternal_HTMLOnly(t *testing.T) {
-	htmlContent := "<html><body>HTML email</body></html>"
-	encodedHTML := base64.URLEncoding.EncodeToString([]byte(htmlContent))
-
-	mockMsg := &gmail.Message{
-		Payload: &gmail.MessagePart{
-			MimeType: "text/html",
-			Body: &gmail.MessagePartBody{
-				Data: encodedHTML,
-			},
-		},
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := client.extractBodyFromMessage(tt.message, tt.format)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("extractBodyFromMessage() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("extractBodyFromMessage() = %v, want %v", got, tt.want)
+			}
+		})
 	}
-
-	// Verify the structure
-	_ = mockMsg
 }
 
-// TestGetMessageBodyInternal_BothFormats tests a message with both text and HTML
-func TestGetMessageBodyInternal_BothFormats(t *testing.T) {
-	textContent := "Plain text version"
-	htmlContent := "<html><body>HTML version</body></html>"
+func TestExtractBodyFromMessage_Formats(t *testing.T) {
+	client := &Client{}
 
-	encodedText := base64.URLEncoding.EncodeToString([]byte(textContent))
-	encodedHTML := base64.URLEncoding.EncodeToString([]byte(htmlContent))
-
-	mockMsg := &gmail.Message{
+	// Test that both text and html formats work correctly with the same multipart message
+	message := &gmail.Message{
+		Id: "msg-multipart",
 		Payload: &gmail.MessagePart{
 			MimeType: "multipart/alternative",
 			Parts: []*gmail.MessagePart{
 				{
 					MimeType: "text/plain",
 					Body: &gmail.MessagePartBody{
-						Data: encodedText,
+						Data: base64.URLEncoding.EncodeToString([]byte("Plain text version")),
 					},
 				},
 				{
 					MimeType: "text/html",
 					Body: &gmail.MessagePartBody{
-						Data: encodedHTML,
+						Data: base64.URLEncoding.EncodeToString([]byte("<p>HTML version</p>")),
 					},
 				},
 			},
 		},
 	}
 
-	// Verify the structure - text should be preferred when requesting "text" format
-	_ = mockMsg
-}
-
-// TestGetMessageBodyInternal_NestedParts tests finding body in nested multipart structure
-func TestGetMessageBodyInternal_NestedParts(t *testing.T) {
-	textContent := "Nested plain text"
-	encodedText := base64.URLEncoding.EncodeToString([]byte(textContent))
-
-	mockMsg := &gmail.Message{
-		Payload: &gmail.MessagePart{
-			MimeType: "multipart/mixed",
-			Parts: []*gmail.MessagePart{
-				{
-					MimeType: "multipart/alternative",
-					Parts: []*gmail.MessagePart{
-						{
-							MimeType: "text/plain",
-							Body: &gmail.MessagePartBody{
-								Data: encodedText,
-							},
-						},
-					},
-				},
-				{
-					MimeType: "application/pdf",
-					Filename: "attachment.pdf",
-					Body: &gmail.MessagePartBody{
-						AttachmentId: "att123",
-					},
-				},
-			},
-		},
+	// Test text format
+	gotText, err := client.extractBodyFromMessage(message, "text")
+	if err != nil {
+		t.Errorf("extractBodyFromMessage(text) error = %v", err)
+	}
+	if gotText != "Plain text version" {
+		t.Errorf("extractBodyFromMessage(text) = %v, want 'Plain text version'", gotText)
 	}
 
-	// Verify walkParts can find nested text body
-	var foundText bool
-	walkParts(mockMsg.Payload, "test-id", func(part *gmail.MessagePart) {
-		if part.MimeType == "text/plain" && part.Body != nil && part.Body.Data != "" {
-			foundText = true
-		}
-	})
-
-	if !foundText {
-		t.Error("walkParts should find nested text/plain part")
+	// Test html format
+	gotHTML, err := client.extractBodyFromMessage(message, "html")
+	if err != nil {
+		t.Errorf("extractBodyFromMessage(html) error = %v", err)
 	}
-}
-
-// TestGetMessageBodyInternal_EmptyMessage tests handling of empty message
-func TestGetMessageBodyInternal_EmptyMessage(t *testing.T) {
-	mockMsg := &gmail.Message{
-		Payload: &gmail.MessagePart{
-			MimeType: "text/plain",
-			Body:     nil, // No body
-		},
+	if gotHTML != "<p>HTML version</p>" {
+		t.Errorf("extractBodyFromMessage(html) = %v, want '<p>HTML version</p>'", gotHTML)
 	}
 
-	// Should handle messages with no body gracefully
-	_ = mockMsg
-}
-
-// TestGetMessageBodyInternal_InvalidFormat tests invalid format parameter
-func TestGetMessageBodyInternal_InvalidFormat(t *testing.T) {
-	// The internal function should validate format parameter
-	// Valid formats are "text" and "html"
-	invalidFormats := []string{"pdf", "json", "xml", "invalid"}
-
-	for _, format := range invalidFormats {
-		t.Run(format, func(t *testing.T) {
-			// Each invalid format should be rejected
-			_ = format
-		})
+	// Test default format (should be text)
+	gotDefault, err := client.extractBodyFromMessage(message, "")
+	if err != nil {
+		t.Errorf("extractBodyFromMessage('') error = %v", err)
 	}
-}
-
-// TestGetMessageBody_FallbackBehavior tests the smart HTML fallback logic
-func TestGetMessageBody_FallbackBehavior(t *testing.T) {
-	tests := []struct {
-		name           string
-		requestFormat  string
-		hasTextBody    bool
-		hasHTMLBody    bool
-		expectFallback bool
-		expectError    bool
-	}{
-		{
-			name:           "text request with text body available",
-			requestFormat:  "text",
-			hasTextBody:    true,
-			hasHTMLBody:    false,
-			expectFallback: false,
-			expectError:    false,
-		},
-		{
-			name:           "text request with only HTML body (should fallback)",
-			requestFormat:  "text",
-			hasTextBody:    false,
-			hasHTMLBody:    true,
-			expectFallback: true,
-			expectError:    false,
-		},
-		{
-			name:           "text request with both formats (prefer text, no fallback)",
-			requestFormat:  "text",
-			hasTextBody:    true,
-			hasHTMLBody:    true,
-			expectFallback: false,
-			expectError:    false,
-		},
-		{
-			name:           "text request with neither format (error after fallback)",
-			requestFormat:  "text",
-			hasTextBody:    false,
-			hasHTMLBody:    false,
-			expectFallback: true,
-			expectError:    true,
-		},
-		{
-			name:           "html request with HTML body available",
-			requestFormat:  "html",
-			hasTextBody:    false,
-			hasHTMLBody:    true,
-			expectFallback: false,
-			expectError:    false,
-		},
-		{
-			name:           "html request with only text body (no fallback, error)",
-			requestFormat:  "html",
-			hasTextBody:    true,
-			hasHTMLBody:    false,
-			expectFallback: false,
-			expectError:    true,
-		},
-		{
-			name:           "html request with both formats (prefer HTML)",
-			requestFormat:  "html",
-			hasTextBody:    true,
-			hasHTMLBody:    true,
-			expectFallback: false,
-			expectError:    false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Verify the expected behavior based on test case
-			// In real implementation with mock client, we would:
-			// 1. Create mock message with specified body formats
-			// 2. Call GetMessageBody with requestFormat
-			// 3. Verify it returns correct body or error
-			// 4. Verify fallback occurred when expected
-
-			if tt.expectFallback && !tt.expectError {
-				// Should successfully fall back to HTML
-				t.Log("Fallback to HTML should succeed")
-			}
-
-			if tt.expectFallback && tt.expectError {
-				// Should attempt fallback but still fail
-				t.Log("Fallback attempted but no HTML body available")
-			}
-
-			if !tt.expectFallback && tt.expectError {
-				// Should not fallback and return error
-				t.Log("No fallback, should return error")
-			}
-
-			if !tt.expectFallback && !tt.expectError {
-				// Should succeed without fallback
-				t.Log("Should succeed without fallback")
-			}
-		})
-	}
-}
-
-// TestGetMessageBody_DefaultFormat tests that empty format defaults to "text"
-func TestGetMessageBody_DefaultFormat(t *testing.T) {
-	// When format is empty string, it should default to "text"
-	// This maintains backward compatibility
-	emptyFormat := ""
-	defaultFormat := "text"
-
-	if emptyFormat == "" {
-		emptyFormat = defaultFormat
-	}
-
-	if emptyFormat != "text" {
-		t.Errorf("Empty format should default to 'text', got '%s'", emptyFormat)
+	if gotDefault != "Plain text version" {
+		t.Errorf("extractBodyFromMessage('') = %v, want 'Plain text version'", gotDefault)
 	}
 }
