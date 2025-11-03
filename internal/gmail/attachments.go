@@ -97,12 +97,28 @@ func (c *Client) GetAttachmentAsString(messageID, attachmentID string) (string, 
 	return string(data), nil
 }
 
-// GetMessageBody extracts text/HTML body from a message
+// GetMessageBody extracts text/HTML body from a message.
+// When format is "text" and no text body is found, it automatically falls back to HTML.
+// This eliminates the need for manual retries when dealing with HTML-only emails.
 func (c *Client) GetMessageBody(messageID string, format string) (string, error) {
 	if format == "" {
 		format = "text"
 	}
 
+	// Try to get the body with the requested format
+	body, err := c.getMessageBodyInternal(messageID, format)
+
+	// Auto-fallback to HTML if text not available
+	// Only fallback when format is "text" to prevent infinite loops
+	if err != nil && format == "text" && strings.Contains(err.Error(), "no text body found") {
+		return c.getMessageBodyInternal(messageID, "html")
+	}
+
+	return body, err
+}
+
+// getMessageBodyInternal is the internal implementation that extracts a specific format
+func (c *Client) getMessageBodyInternal(messageID string, format string) (string, error) {
 	msg, err := c.GetMessage(messageID)
 	if err != nil {
 		return "", err
