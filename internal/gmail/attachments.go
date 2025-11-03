@@ -145,7 +145,7 @@ func (c *Client) extractBodyFromMessage(msg *gmail.Message, format string) (stri
 
 	// Try to extract with the requested format
 	body, err := c.extractBodyFromMessageInternal(msg, format)
-	
+
 	// Auto-fallback to HTML if text not available
 	// Only fallback when format is "text" to prevent infinite loops
 	if err != nil && format == "text" && strings.Contains(err.Error(), "no text body found") {

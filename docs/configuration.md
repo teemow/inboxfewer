@@ -84,6 +84,136 @@ Each token provides access to the following Google APIs with these scopes:
 **Google Tasks:**
 - `https://www.googleapis.com/auth/tasks` - Read and write tasks
 
+## Signal Messaging
+
+inboxfewer provides Signal messaging capabilities through integration with signal-cli. This allows AI assistants to send and receive Signal messages.
+
+### Prerequisites
+
+Before using Signal features, you must:
+
+1. Install signal-cli on your system
+2. Register your Signal account with signal-cli
+3. Verify your account
+
+### Installing signal-cli
+
+Follow the official installation instructions at: https://github.com/AsamK/signal-cli
+
+For most systems:
+
+**macOS (Homebrew):**
+```bash
+brew install signal-cli
+```
+
+**Linux (Manual):**
+```bash
+# Download the latest release from GitHub
+wget https://github.com/AsamK/signal-cli/releases/latest/download/signal-cli-*.tar.gz
+tar xf signal-cli-*.tar.gz -C /opt
+sudo ln -s /opt/signal-cli-*/bin/signal-cli /usr/local/bin/
+```
+
+### Registering Your Signal Account
+
+1. **Register with your phone number:**
+```bash
+signal-cli -u +15551234567 register
+```
+
+2. **Verify with the code received via SMS:**
+```bash
+signal-cli -u +15551234567 verify CODE_RECEIVED
+```
+
+3. **Test the registration:**
+```bash
+signal-cli -u +15551234567 receive --timeout 5
+```
+
+### Configuration
+
+Unlike Google services, Signal does not require OAuth authentication. The signal-cli stores its configuration in:
+- Linux/Unix: `~/.local/share/signal-cli/`
+- macOS: `~/.local/share/signal-cli/`
+- Windows: `%APPDATA%\signal-cli\`
+
+### Using Signal Tools
+
+Signal tools are available through the MCP server. Like other services, they support multi-account configuration:
+
+```javascript
+// Send a direct message using default account
+signal_send_message({
+  recipient: "+15559876543",
+  message: "Hello from Signal!"
+})
+
+// Send a group message
+signal_send_group_message({
+  group_name: "Family Chat",
+  message: "Meeting at 3pm"
+})
+
+// Receive messages with 30 second timeout
+signal_receive_message({
+  timeout: 30
+})
+
+// List all groups
+signal_list_groups()
+```
+
+### Multi-Account Signal Support
+
+You can manage multiple Signal accounts (phone numbers) by specifying the `account` parameter:
+
+```javascript
+// Use work phone number
+signal_send_message({
+  account: "work",
+  recipient: "+15559876543",
+  message: "Work message"
+})
+
+// Use personal phone number  
+signal_send_message({
+  account: "personal",
+  recipient: "+15551112222",
+  message: "Personal message"
+})
+```
+
+Each account corresponds to a different phone number registered with signal-cli.
+
+### Safety Mode and Signal
+
+Signal tools respect the server's safety mode:
+
+- **Read-only mode (default):** Only `signal_receive_message` and `signal_list_groups` are available
+- **Write mode (--yolo):** All Signal tools are available, including `signal_send_message` and `signal_send_group_message`
+
+### Troubleshooting Signal
+
+**signal-cli not found:**
+- Ensure signal-cli is installed and in your PATH
+- Try running `signal-cli --version` to verify installation
+
+**Phone number not registered:**
+- Complete the registration and verification steps
+- Verify with `signal-cli -u +15551234567 receive --timeout 5`
+
+**Message sending fails:**
+- Check that the recipient's phone number is correct (include country code with +)
+- Ensure both parties have Signal installed
+- Verify your registration is still valid
+
+**Group not found:**
+- Use `signal-cli -u +15551234567 listGroups` to see available groups
+- Ensure you're a member of the group
+- Group names are case-sensitive
+
 ## Multi-Account Support
 
 inboxfewer supports managing multiple Google accounts simultaneously (e.g., work and personal email).
