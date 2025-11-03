@@ -19,7 +19,6 @@ import (
 	"github.com/teemow/inboxfewer/internal/tools/gmail_tools"
 	"github.com/teemow/inboxfewer/internal/tools/google_tools"
 	"github.com/teemow/inboxfewer/internal/tools/meet_tools"
-	"github.com/teemow/inboxfewer/internal/tools/signal_tools"
 	"github.com/teemow/inboxfewer/internal/tools/tasks_tools"
 )
 
@@ -132,11 +131,6 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool) erro
 	// Register Tasks tools
 	if err := tasks_tools.RegisterTasksTools(mcpSrv, serverContext, readOnly); err != nil {
 		return fmt.Errorf("failed to register Tasks tools: %w", err)
-	}
-
-	// Register Signal tools
-	if err := signal_tools.RegisterSignalTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Signal tools: %w", err)
 	}
 
 	// Start the appropriate server based on transport type

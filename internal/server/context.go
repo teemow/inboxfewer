@@ -10,7 +10,6 @@ import (
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/meet"
-	"github.com/teemow/inboxfewer/internal/signal"
 	"github.com/teemow/inboxfewer/internal/tasks"
 )
 
@@ -24,7 +23,6 @@ type ServerContext struct {
 	calendarClients map[string]*calendar.Client // Maps account name to Calendar client
 	meetClients     map[string]*meet.Client     // Maps account name to Meet client
 	tasksClients    map[string]*tasks.Client    // Maps account name to Tasks client
-	signalClients   map[string]*signal.Client   // Maps account name to Signal client
 	githubUser      string
 	githubToken     string
 	mu              sync.RWMutex
@@ -42,7 +40,6 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 	calendarClients := make(map[string]*calendar.Client)
 	meetClients := make(map[string]*meet.Client)
 	tasksClients := make(map[string]*tasks.Client)
-	signalClients := make(map[string]*signal.Client)
 
 	// Try to create default Gmail client, but don't fail if token is missing
 	// Clients will be lazily initialized when first needed
@@ -65,7 +62,6 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 		calendarClients: calendarClients,
 		meetClients:     meetClients,
 		tasksClients:    tasksClients,
-		signalClients:   signalClients,
 		githubUser:      githubUser,
 		githubToken:     githubToken,
 		shutdown:        false,
@@ -360,40 +356,6 @@ func (sc *ServerContext) IsShutdown() bool {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
 	return sc.shutdown
-}
-
-// SignalClientForAccount returns the Signal client for a specific account
-// Creates and caches the client if it doesn't exist yet
-// The account name is typically the phone number without the + sign
-func (sc *ServerContext) SignalClientForAccount(account string) *signal.Client {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	// Check if client already exists
-	if client, ok := sc.signalClients[account]; ok {
-		return client
-	}
-
-	// Signal clients need to be configured manually since they require
-	// a phone number. Return nil and let the tool handler provide a helpful error.
-	return nil
-}
-
-// SignalClient returns the Signal client for the default account
-func (sc *ServerContext) SignalClient() *signal.Client {
-	return sc.SignalClientForAccount("default")
-}
-
-// SetSignalClientForAccount sets the Signal client for a specific account
-func (sc *ServerContext) SetSignalClientForAccount(account string, client *signal.Client) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	sc.signalClients[account] = client
-}
-
-// SetSignalClient sets the Signal client for the default account
-func (sc *ServerContext) SetSignalClient(client *signal.Client) {
-	sc.SetSignalClientForAccount("default", client)
 }
 
 // Shutdown shuts down the server context

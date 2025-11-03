@@ -12,7 +12,7 @@ inboxfewer serve [--transport TYPE] [--http-addr ADDR] [--yolo] [--debug]
 
 # DESCRIPTION
 
-inboxfewer is a tool that archives Gmail threads related to closed GitHub issues and pull requests. It can run as a standalone CLI tool or as a Model Context Protocol (MCP) server, providing AI assistants with programmatic access to Gmail, Google Docs, Google Drive, Google Calendar, Google Meet, Google Tasks, and Signal messaging.
+inboxfewer is a tool that archives Gmail threads related to closed GitHub issues and pull requests. It can run as a standalone CLI tool or as a Model Context Protocol (MCP) server, providing AI assistants with programmatic access to Gmail, Google Docs, Google Drive, Google Calendar, Google Meet, and Google Tasks.
 
 # INSTALLATION
 
@@ -109,16 +109,6 @@ On first run, authenticate with Google services. OAuth tokens are cached at:
 - macOS: `~/Library/Caches/inboxfewer/google-{account}.token`
 - Windows: `%TEMP%/inboxfewer/google-{account}.token`
 
-## Signal Setup (Optional)
-
-To use Signal messaging features:
-
-1. Install signal-cli: https://github.com/AsamK/signal-cli
-2. Register your phone number: `signal-cli -u +15551234567 register`
-3. Verify with SMS code: `signal-cli -u +15551234567 verify CODE`
-
-See [docs/configuration.md](docs/configuration.md) for detailed Signal setup instructions.
-
 ## Multi-Account Support
 
 Manage multiple Google accounts using the `--account` flag:
@@ -158,7 +148,7 @@ inboxfewer serve --yolo
 
 # MCP SERVER
 
-The MCP server provides 70+ tools for managing Gmail, Google Docs, Drive, Calendar, Meet, Tasks, and Signal messaging. By default, the server operates in read-only mode for safety. Use `--yolo` to enable write operations.
+The MCP server provides 65+ tools for managing Gmail, Google Docs, Drive, Calendar, Meet, and Tasks. By default, the server operates in read-only mode for safety. Use `--yolo` to enable write operations.
 
 **Key Capabilities:**
 - Gmail: List, search, archive, send emails, manage filters
@@ -167,7 +157,6 @@ The MCP server provides 70+ tools for managing Gmail, Google Docs, Drive, Calend
 - Google Calendar: Create events, check availability, schedule meetings
 - Google Meet: Access recordings, transcripts, and notes
 - Google Tasks: Create and manage task lists
-- Signal: Send and receive Signal messages, manage groups (requires signal-cli)
 
 See [docs/tools.md](docs/tools.md) for the complete tool reference (auto-generated from code).
 
