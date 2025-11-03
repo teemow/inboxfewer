@@ -97,21 +97,51 @@ func (c *Client) GetAttachmentAsString(messageID, attachmentID string) (string, 
 	return string(data), nil
 }
 
-// GetMessageBody extracts text/HTML body from a message
-func (c *Client) GetMessageBody(messageID string, format string) (string, error) {
+// GetThreadMessageBodies extracts bodies from all messages in a thread
+func (c *Client) GetThreadMessageBodies(threadID string, format string) (string, error) {
 	if format == "" {
 		format = "text"
 	}
 
-	msg, err := c.GetMessage(messageID)
+	thread, err := c.GetThread(threadID)
 	if err != nil {
 		return "", err
 	}
 
-	// Find the appropriate body part based on format
-	var body string
-	var targetMimeType string
+	if len(thread.Messages) == 0 {
+		return "", fmt.Errorf("thread %s contains no messages", threadID)
+	}
 
+	var allBodies strings.Builder
+	for i, msg := range thread.Messages {
+		// Extract body directly from the message we already have
+		body, err := c.extractBodyFromMessage(msg, format)
+		if err != nil {
+			// If we can't get the body for this message, skip it with a note
+			allBodies.WriteString(fmt.Sprintf("\n[Message %d/%d: Error extracting body: %v]\n", i+1, len(thread.Messages), err))
+			continue
+		}
+
+		// Add message separator if not the first message
+		if i > 0 {
+			allBodies.WriteString("\n\n" + strings.Repeat("-", 80) + "\n\n")
+		}
+
+		allBodies.WriteString(fmt.Sprintf("Message %d/%d (ID: %s):\n\n", i+1, len(thread.Messages), msg.Id))
+		allBodies.WriteString(body)
+	}
+
+	return allBodies.String(), nil
+}
+
+// extractBodyFromMessage extracts body from a message object we already have
+func (c *Client) extractBodyFromMessage(msg *gmail.Message, format string) (string, error) {
+	// Default to text format if empty
+	if format == "" {
+		format = "text"
+	}
+
+	var targetMimeType string
 	switch format {
 	case "text":
 		targetMimeType = "text/plain"
@@ -121,13 +151,15 @@ func (c *Client) GetMessageBody(messageID string, format string) (string, error)
 		return "", fmt.Errorf("invalid format %s, must be 'text' or 'html'", format)
 	}
 
-	// First, try to find the body in the main payload
+	var body string
+
+	// Find the appropriate body part based on format
 	if msg.Payload != nil {
 		if msg.Payload.MimeType == targetMimeType && msg.Payload.Body != nil && msg.Payload.Body.Data != "" {
 			body = msg.Payload.Body.Data
 		} else {
 			// Walk through parts to find the body
-			walkParts(msg.Payload, messageID, func(part *gmail.MessagePart) {
+			walkParts(msg.Payload, msg.Id, func(part *gmail.MessagePart) {
 				if body == "" && part.MimeType == targetMimeType && part.Body != nil && part.Body.Data != "" {
 					body = part.Body.Data
 				}
@@ -150,6 +182,37 @@ func (c *Client) GetMessageBody(messageID string, format string) (string, error)
 	}
 
 	return string(decoded), nil
+}
+
+// GetMessageBody extracts text/HTML body from a message or thread
+// It accepts both Message IDs and Thread IDs for convenience
+func (c *Client) GetMessageBody(messageID string, format string) (string, error) {
+	if format == "" {
+		format = "text"
+	}
+
+	// First, try to get it as a message (most common case)
+	msg, err := c.GetMessage(messageID)
+	if err == nil {
+		// Successfully got it as a message, extract the body
+		return c.extractBodyFromMessage(msg, format)
+	}
+
+	// If it failed, check if the error suggests it might be a thread ID
+	// Gmail API returns 404 for messages that don't exist, which includes thread IDs
+	if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+		// Try as a thread ID
+		threadBody, threadErr := c.GetThreadMessageBodies(messageID, format)
+		if threadErr == nil {
+			// Successfully got it as a thread
+			return threadBody, nil
+		}
+		// If both failed, return the original message error
+		return "", fmt.Errorf("failed to get body (tried as message ID and thread ID): %w", err)
+	}
+
+	// For other errors (not 404), just return the original error
+	return "", err
 }
 
 // walkParts recursively walks through message parts
