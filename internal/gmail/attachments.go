@@ -145,11 +145,16 @@ func (c *Client) extractBodyFromMessage(msg *gmail.Message, format string) (stri
 
 	// Try to extract with the requested format
 	body, err := c.extractBodyFromMessageInternal(msg, format)
-	
+
 	// Auto-fallback to HTML if text not available
 	// Only fallback when format is "text" to prevent infinite loops
 	if err != nil && format == "text" && strings.Contains(err.Error(), "no text body found") {
-		return c.extractBodyFromMessageInternal(msg, "html")
+		htmlBody, htmlErr := c.extractBodyFromMessageInternal(msg, "html")
+		if htmlErr != nil {
+			// Both text and HTML failed - provide comprehensive error
+			return "", fmt.Errorf("no body found (tried text and html): text error: %w, html error: %v", err, htmlErr)
+		}
+		return htmlBody, nil
 	}
 
 	return body, err
@@ -217,7 +222,9 @@ func (c *Client) GetMessageBody(messageID string, format string) (string, error)
 
 	// If it failed, check if the error suggests it might be a thread ID
 	// Gmail API returns 404 for messages that don't exist, which includes thread IDs
-	if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+	// Gmail API returns 400 for invalid/malformed IDs, which might also be thread IDs
+	if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") ||
+		strings.Contains(err.Error(), "400") || strings.Contains(err.Error(), "Invalid id value") {
 		// Try as a thread ID
 		threadBody, threadErr := c.GetThreadMessageBodies(messageID, format)
 		if threadErr == nil {

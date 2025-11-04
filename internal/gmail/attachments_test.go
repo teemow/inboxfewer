@@ -618,3 +618,152 @@ func TestExtractBodyFromMessage_Formats(t *testing.T) {
 		t.Errorf("extractBodyFromMessage('') = %v, want 'Plain text version'", gotDefault)
 	}
 }
+
+// TestExtractBodyFromMessage_FallbackToHTML tests Issue #53 fix:
+// When text body is not available, it should fall back to HTML.
+// If both fail, it should return a comprehensive error message.
+func TestExtractBodyFromMessage_FallbackToHTML(t *testing.T) {
+	client := &Client{}
+
+	t.Run("html-only message with text format request falls back to html", func(t *testing.T) {
+		// Message with only HTML body
+		message := &gmail.Message{
+			Id: "msg-html-only",
+			Payload: &gmail.MessagePart{
+				MimeType: "text/html",
+				Body: &gmail.MessagePartBody{
+					Data: base64.URLEncoding.EncodeToString([]byte("<p>HTML only content</p>")),
+				},
+			},
+		}
+
+		// Request text format, should automatically fall back to HTML
+		got, err := client.extractBodyFromMessage(message, "text")
+		if err != nil {
+			t.Errorf("extractBodyFromMessage() should have fallen back to HTML, got error = %v", err)
+		}
+		if got != "<p>HTML only content</p>" {
+			t.Errorf("extractBodyFromMessage() = %v, want '<p>HTML only content</p>'", got)
+		}
+	})
+
+	t.Run("message with no text or html returns comprehensive error", func(t *testing.T) {
+		// Message with no body at all
+		message := &gmail.Message{
+			Id: "msg-no-body",
+			Payload: &gmail.MessagePart{
+				MimeType: "multipart/mixed",
+				Parts: []*gmail.MessagePart{
+					{
+						MimeType: "application/pdf",
+						Body: &gmail.MessagePartBody{
+							AttachmentId: "att123",
+						},
+					},
+				},
+			},
+		}
+
+		// Request text format, should try both text and HTML and fail with comprehensive error
+		_, err := client.extractBodyFromMessage(message, "text")
+		if err == nil {
+			t.Error("extractBodyFromMessage() should have returned error for message with no body")
+		}
+
+		// Check that the error message mentions both text and html attempts
+		errMsg := err.Error()
+		if !contains(errMsg, "text") && !contains(errMsg, "html") {
+			t.Errorf("error message should mention both text and html attempts, got: %v", errMsg)
+		}
+	})
+
+	t.Run("empty message returns comprehensive error", func(t *testing.T) {
+		// Completely empty message
+		message := &gmail.Message{
+			Id:      "msg-empty",
+			Payload: &gmail.MessagePart{},
+		}
+
+		_, err := client.extractBodyFromMessage(message, "text")
+		if err == nil {
+			t.Error("extractBodyFromMessage() should have returned error for empty message")
+		}
+
+		// Verify error mentions both formats were tried
+		errMsg := err.Error()
+		if !contains(errMsg, "tried text and html") {
+			t.Errorf("error should indicate both formats were tried, got: %v", errMsg)
+		}
+	})
+}
+
+// TestExtractBodyFromMessage_HTMLFallbackSuccess tests that HTML fallback works
+// and returns the HTML content when text is not available
+func TestExtractBodyFromMessage_HTMLFallbackSuccess(t *testing.T) {
+	client := &Client{}
+
+	tests := []struct {
+		name     string
+		message  *gmail.Message
+		wantHTML string
+	}{
+		{
+			name: "multipart with only html",
+			message: &gmail.Message{
+				Id: "msg1",
+				Payload: &gmail.MessagePart{
+					MimeType: "multipart/alternative",
+					Parts: []*gmail.MessagePart{
+						{
+							MimeType: "text/html",
+							Body: &gmail.MessagePartBody{
+								Data: base64.URLEncoding.EncodeToString([]byte("<html>Test</html>")),
+							},
+						},
+					},
+				},
+			},
+			wantHTML: "<html>Test</html>",
+		},
+		{
+			name: "simple html message",
+			message: &gmail.Message{
+				Id: "msg2",
+				Payload: &gmail.MessagePart{
+					MimeType: "text/html",
+					Body: &gmail.MessagePartBody{
+						Data: base64.URLEncoding.EncodeToString([]byte("<div>HTML Body</div>")),
+					},
+				},
+			},
+			wantHTML: "<div>HTML Body</div>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Request text format, should fall back to HTML
+			got, err := client.extractBodyFromMessage(tt.message, "text")
+			if err != nil {
+				t.Errorf("extractBodyFromMessage() error = %v, expected successful HTML fallback", err)
+			}
+			if got != tt.wantHTML {
+				t.Errorf("extractBodyFromMessage() = %v, want %v", got, tt.wantHTML)
+			}
+		})
+	}
+}
+
+// contains is a helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
