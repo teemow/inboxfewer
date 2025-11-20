@@ -3,6 +3,8 @@ package oauth
 import (
 	"testing"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 func TestNewStore(t *testing.T) {
@@ -423,5 +425,221 @@ func TestStore_Stats(t *testing.T) {
 	}
 	if stats["authorization_codes"] != 1 {
 		t.Errorf("Stats() authorization_codes = %d, want 1", stats["authorization_codes"])
+	}
+}
+
+func TestStore_DeleteAuthorizationCode(t *testing.T) {
+	store := NewStore()
+
+	code := &AuthorizationCode{
+		Code:      "test-code",
+		ClientID:  "test-client",
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+		Used:      false,
+	}
+
+	if err := store.SaveAuthorizationCode(code); err != nil {
+		t.Fatalf("SaveAuthorizationCode() error = %v", err)
+	}
+
+	if err := store.DeleteAuthorizationCode("test-code"); err != nil {
+		t.Fatalf("DeleteAuthorizationCode() error = %v", err)
+	}
+
+	// Should not be able to retrieve deleted code
+	_, err := store.GetAuthorizationCode("test-code")
+	if err == nil {
+		t.Error("GetAuthorizationCode() after DeleteAuthorizationCode() should return error")
+	}
+}
+
+func TestStore_DeleteTokenByRefreshToken(t *testing.T) {
+	store := NewStore()
+
+	token := &Token{
+		AccessToken:  "access-token",
+		TokenType:    "Bearer",
+		ExpiresIn:    3600,
+		RefreshToken: "refresh-token",
+		IssuedAt:     time.Now(),
+		ClientID:     "test-client",
+	}
+
+	if err := store.SaveToken(token); err != nil {
+		t.Fatalf("SaveToken() error = %v", err)
+	}
+
+	if err := store.DeleteTokenByRefreshToken("refresh-token"); err != nil {
+		t.Fatalf("DeleteTokenByRefreshToken() error = %v", err)
+	}
+
+	// Both access and refresh tokens should be deleted
+	_, err := store.GetToken("access-token")
+	if err == nil {
+		t.Error("GetToken() after DeleteTokenByRefreshToken() should return error")
+	}
+
+	_, err = store.GetTokenByRefreshToken("refresh-token")
+	if err == nil {
+		t.Error("GetTokenByRefreshToken() after DeleteTokenByRefreshToken() should return error")
+	}
+}
+
+func TestStore_SaveAndGetGoogleToken(t *testing.T) {
+	store := NewStore()
+
+	token := &oauth2.Token{
+		AccessToken: "google-access-token",
+		TokenType:   "Bearer",
+		Expiry:      time.Now().Add(1 * time.Hour),
+	}
+
+	// Save Google token
+	if err := store.SaveGoogleToken("user@example.com", token); err != nil {
+		t.Fatalf("SaveGoogleToken() error = %v", err)
+	}
+
+	// Get Google token
+	retrieved, err := store.GetGoogleToken("user@example.com")
+	if err != nil {
+		t.Fatalf("GetGoogleToken() error = %v", err)
+	}
+
+	if retrieved.AccessToken != token.AccessToken {
+		t.Errorf("GetGoogleToken() AccessToken = %s, want %s", retrieved.AccessToken, token.AccessToken)
+	}
+}
+
+func TestStore_SaveGoogleTokenEmptyEmail(t *testing.T) {
+	store := NewStore()
+
+	token := &oauth2.Token{
+		AccessToken: "google-access-token",
+	}
+
+	err := store.SaveGoogleToken("", token)
+	if err == nil {
+		t.Error("SaveGoogleToken() with empty email should return error")
+	}
+}
+
+func TestStore_SaveGoogleTokenNil(t *testing.T) {
+	store := NewStore()
+
+	err := store.SaveGoogleToken("user@example.com", nil)
+	if err == nil {
+		t.Error("SaveGoogleToken() with nil token should return error")
+	}
+}
+
+func TestStore_GetGoogleTokenNotFound(t *testing.T) {
+	store := NewStore()
+
+	_, err := store.GetGoogleToken("nonexistent@example.com")
+	if err == nil {
+		t.Error("GetGoogleToken() for non-existent user should return error")
+	}
+}
+
+func TestStore_GetGoogleTokenExpired(t *testing.T) {
+	store := NewStore()
+
+	token := &oauth2.Token{
+		AccessToken: "google-access-token",
+		TokenType:   "Bearer",
+		Expiry:      time.Now().Add(-1 * time.Hour), // Expired
+	}
+
+	if err := store.SaveGoogleToken("user@example.com", token); err != nil {
+		t.Fatalf("SaveGoogleToken() error = %v", err)
+	}
+
+	_, err := store.GetGoogleToken("user@example.com")
+	if err == nil {
+		t.Error("GetGoogleToken() for expired token should return error")
+	}
+}
+
+func TestStore_DeleteGoogleToken(t *testing.T) {
+	store := NewStore()
+
+	token := &oauth2.Token{
+		AccessToken: "google-access-token",
+		TokenType:   "Bearer",
+		Expiry:      time.Now().Add(1 * time.Hour),
+	}
+
+	if err := store.SaveGoogleToken("user@example.com", token); err != nil {
+		t.Fatalf("SaveGoogleToken() error = %v", err)
+	}
+
+	if err := store.DeleteGoogleToken("user@example.com"); err != nil {
+		t.Fatalf("DeleteGoogleToken() error = %v", err)
+	}
+
+	_, err := store.GetGoogleToken("user@example.com")
+	if err == nil {
+		t.Error("GetGoogleToken() after DeleteGoogleToken() should return error")
+	}
+}
+
+func TestStore_SaveAndGetGoogleUserInfo(t *testing.T) {
+	store := NewStore()
+
+	userInfo := &GoogleUserInfo{
+		Sub:           "12345",
+		Email:         "user@example.com",
+		EmailVerified: true,
+		Name:          "Test User",
+	}
+
+	// Save user info
+	if err := store.SaveGoogleUserInfo("user@example.com", userInfo); err != nil {
+		t.Fatalf("SaveGoogleUserInfo() error = %v", err)
+	}
+
+	// Get user info
+	retrieved, err := store.GetGoogleUserInfo("user@example.com")
+	if err != nil {
+		t.Fatalf("GetGoogleUserInfo() error = %v", err)
+	}
+
+	if retrieved.Email != userInfo.Email {
+		t.Errorf("GetGoogleUserInfo() Email = %s, want %s", retrieved.Email, userInfo.Email)
+	}
+	if retrieved.Name != userInfo.Name {
+		t.Errorf("GetGoogleUserInfo() Name = %s, want %s", retrieved.Name, userInfo.Name)
+	}
+}
+
+func TestStore_SaveGoogleUserInfoEmptyEmail(t *testing.T) {
+	store := NewStore()
+
+	userInfo := &GoogleUserInfo{
+		Sub:   "12345",
+		Email: "user@example.com",
+	}
+
+	err := store.SaveGoogleUserInfo("", userInfo)
+	if err == nil {
+		t.Error("SaveGoogleUserInfo() with empty email should return error")
+	}
+}
+
+func TestStore_SaveGoogleUserInfoNil(t *testing.T) {
+	store := NewStore()
+
+	err := store.SaveGoogleUserInfo("user@example.com", nil)
+	if err == nil {
+		t.Error("SaveGoogleUserInfo() with nil userInfo should return error")
+	}
+}
+
+func TestStore_GetGoogleUserInfoNotFound(t *testing.T) {
+	store := NewStore()
+
+	_, err := store.GetGoogleUserInfo("nonexistent@example.com")
+	if err == nil {
+		t.Error("GetGoogleUserInfo() for non-existent user should return error")
 	}
 }

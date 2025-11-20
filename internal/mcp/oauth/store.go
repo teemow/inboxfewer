@@ -263,40 +263,63 @@ func (s *Store) DeleteTokenByRefreshToken(refreshToken string) error {
 }
 
 // cleanupExpiredTokens periodically removes expired tokens and authorization codes
+// Uses optimized locking strategy to minimize write lock duration
 func (s *Store) cleanupExpiredTokens() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		s.mu.Lock()
+		// Collect expired items with read lock first
+		s.mu.RLock()
 
-		// Clean up expired tokens
+		expiredTokens := []string{}
+		expiredRefreshTokens := []string{}
 		for accessToken, token := range s.tokens {
 			if token.IsExpired() {
-				delete(s.tokens, accessToken)
+				expiredTokens = append(expiredTokens, accessToken)
 				if token.RefreshToken != "" {
-					delete(s.refreshTokens, token.RefreshToken)
+					expiredRefreshTokens = append(expiredRefreshTokens, token.RefreshToken)
 				}
 			}
 		}
 
-		// Clean up expired authorization codes
+		expiredCodes := []string{}
 		for code, authCode := range s.authorizationCodes {
 			if authCode.IsExpired() || authCode.Used {
-				delete(s.authorizationCodes, code)
+				expiredCodes = append(expiredCodes, code)
 			}
 		}
 
-		// Clean up expired Google tokens
+		expiredGoogleTokens := []string{}
 		now := time.Now()
 		for email, token := range s.googleTokens {
 			if token.Expiry.Before(now) {
-				delete(s.googleTokens, email)
-				delete(s.googleUserInfo, email)
+				expiredGoogleTokens = append(expiredGoogleTokens, email)
 			}
 		}
 
-		s.mu.Unlock()
+		s.mu.RUnlock()
+
+		// Delete in batch with write lock only if there's something to delete
+		if len(expiredTokens) > 0 || len(expiredCodes) > 0 || len(expiredGoogleTokens) > 0 {
+			s.mu.Lock()
+
+			for _, accessToken := range expiredTokens {
+				delete(s.tokens, accessToken)
+			}
+			for _, refreshToken := range expiredRefreshTokens {
+				delete(s.refreshTokens, refreshToken)
+			}
+			for _, code := range expiredCodes {
+				delete(s.authorizationCodes, code)
+			}
+			for _, email := range expiredGoogleTokens {
+				delete(s.googleTokens, email)
+				delete(s.googleUserInfo, email)
+			}
+
+			s.mu.Unlock()
+		}
 	}
 }
 

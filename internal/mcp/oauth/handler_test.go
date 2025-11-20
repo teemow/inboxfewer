@@ -123,3 +123,64 @@ func TestHandler_GetStore(t *testing.T) {
 		t.Error("GetStore() returned nil store")
 	}
 }
+
+func TestHandler_GetConfig(t *testing.T) {
+	config := &Config{
+		Resource: "https://mcp.example.com",
+		SupportedScopes: []string{
+			"https://www.googleapis.com/auth/gmail.readonly",
+		},
+	}
+
+	handler, err := NewHandler(config)
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+
+	retrievedConfig := handler.GetConfig()
+	if retrievedConfig == nil {
+		t.Fatal("GetConfig() returned nil config")
+	}
+
+	if retrievedConfig.Resource != config.Resource {
+		t.Errorf("GetConfig() Resource = %s, want %s", retrievedConfig.Resource, config.Resource)
+	}
+
+	if len(retrievedConfig.SupportedScopes) != len(config.SupportedScopes) {
+		t.Errorf("GetConfig() SupportedScopes length = %d, want %d", len(retrievedConfig.SupportedScopes), len(config.SupportedScopes))
+	}
+}
+
+func TestHandler_WriteError(t *testing.T) {
+	handler, err := NewHandler(&Config{
+		Resource: "https://mcp.example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	handler.writeError(w, "invalid_request", "The request is invalid", http.StatusBadRequest)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("writeError() status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("writeError() Content-Type = %s, want application/json", contentType)
+	}
+
+	var errorResponse ErrorResponse
+	if err := json.NewDecoder(w.Body).Decode(&errorResponse); err != nil {
+		t.Fatalf("Failed to decode error response: %v", err)
+	}
+
+	if errorResponse.Error != "invalid_request" {
+		t.Errorf("writeError() Error = %s, want invalid_request", errorResponse.Error)
+	}
+
+	if errorResponse.ErrorDescription != "The request is invalid" {
+		t.Errorf("writeError() ErrorDescription = %s, want 'The request is invalid'", errorResponse.ErrorDescription)
+	}
+}

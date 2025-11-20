@@ -19,7 +19,7 @@ type Config struct {
 // Handler implements OAuth 2.1 endpoints for the MCP server
 // It acts as an OAuth 2.1 Resource Server with Google as the Authorization Server
 type Handler struct {
-	config *Config
+	config *Config // Lowercase for internal use, exposed via getter if needed
 	store  *Store
 }
 
@@ -53,6 +53,11 @@ func NewHandler(config *Config) (*Handler, error) {
 // GetStore returns the underlying store (for testing and token management)
 func (h *Handler) GetStore() *Store {
 	return h.store
+}
+
+// GetConfig returns the OAuth configuration
+func (h *Handler) GetConfig() *Config {
+	return h.config
 }
 
 // ServeProtectedResourceMetadata serves the OAuth 2.0 Protected Resource Metadata (RFC 9728)

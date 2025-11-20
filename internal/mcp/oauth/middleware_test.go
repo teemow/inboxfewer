@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"golang.org/x/oauth2"
 )
 
 func TestHandler_ValidateGoogleToken_MissingHeader(t *testing.T) {
@@ -152,5 +155,101 @@ func TestGetGoogleTokenFromContext(t *testing.T) {
 	}
 	if token != nil {
 		t.Error("GetGoogleTokenFromContext() should return nil token for empty context")
+	}
+}
+
+func TestHandler_CacheGoogleToken(t *testing.T) {
+	handler, err := NewHandler(&Config{
+		Resource: "https://mcp.example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+
+	token := &oauth2.Token{
+		AccessToken: "test-token",
+		TokenType:   "Bearer",
+		Expiry:      time.Now().Add(1 * time.Hour),
+	}
+
+	// Cache a token
+	if err := handler.CacheGoogleToken("user@example.com", token); err != nil {
+		t.Fatalf("CacheGoogleToken() error = %v", err)
+	}
+
+	// Verify it can be retrieved
+	retrieved, err := handler.GetCachedGoogleToken("user@example.com")
+	if err != nil {
+		t.Fatalf("GetCachedGoogleToken() error = %v", err)
+	}
+
+	if retrieved.AccessToken != token.AccessToken {
+		t.Errorf("GetCachedGoogleToken() AccessToken = %s, want %s", retrieved.AccessToken, token.AccessToken)
+	}
+}
+
+func TestHandler_GetCachedGoogleToken_NotFound(t *testing.T) {
+	handler, err := NewHandler(&Config{
+		Resource: "https://mcp.example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+
+	_, err = handler.GetCachedGoogleToken("nonexistent@example.com")
+	if err == nil {
+		t.Error("GetCachedGoogleToken() for non-existent user should return error")
+	}
+}
+
+func TestHandler_OptionalGoogleToken_InvalidToken(t *testing.T) {
+	handler, err := NewHandler(&Config{
+		Resource: "https://mcp.example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("Handler should not be called with invalid token")
+	})
+
+	wrappedHandler := handler.OptionalGoogleToken(testHandler)
+
+	// Test with invalid token (should fail)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer invalid-token")
+	w := httptest.NewRecorder()
+
+	wrappedHandler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("OptionalGoogleToken() with invalid token status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandler_OptionalGoogleToken_InvalidFormat(t *testing.T) {
+	handler, err := NewHandler(&Config{
+		Resource: "https://mcp.example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("Handler should not be called with invalid format")
+	})
+
+	wrappedHandler := handler.OptionalGoogleToken(testHandler)
+
+	// Test with invalid format
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "InvalidFormat")
+	w := httptest.NewRecorder()
+
+	wrappedHandler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("OptionalGoogleToken() with invalid format status = %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }

@@ -34,4 +34,3 @@ func (p *TokenProvider) HasTokenForAccount(account string) bool {
 	_, err := p.store.GetGoogleToken(account)
 	return err == nil
 }
-

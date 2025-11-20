@@ -58,6 +58,15 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, baseU
 
 // Start starts the OAuth-enabled HTTP server
 func (s *OAuthHTTPServer) Start(addr string) error {
+	// Validate HTTPS requirement for OAuth 2.1
+	// Exception: localhost is allowed to use HTTP for development
+	config := s.oauthHandler.GetConfig()
+	baseURL := config.Resource
+	isLocalhost := contains(baseURL, "localhost") || contains(baseURL, "127.0.0.1")
+	if !isLocalhost && !contains(baseURL, "https://") {
+		return fmt.Errorf("OAuth 2.1 requires HTTPS for production (localhost may use HTTP): %s", baseURL)
+	}
+
 	mux := http.NewServeMux()
 
 	// Register OAuth endpoints
@@ -124,4 +133,14 @@ func (s *OAuthHTTPServer) Shutdown(ctx context.Context) error {
 // GetOAuthHandler returns the OAuth handler for testing or direct access
 func (s *OAuthHTTPServer) GetOAuthHandler() *oauth.Handler {
 	return s.oauthHandler
+}
+
+// contains checks if a string contains a substring
+func contains(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
