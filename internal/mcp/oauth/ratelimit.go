@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ type RateLimiter struct {
 	burst      int           // max burst size
 	cleanup    time.Duration // cleanup interval for inactive limiters
 	trustProxy bool          // whether to trust proxy headers
+	logger     *slog.Logger
 }
 
 // bucket represents a token bucket for rate limiting
@@ -26,14 +28,26 @@ type bucket struct {
 
 // NewRateLimiter creates a new rate limiter
 // rate: tokens per second, burst: maximum burst size, trustProxy: whether to trust proxy headers
-func NewRateLimiter(rate, burst int, trustProxy bool) *RateLimiter {
+// cleanupInterval: how often to cleanup inactive limiters, logger: structured logger
+func NewRateLimiter(rate, burst int, trustProxy bool, cleanupInterval time.Duration, logger *slog.Logger) *RateLimiter {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	rl := &RateLimiter{
 		limiters:   make(map[string]*bucket),
 		rate:       rate,
 		burst:      burst,
-		cleanup:    5 * time.Minute,
+		cleanup:    cleanupInterval,
 		trustProxy: trustProxy,
+		logger:     logger,
 	}
+
+	logger.Info("Rate limiter initialized",
+		"rate", rate,
+		"burst", burst,
+		"trust_proxy", trustProxy,
+		"cleanup_interval", cleanupInterval)
 
 	// Start cleanup goroutine
 	go rl.cleanupInactiveLimiters()
@@ -56,6 +70,7 @@ func (rl *RateLimiter) Allow(ip string) bool {
 		rl.mu.Lock()
 		rl.limiters[ip] = b
 		rl.mu.Unlock()
+		rl.logger.Debug("Created rate limiter for IP", "ip", ip)
 	}
 
 	b.mu.Lock()
@@ -77,6 +92,7 @@ func (rl *RateLimiter) Allow(ip string) bool {
 		return true
 	}
 
+	rl.logger.Warn("Rate limit exceeded", "ip", ip, "remaining_tokens", b.tokens)
 	return false
 }
 
@@ -88,14 +104,20 @@ func (rl *RateLimiter) cleanupInactiveLimiters() {
 	for range ticker.C {
 		rl.mu.Lock()
 		now := time.Now()
+		removed := 0
 		for ip, b := range rl.limiters {
 			b.mu.Lock()
 			if now.Sub(b.lastUpdate) > 10*time.Minute {
 				delete(rl.limiters, ip)
+				removed++
 			}
 			b.mu.Unlock()
 		}
 		rl.mu.Unlock()
+
+		if removed > 0 {
+			rl.logger.Debug("Cleaned up inactive rate limiters", "count", removed)
+		}
 	}
 }
 
@@ -112,7 +134,7 @@ func (h *Handler) RateLimitMiddleware(next http.Handler) http.Handler {
 
 		if !h.rateLimiter.Allow(ip) {
 			w.Header().Set("Retry-After", "1")
-			h.writeError(w, "rate_limit_exceeded", 
+			h.writeError(w, "rate_limit_exceeded",
 				fmt.Sprintf("Rate limit exceeded for %s. Please try again later", ip),
 				http.StatusTooManyRequests)
 			return
@@ -158,4 +180,3 @@ func extractIPFromAddr(addr string) string {
 	}
 	return addr
 }
-

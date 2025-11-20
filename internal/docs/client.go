@@ -15,9 +15,10 @@ import (
 
 // Client wraps the Google Docs and Drive API services
 type Client struct {
-	docsService  *docs.Service
-	driveService *drive.Service
-	account      string // The account this client is associated with
+	docsService   *docs.Service
+	driveService  *drive.Service
+	account       string // The account this client is associated with
+	tokenProvider google.TokenProvider
 }
 
 // Account returns the account name this client is associated with
@@ -25,9 +26,18 @@ func (c *Client) Account() string {
 	return c.account
 }
 
+// HasTokenForAccountWithProvider checks if a valid OAuth token exists for the specified account
+func HasTokenForAccountWithProvider(account string, provider google.TokenProvider) bool {
+	if provider == nil {
+		return false
+	}
+	return provider.HasTokenForAccount(account)
+}
+
 // HasTokenForAccount checks if a valid OAuth token exists for the specified account
 func HasTokenForAccount(account string) bool {
-	return google.GetDefaultTokenProvider().HasTokenForAccount(account)
+	provider := google.NewFileTokenProvider()
+	return HasTokenForAccountWithProvider(account, provider)
 }
 
 // HasToken checks if a valid OAuth token exists for the default account
@@ -35,11 +45,14 @@ func HasToken() bool {
 	return HasTokenForAccount("default")
 }
 
-// NewClientForAccount creates a new Google Docs client with OAuth2 authentication for a specific account
-// The OAuth token is retrieved from the configured token provider (OAuth store or file-based)
-func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
-	// Get token from the configured provider
-	tokenProvider := google.GetDefaultTokenProvider()
+// NewClientForAccountWithProvider creates a new Google Docs client with OAuth2 authentication for a specific account
+// The OAuth token is retrieved from the provided token provider
+func NewClientForAccountWithProvider(ctx context.Context, account string, tokenProvider google.TokenProvider) (*Client, error) {
+	if tokenProvider == nil {
+		return nil, fmt.Errorf("token provider cannot be nil")
+	}
+
+	// Get token from the provided provider
 	token, err := tokenProvider.GetTokenForAccount(ctx, account)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Google OAuth token for account %s: %w", account, err)
@@ -72,10 +85,24 @@ func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
 	}
 
 	return &Client{
-		docsService:  docsService,
-		driveService: driveService,
-		account:      account,
+		docsService:   docsService,
+		driveService:  driveService,
+		account:       account,
+		tokenProvider: tokenProvider,
 	}, nil
+}
+
+// NewClientForAccount creates a new Google Docs client with OAuth2 authentication for a specific account
+// Uses the default file-based token provider for backward compatibility
+func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
+	provider := google.NewFileTokenProvider()
+	return NewClientForAccountWithProvider(ctx, account, provider)
+}
+
+// NewClientWithProvider creates a new Google Docs client with OAuth2 authentication for the default account
+// using the provided token provider
+func NewClientWithProvider(ctx context.Context, provider google.TokenProvider) (*Client, error) {
+	return NewClientForAccountWithProvider(ctx, "default", provider)
 }
 
 // NewClient creates a new Google Docs client with OAuth2 authentication for the default account

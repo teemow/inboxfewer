@@ -44,19 +44,3 @@ func (p *FileTokenProvider) GetTokenForAccount(ctx context.Context, account stri
 func (p *FileTokenProvider) HasTokenForAccount(account string) bool {
 	return HasTokenForAccount(account)
 }
-
-// defaultTokenProvider is the global token provider (defaults to file-based)
-var defaultTokenProvider TokenProvider = NewFileTokenProvider()
-
-// SetDefaultTokenProvider sets the global token provider
-// This is called by the MCP server to switch between file-based and OAuth-based tokens
-func SetDefaultTokenProvider(provider TokenProvider) {
-	if provider != nil {
-		defaultTokenProvider = provider
-	}
-}
-
-// GetDefaultTokenProvider returns the current global token provider
-func GetDefaultTokenProvider() TokenProvider {
-	return defaultTokenProvider
-}

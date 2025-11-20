@@ -3,6 +3,7 @@ package oauth
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -19,27 +20,40 @@ type Config struct {
 	// SupportedScopes are all available scopes
 	SupportedScopes []string
 
+	// Google OAuth credentials for token refresh
+	// If not provided, automatic token refresh will not be available
+	GoogleClientID     string
+	GoogleClientSecret string
+
 	// RateLimitRate is the number of requests per second allowed per IP (0 = no limit)
 	RateLimitRate int
 
 	// RateLimitBurst is the maximum burst size allowed per IP
 	RateLimitBurst int
 
+	// RateLimitCleanupInterval is how often to cleanup inactive rate limiters (default: 5 minutes)
+	RateLimitCleanupInterval time.Duration
+
 	// CleanupInterval is how often to cleanup expired tokens (default: 1 minute)
 	CleanupInterval time.Duration
 
 	// TrustProxy indicates whether to trust X-Forwarded-For and X-Real-IP headers
 	// Only set to true if the server is behind a trusted proxy
+	// Default: false (secure by default)
 	TrustProxy bool
+
+	// Logger for structured logging (optional, uses default if not provided)
+	Logger *slog.Logger
 }
 
 // Handler implements OAuth 2.1 endpoints for the MCP server
 // It acts as an OAuth 2.1 Resource Server with Google as the Authorization Server
 type Handler struct {
-	config      *Config      // Lowercase for internal use, exposed via getter if needed
+	config      *Config
 	store       *Store
-	rateLimiter *RateLimiter // Optional rate limiter for protecting endpoints
+	rateLimiter *RateLimiter   // Optional rate limiter for protecting endpoints
 	oauthConfig *oauth2.Config // Google OAuth config for token refresh
+	logger      *slog.Logger
 }
 
 // NewHandler creates a new OAuth handler
@@ -68,6 +82,12 @@ func NewHandler(config *Config) (*Handler, error) {
 		config.CleanupInterval = 1 * time.Minute
 	}
 
+	// Set default logger if not provided
+	logger := config.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	// Create rate limiter if configured
 	var rateLimiter *RateLimiter
 	if config.RateLimitRate > 0 {
@@ -75,22 +95,37 @@ func NewHandler(config *Config) (*Handler, error) {
 		if burst == 0 {
 			burst = config.RateLimitRate * 2 // Default burst is 2x rate
 		}
-		rateLimiter = NewRateLimiter(config.RateLimitRate, burst, config.TrustProxy)
+		cleanupInterval := config.RateLimitCleanupInterval
+		if cleanupInterval == 0 {
+			cleanupInterval = 5 * time.Minute
+		}
+		rateLimiter = NewRateLimiter(config.RateLimitRate, burst, config.TrustProxy, cleanupInterval, logger)
 	}
 
 	// Create Google OAuth config for token refresh
-	// Note: ClientID and ClientSecret would need to be provided for actual refresh
-	// For now, we create a minimal config that can be used with existing tokens
-	oauthConfig := &oauth2.Config{
-		Endpoint: google.Endpoint,
-		Scopes:   config.SupportedScopes,
+	// Only enables refresh if ClientID and ClientSecret are provided
+	var oauthConfig *oauth2.Config
+	if config.GoogleClientID != "" && config.GoogleClientSecret != "" {
+		oauthConfig = &oauth2.Config{
+			ClientID:     config.GoogleClientID,
+			ClientSecret: config.GoogleClientSecret,
+			Endpoint:     google.Endpoint,
+			Scopes:       config.SupportedScopes,
+		}
+		logger.Info("Token refresh enabled with Google OAuth credentials")
+	} else {
+		logger.Warn("Token refresh disabled: Google OAuth credentials not provided")
 	}
+
+	store := NewStoreWithInterval(config.CleanupInterval)
+	store.SetLogger(logger)
 
 	return &Handler{
 		config:      config,
-		store:       NewStoreWithInterval(config.CleanupInterval),
+		store:       store,
 		rateLimiter: rateLimiter,
 		oauthConfig: oauthConfig,
+		logger:      logger,
 	}, nil
 }
 
@@ -102,6 +137,11 @@ func (h *Handler) GetStore() *Store {
 // GetConfig returns the OAuth configuration
 func (h *Handler) GetConfig() *Config {
 	return h.config
+}
+
+// CanRefreshTokens returns true if the handler can refresh tokens
+func (h *Handler) CanRefreshTokens() bool {
+	return h.oauthConfig != nil && h.oauthConfig.ClientID != ""
 }
 
 // ServeProtectedResourceMetadata serves the OAuth 2.0 Protected Resource Metadata (RFC 9728)
@@ -136,12 +176,14 @@ func (h *Handler) ServeProtectedResourceMetadata(w http.ResponseWriter, r *http.
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(metadata); err != nil {
+		h.logger.Error("Failed to encode metadata", "error", err)
 		http.Error(w, "Failed to encode metadata", http.StatusInternalServerError)
 	}
 }
 
 // writeError is a helper to write OAuth error responses
 func (h *Handler) writeError(w http.ResponseWriter, errorCode, description string, statusCode int) {
+	h.logger.Debug("OAuth error", "code", errorCode, "description", description, "status", statusCode)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(ErrorResponse{
@@ -153,6 +195,7 @@ func (h *Handler) writeError(w http.ResponseWriter, errorCode, description strin
 // RevokeToken revokes a Google OAuth token for a specific user
 // This removes the token from the store, forcing re-authentication
 func (h *Handler) RevokeToken(email string) error {
+	h.logger.Info("Revoking token", "email", email)
 	return h.store.DeleteGoogleToken(email)
 }
 

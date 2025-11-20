@@ -8,7 +8,6 @@ import (
 	"time"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
-	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/mcp/oauth"
 )
 
@@ -48,10 +47,12 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, baseU
 		return nil, fmt.Errorf("failed to create OAuth handler: %w", err)
 	}
 
-	// Set the OAuth token provider so Google API clients use tokens from the OAuth store
-	// This replaces the default file-based token provider
-	tokenProvider := oauth.NewTokenProvider(oauthHandler.GetStore())
-	google.SetDefaultTokenProvider(tokenProvider)
+	// Create OAuth token provider for Google API clients
+	// This will be passed to clients via dependency injection through MCP server context
+	_ = oauth.NewTokenProvider(oauthHandler.GetStore())
+
+	// TODO: Pass tokenProvider to ServerContext when creating MCP server
+	// For now, clients will be created with the token provider from oauth middleware
 
 	return &OAuthHTTPServer{
 		mcpServer:    mcpServer,

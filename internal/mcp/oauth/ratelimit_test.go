@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -8,7 +9,7 @@ import (
 )
 
 func TestNewRateLimiter(t *testing.T) {
-	rl := NewRateLimiter(10, 20, false)
+	rl := NewRateLimiter(10, 20, false, 5*time.Minute, slog.Default())
 	if rl == nil {
 		t.Fatal("NewRateLimiter returned nil")
 	}
@@ -24,7 +25,7 @@ func TestNewRateLimiter(t *testing.T) {
 }
 
 func TestRateLimiter_Allow(t *testing.T) {
-	rl := NewRateLimiter(10, 10, false) // 10 requests per second, burst of 10
+	rl := NewRateLimiter(10, 10, false, 5*time.Minute, slog.Default()) // 10 requests per second, burst of 10
 
 	// First 10 requests should be allowed (burst)
 	for i := 0; i < 10; i++ {
@@ -48,7 +49,7 @@ func TestRateLimiter_Allow(t *testing.T) {
 }
 
 func TestRateLimiter_MultipleIPs(t *testing.T) {
-	rl := NewRateLimiter(10, 5, false) // 10 requests per second, burst of 5
+	rl := NewRateLimiter(10, 5, false, 5*time.Minute, slog.Default()) // 10 requests per second, burst of 5
 
 	// Exhaust burst for first IP
 	for i := 0; i < 5; i++ {
@@ -76,7 +77,7 @@ func TestRateLimiter_MultipleIPs(t *testing.T) {
 }
 
 func TestRateLimiter_TokenReplenishment(t *testing.T) {
-	rl := NewRateLimiter(100, 2, false) // 100 requests per second, burst of 2
+	rl := NewRateLimiter(100, 2, false, 5*time.Minute, slog.Default()) // 100 requests per second, burst of 2
 
 	// Use up burst
 	if !rl.Allow("192.168.1.1") {

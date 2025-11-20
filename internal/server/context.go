@@ -2,13 +2,14 @@ package server
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/teemow/inboxfewer/internal/calendar"
 	"github.com/teemow/inboxfewer/internal/docs"
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/gmail"
+	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/meet"
 	"github.com/teemow/inboxfewer/internal/tasks"
 )
@@ -25,13 +26,22 @@ type ServerContext struct {
 	tasksClients    map[string]*tasks.Client    // Maps account name to Tasks client
 	githubUser      string
 	githubToken     string
+	tokenProvider   google.TokenProvider // Token provider for Google API authentication
+	logger          *slog.Logger
 	mu              sync.RWMutex
 	shutdown        bool
 }
 
-// NewServerContext creates a new server context
+// NewServerContext creates a new server context with file-based token provider (for STDIO transport)
 func NewServerContext(ctx context.Context, githubUser, githubToken string) (*ServerContext, error) {
+	return NewServerContextWithProvider(ctx, githubUser, githubToken, google.NewFileTokenProvider())
+}
+
+// NewServerContextWithProvider creates a new server context with a custom token provider (for HTTP/SSE transport)
+func NewServerContextWithProvider(ctx context.Context, githubUser, githubToken string, tokenProvider google.TokenProvider) (*ServerContext, error) {
 	shutdownCtx, cancel := context.WithCancel(ctx)
+
+	logger := slog.Default()
 
 	// Initialize client maps
 	gmailClients := make(map[string]*gmail.Client)
@@ -41,13 +51,13 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 	meetClients := make(map[string]*meet.Client)
 	tasksClients := make(map[string]*tasks.Client)
 
-	// Try to create default Gmail client, but don't fail if token is missing
+	// Try to create default Gmail client if token provider has a token, but don't fail if token is missing
 	// Clients will be lazily initialized when first needed
-	if gmail.HasToken() {
-		gmailClient, err := gmail.NewClient(shutdownCtx)
+	if tokenProvider != nil && tokenProvider.HasTokenForAccount("default") {
+		gmailClient, err := gmail.NewClientWithProvider(shutdownCtx, tokenProvider)
 		if err != nil {
 			// Log but don't fail - will be re-attempted on first use
-			fmt.Printf("Warning: failed to create Gmail client for default account: %v\n", err)
+			logger.Warn("Failed to create Gmail client for default account", "error", err)
 		} else {
 			gmailClients["default"] = gmailClient
 		}
@@ -64,6 +74,8 @@ func NewServerContext(ctx context.Context, githubUser, githubToken string) (*Ser
 		tasksClients:    tasksClients,
 		githubUser:      githubUser,
 		githubToken:     githubToken,
+		tokenProvider:   tokenProvider,
+		logger:          logger,
 		shutdown:        false,
 	}, nil
 }
@@ -86,13 +98,13 @@ func (sc *ServerContext) GmailClientForAccount(account string) *gmail.Client {
 	}
 
 	// Try to create client if token exists
-	if !gmail.HasTokenForAccount(account) {
+	if sc.tokenProvider == nil || !sc.tokenProvider.HasTokenForAccount(account) {
 		return nil
 	}
 
-	client, err := gmail.NewClientForAccount(sc.ctx, account)
+	client, err := gmail.NewClientForAccountWithProvider(sc.ctx, account, sc.tokenProvider)
 	if err != nil {
-		fmt.Printf("Warning: failed to create Gmail client for account %s: %v\n", account, err)
+		sc.logger.Warn("Failed to create Gmail client", "account", account, "error", err)
 		return nil
 	}
 
@@ -130,13 +142,13 @@ func (sc *ServerContext) DocsClientForAccount(account string) *docs.Client {
 	}
 
 	// Try to create client if token exists
-	if !docs.HasTokenForAccount(account) {
+	if sc.tokenProvider == nil || !sc.tokenProvider.HasTokenForAccount(account) {
 		return nil
 	}
 
-	client, err := docs.NewClientForAccount(sc.ctx, account)
+	client, err := docs.NewClientForAccountWithProvider(sc.ctx, account, sc.tokenProvider)
 	if err != nil {
-		fmt.Printf("Warning: failed to create Docs client for account %s: %v\n", account, err)
+		sc.logger.Warn("Failed to create Docs client", "account", account, "error", err)
 		return nil
 	}
 
@@ -174,13 +186,13 @@ func (sc *ServerContext) CalendarClientForAccount(account string) *calendar.Clie
 	}
 
 	// Try to create client if token exists
-	if !calendar.HasTokenForAccount(account) {
+	if sc.tokenProvider == nil || !sc.tokenProvider.HasTokenForAccount(account) {
 		return nil
 	}
 
-	client, err := calendar.NewClientForAccount(sc.ctx, account)
+	client, err := calendar.NewClientForAccountWithProvider(sc.ctx, account, sc.tokenProvider)
 	if err != nil {
-		fmt.Printf("Warning: failed to create Calendar client for account %s: %v\n", account, err)
+		sc.logger.Warn("Failed to create Calendar client", "account", account, "error", err)
 		return nil
 	}
 
@@ -218,13 +230,13 @@ func (sc *ServerContext) MeetClientForAccount(account string) *meet.Client {
 	}
 
 	// Try to create client if token exists
-	if !meet.HasTokenForAccount(account) {
+	if sc.tokenProvider == nil || !sc.tokenProvider.HasTokenForAccount(account) {
 		return nil
 	}
 
-	client, err := meet.NewClientForAccount(sc.ctx, account)
+	client, err := meet.NewClientForAccountWithProvider(sc.ctx, account, sc.tokenProvider)
 	if err != nil {
-		fmt.Printf("Warning: failed to create Meet client for account %s: %v\n", account, err)
+		sc.logger.Warn("Failed to create Meet client", "account", account, "error", err)
 		return nil
 	}
 
@@ -262,13 +274,13 @@ func (sc *ServerContext) TasksClientForAccount(account string) *tasks.Client {
 	}
 
 	// Try to create client if token exists
-	if !tasks.HasTokenForAccount(account) {
+	if sc.tokenProvider == nil || !sc.tokenProvider.HasTokenForAccount(account) {
 		return nil
 	}
 
-	client, err := tasks.NewClientForAccount(sc.ctx, account)
+	client, err := tasks.NewClientForAccountWithProvider(sc.ctx, account, sc.tokenProvider)
 	if err != nil {
-		fmt.Printf("Warning: failed to create Tasks client for account %s: %v\n", account, err)
+		sc.logger.Warn("Failed to create Tasks client", "account", account, "error", err)
 		return nil
 	}
 
@@ -306,13 +318,13 @@ func (sc *ServerContext) DriveClientForAccount(account string) *drive.Client {
 	}
 
 	// Try to create client if token exists
-	if !drive.HasTokenForAccount(account) {
+	if sc.tokenProvider == nil || !sc.tokenProvider.HasTokenForAccount(account) {
 		return nil
 	}
 
-	client, err := drive.NewClientForAccount(sc.ctx, account)
+	client, err := drive.NewClientForAccountWithProvider(sc.ctx, account, sc.tokenProvider)
 	if err != nil {
-		fmt.Printf("Warning: failed to create Drive client for account %s: %v\n", account, err)
+		sc.logger.Warn("Failed to create Drive client", "account", account, "error", err)
 		return nil
 	}
 
