@@ -7,6 +7,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/teemow/inboxfewer/internal/calendar"
+	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/server"
 )
 
@@ -25,7 +26,7 @@ func getCalendarClient(ctx context.Context, account string, sc *server.ServerCon
 	if client == nil {
 		// Check if token exists before trying to create client
 		if !calendar.HasTokenForAccount(account) {
-			authURL := calendar.GetAuthURLForAccount(account)
+			authURL := google.GetAuthenticationErrorMessage(account)
 			return nil, fmt.Errorf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:

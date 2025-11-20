@@ -1,273 +1,322 @@
-# MCP OAuth 2.1 Server Authentication
+# MCP OAuth 2.1 Authentication with Google
 
 This document describes the OAuth 2.1 authentication implementation for the MCP server according to the Model Context Protocol (MCP) specification dated 2025-06-18.
 
 ## Overview
 
-The MCP server implements OAuth 2.1 authentication to secure access to its endpoints. This ensures that only authorized clients can access the server's capabilities.
+The inboxfewer MCP server implements secure OAuth 2.1 authentication using **Google as the authorization server**. This architecture provides several benefits:
 
-**Note**: This is separate from Google OAuth, which the server uses to access Google services (Gmail, Drive, Calendar, etc.). MCP OAuth protects the MCP server itself, while Google OAuth allows the server to access external services on behalf of users.
-
-## Features
-
-- **OAuth 2.1 Compliance**: Full OAuth 2.1 support with security best practices
-- **PKCE Support**: Proof Key for Code Exchange (PKCE) required for all authorization flows, especially public clients
-- **Dynamic Client Registration** (RFC 7591): Clients can register dynamically without manual configuration
-- **Authorization Server Metadata** (RFC 8414): Automatic discovery of endpoints and capabilities
-- **Resource Indicators** (RFC 8707): Tokens are bound to the MCP server resource audience
-- **Secure Token Storage**: In-memory token store with automatic expiration and cleanup
-- **Support for Public and Confidential Clients**: Different security models for different client types
+- **Single Sign-On**: Users authenticate with their existing Google accounts
+- **Secure by Design**: The LLM never sees OAuth tokens - they're handled entirely by the MCP client
+- **Integrated Access**: The same Google credentials grant both access to the MCP server and Google services (Gmail, Drive, Calendar, etc.)
+- **Standards Compliant**: Full compliance with OAuth 2.1, PKCE, and RFC 9728 (Protected Resource Metadata)
 
 ## Architecture
 
-### Components
+### Roles
 
-1. **OAuth Handler** (`internal/mcp/oauth/handler.go`): Implements the OAuth endpoints
-   - Authorization endpoint (`/oauth/authorize`)
-   - Token endpoint (`/oauth/token`)
-   - Well-known metadata endpoint (`/.well-known/oauth-authorization-server`)
-   - Dynamic client registration endpoint (`/oauth/register`)
+1. **MCP Server** (inboxfewer): Acts as an **OAuth 2.1 Resource Server**
+   - Validates Google OAuth tokens
+   - Provides Google services (Gmail, Drive, Calendar, etc.)
+   - Protected by Bearer token authentication
 
-2. **Token Store** (`internal/mcp/oauth/store.go`): Manages clients, tokens, and authorization codes in memory
+2. **Google**: Acts as the **OAuth 2.1 Authorization Server**
+   - Issues access tokens
+   - Handles user authentication and consent
+   - Provides token introspection/validation
 
-3. **Middleware** (`internal/mcp/oauth/middleware.go`): Validates OAuth tokens and protects endpoints
+3. **MCP Client** (Cursor, Claude Desktop, etc.): Acts as the **OAuth 2.1 Client**
+   - Discovers the authorization server via Protected Resource Metadata
+   - Handles the OAuth flow (opening browser, PKCE, token exchange)
+   - Includes Bearer tokens in requests to the MCP server
 
-4. **PKCE Utilities** (`internal/mcp/oauth/pkce.go`): Generates and validates PKCE parameters
+4. **LLM**: Never sees tokens
+   - Only receives responses from MCP tools
+   - No access to sensitive authentication credentials
 
-## OAuth Flows
+### Security Flow
 
-### 1. Dynamic Client Registration
+According to the MCP specification, the authentication flow is:
 
-Clients can register themselves dynamically:
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant Server as MCP Server
+    participant Google as Google OAuth
+    participant Browser as User Browser
 
-```bash
-curl -X POST https://mcp.example.com/oauth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "redirect_uris": ["https://client.example.com/callback"],
-    "client_name": "My MCP Client",
-    "token_endpoint_auth_method": "client_secret_post"
-  }'
+    Client->>Server: Request without token
+    Server-->>Client: 401 + WWW-Authenticate header
+    
+    Client->>Server: GET /.well-known/oauth-protected-resource
+    Server-->>Client: Resource metadata (points to Google)
+    
+    Client->>Google: GET /.well-known/openid-configuration
+    Google-->>Client: Authorization server metadata
+    
+    Client->>Browser: Open Google OAuth consent page
+    Browser->>Google: User signs in & grants consent
+    Google-->>Browser: Authorization code
+    Browser->>Client: Authorization code
+    
+    Client->>Google: Exchange code for token (with PKCE)
+    Google-->>Client: Access token + refresh token
+    
+    Client->>Server: MCP request with Bearer token
+    Server->>Google: Validate token (userinfo endpoint)
+    Google-->>Server: User info
+    Server-->>Client: MCP response
 ```
 
-Response:
+## Components
+
+### 1. Protected Resource Metadata (RFC 9728)
+
+The MCP server provides an endpoint that tells clients where to find the authorization server:
+
+**Endpoint**: `/.well-known/oauth-protected-resource`
+
+**Response**:
 ```json
 {
-  "client_id": "abc123...",
-  "client_secret": "secret456...",
-  "redirect_uris": ["https://client.example.com/callback"],
-  "client_name": "My MCP Client",
-  "grant_types": ["authorization_code", "refresh_token"],
-  "response_types": ["code"],
-  "token_endpoint_auth_method": "client_secret_post"
+  "resource": "https://mcp.example.com",
+  "authorization_servers": [
+    "https://accounts.google.com"
+  ],
+  "bearer_methods_supported": [
+    "header"
+  ],
+  "scopes_supported": [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/calendar",
+    ...
+  ]
 }
 ```
 
-For public clients (e.g., mobile apps), use `"token_endpoint_auth_method": "none"` and no client secret will be issued.
+### 2. OAuth Middleware
 
-### 2. Authorization Code Flow with PKCE
+The middleware (`internal/mcp/oauth/middleware.go`):
+- Validates Bearer tokens from the `Authorization` header
+- Calls Google's userinfo endpoint to validate tokens and extract user identity
+- Stores user identity and token in request context
+- Caches Google tokens for accessing Google APIs
+- Returns 401 with `WWW-Authenticate` header for invalid/missing tokens
 
-#### Step 1: Generate PKCE Parameters
+### 3. Token Store
 
-```javascript
-// Generate code verifier (random string)
-const codeVerifier = generateRandomString(43); // Base64URL encoded, 43-128 chars
+The token store (`internal/mcp/oauth/store.go`):
+- Stores validated Google OAuth tokens in memory
+- Associates tokens with user email addresses
+- Provides tokens to Google API clients (Gmail, Drive, etc.)
+- No custom token generation - all tokens come from Google
 
-// Generate code challenge (SHA256 hash)
-const codeChallenge = base64url(sha256(codeVerifier));
-```
+## Authentication for Different Transports
 
-#### Step 2: Authorization Request
+### STDIO Transport (Default)
 
-Redirect user to:
+For STDIO transport (local execution), OAuth is **not used**. Instead, follow the traditional approach:
 
-```
-https://mcp.example.com/oauth/authorize?
-  response_type=code&
-  client_id=abc123&
-  redirect_uri=https://client.example.com/callback&
-  scope=mcp&
-  state=random_state&
-  code_challenge=sha256_hash&
-  code_challenge_method=S256
-```
+1. Run the initial setup (if needed) to authenticate with Google
+2. Tokens are stored in `~/.cache/inboxfewer/google-{account}.token`
+3. The MCP server reads tokens from the filesystem
 
-#### Step 3: User Authorizes
+This follows the MCP specification recommendation: "Implementations using an STDIO transport SHOULD NOT follow this specification, and instead retrieve credentials from the environment."
 
-The user is redirected back to your callback URL with an authorization code:
+### HTTP/SSE Transports
 
-```
-https://client.example.com/callback?
-  code=auth_code_here&
-  state=random_state
-```
+For HTTP-based transports (remote servers), OAuth authentication is **required**:
 
-#### Step 4: Token Exchange
+1. **Start server with HTTP transport**:
+   ```bash
+   inboxfewer serve --transport sse --http-addr :8080
+   # or
+   inboxfewer serve --transport streamable-http --http-addr :8080
+   ```
 
-Exchange the authorization code for an access token:
+2. **MCP Client discovers authentication**:
+   - Client makes unauthenticated request
+   - Server returns `401 Unauthorized` with `WWW-Authenticate` header
+   - Client fetches `/.well-known/oauth-protected-resource`
+   - Client discovers Google as the authorization server
 
-```bash
-curl -X POST https://mcp.example.com/oauth/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=authorization_code" \
-  -d "code=auth_code_here" \
-  -d "redirect_uri=https://client.example.com/callback" \
-  -d "client_id=abc123" \
-  -d "client_secret=secret456" \  # Only for confidential clients
-  -d "code_verifier=original_verifier"
-```
+3. **MCP Client handles OAuth flow**:
+   - Client opens browser to Google OAuth consent page
+   - User signs in with Google account
+   - User grants requested permissions (Gmail, Drive, Calendar, etc.)
+   - Client receives authorization code
+   - Client exchanges code for access token using PKCE
+   - All of this happens **without LLM involvement**
 
-Response:
-```json
-{
-  "access_token": "access_token_here",
-  "token_type": "Bearer",
-  "expires_in": 3600,
-  "refresh_token": "refresh_token_here",
-  "scope": "mcp"
-}
-```
+4. **MCP Client makes authenticated requests**:
+   ```
+   Authorization: Bearer {google_access_token}
+   ```
 
-### 3. Refresh Token Flow
+5. **MCP Server validates token**:
+   - Calls `https://www.googleapis.com/oauth2/v2/userinfo` with the token
+   - Extracts user identity (email, name, etc.)
+   - Caches token for accessing Google APIs
+   - Processes MCP request
 
-When the access token expires, use the refresh token:
+## Required Google OAuth Scopes
 
-```bash
-curl -X POST https://mcp.example.com/oauth/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=refresh_token" \
-  -d "refresh_token=refresh_token_here" \
-  -d "client_id=abc123" \
-  -d "client_secret=secret456"  # Only for confidential clients
-```
+The MCP server requests the following Google OAuth scopes:
 
-### 4. Using Access Tokens
-
-Include the access token in the `Authorization` header when making requests to protected MCP endpoints:
-
-```bash
-curl -X POST https://mcp.example.com/mcp \
-  -H "Authorization: Bearer access_token_here" \
-  -H "Content-Type: application/json" \
-  -d '{"method": "tools/list", "params": {}}'
-```
-
-## Authorization Server Metadata
-
-Clients can discover OAuth endpoints and capabilities:
-
-```bash
-curl https://mcp.example.com/.well-known/oauth-authorization-server
-```
-
-Response:
-```json
-{
-  "issuer": "https://mcp.example.com",
-  "authorization_endpoint": "https://mcp.example.com/oauth/authorize",
-  "token_endpoint": "https://mcp.example.com/oauth/token",
-  "registration_endpoint": "https://mcp.example.com/oauth/register",
-  "scopes_supported": ["mcp"],
-  "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code", "refresh_token"],
-  "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
-  "code_challenge_methods_supported": ["S256", "plain"]
-}
-```
+- `https://www.googleapis.com/auth/gmail.readonly` - Read Gmail messages
+- `https://www.googleapis.com/auth/gmail.modify` - Modify Gmail (labels, archive, etc.)
+- `https://www.googleapis.com/auth/gmail.send` - Send emails
+- `https://www.googleapis.com/auth/gmail.settings.basic` - Manage filters and labels
+- `https://www.googleapis.com/auth/documents.readonly` - Read Google Docs
+- `https://www.googleapis.com/auth/drive` - Access Google Drive
+- `https://www.googleapis.com/auth/calendar` - Manage Google Calendar
+- `https://www.googleapis.com/auth/meetings.space.readonly` - Access Google Meet recordings
+- `https://www.googleapis.com/auth/tasks` - Manage Google Tasks
 
 ## Security Considerations
 
-1. **HTTPS Required**: All OAuth endpoints MUST be served over HTTPS in production (except localhost for development)
+### Token Validation
 
-2. **PKCE Required for Public Clients**: Public clients (mobile apps, SPAs) MUST use PKCE to prevent authorization code interception
+The MCP server validates every Bearer token by:
+1. Calling Google's userinfo endpoint: `https://www.googleapis.com/oauth2/v2/userinfo`
+2. Verifying the response is successful (HTTP 200)
+3. Extracting user identity (email, user ID, name)
 
-3. **Resource Binding**: Access tokens are bound to the MCP server resource using RFC 8707. Tokens issued for other resources are rejected.
+Invalid or expired tokens receive a `401 Unauthorized` response.
 
-4. **Short-Lived Tokens**: Access tokens have a default TTL of 1 hour (configurable)
+### Token Storage
 
-5. **Authorization Code Expiration**: Authorization codes expire after 10 minutes (configurable)
+- **Server-side**: Google tokens are cached in memory (per user session)
+- **No persistent storage**: Tokens are not written to disk on the server
+- **Client-side**: The MCP client manages token persistence and refresh
+- **LLM**: Never has access to tokens
 
-6. **Automatic Cleanup**: Expired tokens and authorization codes are automatically cleaned up every minute
+### HTTPS Requirement
 
-7. **Confidential Clients**: Confidential clients (server-side apps) MUST authenticate with their client secret
+According to OAuth 2.1 specification:
+- **Production**: All OAuth endpoints MUST use HTTPS
+- **Development**: `localhost` may use HTTP for testing
+
+### PKCE (Proof Key for Code Exchange)
+
+The MCP client MUST use PKCE when exchanging authorization codes for tokens. This prevents authorization code interception attacks.
+
+## Multi-Account Support
+
+The MCP server supports multiple Google accounts:
+
+```javascript
+// Use specific account in MCP tool call
+{
+  "tool": "gmail_list_threads",
+  "arguments": {
+    "account": "work",
+    "query": "in:inbox"
+  }
+}
+```
+
+Each account has its own cached Google token, identified by the account name (email address).
 
 ## Configuration
 
-The OAuth handler is configured with the following options:
+### OAuth Handler Configuration
 
 ```go
 config := &oauth.Config{
-    Issuer:               "https://mcp.example.com",
-    Resource:             "https://mcp.example.com",
-    DefaultTokenTTL:      3600,  // Access token TTL in seconds (default: 3600)
-    AuthorizationCodeTTL: 600,   // Authorization code TTL in seconds (default: 600)
-    DefaultScopes:        []string{"mcp"},
-    SupportedScopes:      []string{"mcp", "admin"},
+    Resource: "https://mcp.example.com",  // MCP server URL
+    SupportedScopes: []string{
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/drive",
+        // ... other Google scopes
+    },
 }
 
 handler, err := oauth.NewHandler(config)
+```
+
+### Integration with HTTP Server
+
+```go
+// Create OAuth-enabled HTTP server
+oauthServer, err := server.NewOAuthHTTPServer(mcpServer, "sse", baseURL)
 if err != nil {
+    log.Fatal(err)
+}
+
+// Start server
+if err := oauthServer.Start(":8080"); err != nil {
     log.Fatal(err)
 }
 ```
 
-## Integration with MCP Server
-
-To protect MCP endpoints with OAuth, wrap the MCP handlers with the OAuth middleware:
-
-```go
-// Create OAuth handler
-oauthHandler, err := oauth.NewHandler(oauthConfig)
-if err != nil {
-    return err
-}
-
-// Protect MCP endpoint
-http.Handle("/mcp", oauthHandler.ValidateToken(mcpHandler))
-
-// OAuth endpoints (unprotected)
-http.HandleFunc("/.well-known/oauth-authorization-server", oauthHandler.ServeWellKnown)
-http.HandleFunc("/oauth/register", oauthHandler.ServeDynamicRegistration)
-http.HandleFunc("/oauth/authorize", oauthHandler.ServeAuthorize)
-http.HandleFunc("/oauth/token", oauthHandler.ServeToken)
-```
-
-## Scopes
-
-The default scope is `mcp`, which grants access to all MCP capabilities. You can define custom scopes for fine-grained access control:
-
-```go
-config.SupportedScopes = []string{"mcp", "mcp:read", "mcp:write", "admin"}
-```
-
-Use the `RequireScope` middleware to enforce scope requirements:
-
-```go
-http.Handle("/mcp/admin", 
-    oauthHandler.ValidateToken(
-        oauthHandler.RequireScope("admin")(adminHandler),
-    ),
-)
-```
-
-## Backward Compatibility
-
-OAuth authentication is optional and can be disabled for backward compatibility. When OAuth is not configured, the MCP server operates without authentication (as before).
+The server automatically:
+- Serves Protected Resource Metadata at `/.well-known/oauth-protected-resource`
+- Wraps MCP endpoints with OAuth middleware
+- Returns appropriate `WWW-Authenticate` headers
 
 ## Testing
 
-The OAuth implementation includes comprehensive unit tests with >80% coverage:
+Run tests with:
 
 ```bash
-go test ./internal/mcp/oauth/... -cover
+make test
 ```
+
+The OAuth implementation includes tests for:
+- Protected Resource Metadata generation
+- Token validation (with mocked Google responses)
+- Middleware behavior (missing tokens, invalid tokens, etc.)
+- Token store operations
+
+## Troubleshooting
+
+### "Missing Authorization header"
+
+**Cause**: MCP client is not sending Bearer token
+
+**Solution**: Ensure your MCP client supports OAuth 2.1 and properly discovers the authorization server via Protected Resource Metadata
+
+### "Token validation failed"
+
+**Cause**: Invalid or expired Google OAuth token
+
+**Solution**: The MCP client should automatically refresh the token. If it doesn't, re-authenticate through the client.
+
+### "Please authenticate with Google through your MCP client"
+
+**Cause**: No cached Google token for the requested account
+
+**Solution**: 
+- For HTTP/SSE: The MCP client will automatically initiate OAuth flow
+- For STDIO: Run authentication setup or check token files in `~/.cache/inboxfewer/`
+
+## Migrating from Old Authentication
+
+The previous insecure authentication flow (where users pasted auth codes into the LLM) has been **removed** for security reasons.
+
+**Old flow** (insecure, removed):
+1. LLM calls `google_get_auth_url` tool → gets URL
+2. User visits URL, gets auth code
+3. User pastes code back to LLM
+4. LLM calls `google_save_auth_code` tool → stores token
+5. **Problem**: LLM sees the auth code!
+
+**New flow** (secure):
+1. MCP client detects missing authentication
+2. Client opens browser with Google OAuth
+3. User authenticates with Google
+4. Client receives and stores token
+5. Client includes token in requests to MCP server
+6. **LLM never sees any tokens!**
 
 ## References
 
 - [MCP Specification - Authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
-- [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-10)
-- [RFC 7591 - OAuth 2.0 Dynamic Client Registration Protocol](https://datatracker.ietf.org/doc/html/rfc7591)
-- [RFC 8414 - OAuth 2.0 Authorization Server Metadata](https://datatracker.ietf.org/doc/html/rfc8414)
+- [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-13)
+- [RFC 9728 - OAuth 2.0 Protected Resource Metadata](https://datatracker.ietf.org/doc/html/rfc9728)
 - [RFC 8707 - Resource Indicators for OAuth 2.0](https://datatracker.ietf.org/doc/html/rfc8707)
 - [RFC 7636 - Proof Key for Code Exchange (PKCE)](https://datatracker.ietf.org/doc/html/rfc7636)
-
+- [Google OAuth 2.0](https://developers.google.com/identity/protocols/oauth2)

@@ -17,7 +17,6 @@ import (
 	"github.com/teemow/inboxfewer/internal/tools/docs_tools"
 	"github.com/teemow/inboxfewer/internal/tools/drive_tools"
 	"github.com/teemow/inboxfewer/internal/tools/gmail_tools"
-	"github.com/teemow/inboxfewer/internal/tools/google_tools"
 	"github.com/teemow/inboxfewer/internal/tools/meet_tools"
 	"github.com/teemow/inboxfewer/internal/tools/tasks_tools"
 )
@@ -105,11 +104,6 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool) erro
 		}
 	}
 
-	// Register Google OAuth tools (always available for authentication)
-	if err := google_tools.RegisterGoogleTools(mcpSrv, serverContext); err != nil {
-		return fmt.Errorf("failed to register Google OAuth tools: %w", err)
-	}
-
 	// Register Gmail tools
 	if err := gmail_tools.RegisterGmailTools(mcpSrv, serverContext, readOnly); err != nil {
 		return fmt.Errorf("failed to register Gmail tools: %w", err)
@@ -172,19 +166,32 @@ func runStdioServer(mcpSrv *mcpserver.MCPServer) error {
 }
 
 func runSSEServer(mcpSrv *mcpserver.MCPServer, addr string, ctx context.Context, debugMode bool) error {
-	sseServer := mcpserver.NewSSEServer(mcpSrv,
-		mcpserver.WithSSEEndpoint("/sse"),
-		mcpserver.WithMessageEndpoint("/message"),
-	)
+	// Create OAuth-enabled SSE server
+	// Base URL should be the full URL where the server is accessible
+	// For development, use http://localhost:8080
+	// For production, use the actual HTTPS URL
+	baseURL := fmt.Sprintf("http://%s", addr)
+	if addr[0] == ':' {
+		baseURL = fmt.Sprintf("http://localhost%s", addr)
+	}
 
-	fmt.Printf("SSE server starting on %s\n", addr)
+	oauthServer, err := server.NewOAuthHTTPServer(mcpSrv, "sse", baseURL)
+	if err != nil {
+		return fmt.Errorf("failed to create OAuth SSE server: %w", err)
+	}
+
+	fmt.Printf("SSE server with Google OAuth authentication starting on %s\n", addr)
 	fmt.Printf("  SSE endpoint: /sse\n")
 	fmt.Printf("  Message endpoint: /message\n")
+	fmt.Printf("  OAuth metadata: /.well-known/oauth-protected-resource\n")
+	fmt.Printf("  Authorization Server: https://accounts.google.com\n")
+	fmt.Println("\nClients must authenticate with Google OAuth to access this server.")
+	fmt.Println("The MCP client (e.g., Cursor, Claude Desktop) will handle the OAuth flow automatically.")
 
 	serverDone := make(chan error, 1)
 	go func() {
 		defer close(serverDone)
-		if err := sseServer.Start(addr); err != nil {
+		if err := oauthServer.Start(addr); err != nil {
 			serverDone <- err
 		}
 	}()
@@ -194,7 +201,7 @@ func runSSEServer(mcpSrv *mcpserver.MCPServer, addr string, ctx context.Context,
 		fmt.Println("Shutdown signal received, stopping SSE server...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30)
 		defer cancel()
-		if err := sseServer.Shutdown(shutdownCtx); err != nil {
+		if err := oauthServer.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("error shutting down SSE server: %w", err)
 		}
 	case err := <-serverDone:
@@ -209,17 +216,31 @@ func runSSEServer(mcpSrv *mcpserver.MCPServer, addr string, ctx context.Context,
 }
 
 func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, addr string, ctx context.Context, debugMode bool) error {
-	httpServer := mcpserver.NewStreamableHTTPServer(mcpSrv,
-		mcpserver.WithEndpointPath("/mcp"),
-	)
+	// Create OAuth-enabled HTTP server
+	// Base URL should be the full URL where the server is accessible
+	// For development, use http://localhost:8080
+	// For production, use the actual HTTPS URL
+	baseURL := fmt.Sprintf("http://%s", addr)
+	if addr[0] == ':' {
+		baseURL = fmt.Sprintf("http://localhost%s", addr)
+	}
 
-	fmt.Printf("Streamable HTTP server starting on %s\n", addr)
+	oauthServer, err := server.NewOAuthHTTPServer(mcpSrv, "streamable-http", baseURL)
+	if err != nil {
+		return fmt.Errorf("failed to create OAuth HTTP server: %w", err)
+	}
+
+	fmt.Printf("Streamable HTTP server with Google OAuth authentication starting on %s\n", addr)
 	fmt.Printf("  HTTP endpoint: /mcp\n")
+	fmt.Printf("  OAuth metadata: /.well-known/oauth-protected-resource\n")
+	fmt.Printf("  Authorization Server: https://accounts.google.com\n")
+	fmt.Println("\nClients must authenticate with Google OAuth to access this server.")
+	fmt.Println("The MCP client (e.g., Cursor, Claude Desktop) will handle the OAuth flow automatically.")
 
 	serverDone := make(chan error, 1)
 	go func() {
 		defer close(serverDone)
-		if err := httpServer.Start(addr); err != nil {
+		if err := oauthServer.Start(addr); err != nil {
 			serverDone <- err
 		}
 	}()
@@ -229,7 +250,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, addr string, ctx conte
 		fmt.Println("Shutdown signal received, stopping HTTP server...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30)
 		defer cancel()
-		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		if err := oauthServer.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("error shutting down HTTP server: %w", err)
 		}
 	case err := <-serverDone:

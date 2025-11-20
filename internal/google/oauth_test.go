@@ -1,7 +1,6 @@
 package google
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -124,31 +123,7 @@ func TestMigrateDefaultToken(t *testing.T) {
 	}
 }
 
-func TestSaveTokenForAccount(t *testing.T) {
-	// This test requires a valid OAuth setup, so we'll just test validation
-	ctx := context.Background()
-
-	tests := []struct {
-		name    string
-		account string
-		wantErr bool
-	}{
-		{"empty account", "", true},
-		{"invalid account", "invalid account", true},
-		{"valid account (will fail on exchange)", "test", true}, // Will fail because no valid auth code
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := SaveTokenForAccount(ctx, tt.account, "dummy_code")
-			if (err != nil) != tt.wantErr {
-				t.Errorf("SaveTokenForAccount() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestGetAuthURLForAccount(t *testing.T) {
+func TestGetAuthenticationErrorMessage(t *testing.T) {
 	tests := []struct {
 		name    string
 		account string
@@ -160,16 +135,17 @@ func TestGetAuthURLForAccount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			url := GetAuthURLForAccount(tt.account)
-			if url == "" {
-				t.Error("GetAuthURLForAccount() should return non-empty URL")
+			msg := GetAuthenticationErrorMessage(tt.account)
+			if msg == "" {
+				t.Error("GetAuthenticationErrorMessage() should return non-empty message")
 			}
-			// Check that URL contains state parameter with account
-			if tt.account != "" {
-				expectedState := "state-" + tt.account
-				if !contains(url, expectedState) {
-					t.Errorf("GetAuthURLForAccount() URL should contain state=%s", expectedState)
-				}
+			// Check that message mentions the account
+			if !contains(msg, tt.account) {
+				t.Errorf("GetAuthenticationErrorMessage() should mention account %s", tt.account)
+			}
+			// Check that message mentions OAuth
+			if !contains(msg, "OAuth") {
+				t.Error("GetAuthenticationErrorMessage() should mention OAuth")
 			}
 		})
 	}
@@ -183,13 +159,6 @@ func TestDefaultAccountFunctions(t *testing.T) {
 	legacyResult := HasToken()
 	if defaultResult != legacyResult {
 		t.Error("HasToken() should return same result as HasTokenForAccount('default')")
-	}
-
-	// Test GetAuthURL
-	defaultURL := GetAuthURLForAccount("default")
-	legacyURL := GetAuthURL()
-	if defaultURL != legacyURL {
-		t.Error("GetAuthURL() should return same URL as GetAuthURLForAccount('default')")
 	}
 }
 

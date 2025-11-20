@@ -10,6 +10,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tasks"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
@@ -30,7 +31,7 @@ func getTasksClient(ctx context.Context, account string, sc *server.ServerContex
 	if client == nil {
 		// Check if token exists before trying to create client
 		if !tasks.HasTokenForAccount(account) {
-			authURL := tasks.GetAuthURLForAccount(account)
+			authURL := google.GetAuthenticationErrorMessage(account)
 			return nil, fmt.Errorf(`Google OAuth token not found for account "%s". To authorize access:
 
 1. Visit this URL in your browser:

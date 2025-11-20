@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 // Store manages OAuth clients, tokens, and authorization codes in memory
@@ -13,6 +15,8 @@ type Store struct {
 	tokens             map[string]*Token // access token -> Token
 	refreshTokens      map[string]*Token // refresh token -> Token
 	authorizationCodes map[string]*AuthorizationCode
+	googleTokens       map[string]*oauth2.Token   // user email -> Google token
+	googleUserInfo     map[string]*GoogleUserInfo // user email -> Google user info
 }
 
 // NewStore creates a new in-memory OAuth store
@@ -22,6 +26,8 @@ func NewStore() *Store {
 		tokens:             make(map[string]*Token),
 		refreshTokens:      make(map[string]*Token),
 		authorizationCodes: make(map[string]*AuthorizationCode),
+		googleTokens:       make(map[string]*oauth2.Token),
+		googleUserInfo:     make(map[string]*GoogleUserInfo),
 	}
 
 	// Start background cleanup goroutine
@@ -295,5 +301,79 @@ func (s *Store) Stats() map[string]int {
 		"tokens":              len(s.tokens),
 		"refresh_tokens":      len(s.refreshTokens),
 		"authorization_codes": len(s.authorizationCodes),
+		"google_tokens":       len(s.googleTokens),
 	}
+}
+
+// SaveGoogleToken saves a Google OAuth token for a user
+func (s *Store) SaveGoogleToken(email string, token *oauth2.Token) error {
+	if email == "" {
+		return fmt.Errorf("email cannot be empty")
+	}
+	if token == nil {
+		return fmt.Errorf("token cannot be nil")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.googleTokens[email] = token
+	return nil
+}
+
+// GetGoogleToken retrieves a Google OAuth token for a user
+func (s *Store) GetGoogleToken(email string) (*oauth2.Token, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	token, ok := s.googleTokens[email]
+	if !ok {
+		return nil, fmt.Errorf("Google token not found for user: %s", email)
+	}
+
+	// Check if token is expired
+	if token.Expiry.Before(time.Now()) {
+		return nil, fmt.Errorf("Google token expired for user: %s", email)
+	}
+
+	return token, nil
+}
+
+// DeleteGoogleToken removes a Google OAuth token for a user
+func (s *Store) DeleteGoogleToken(email string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.googleTokens, email)
+	delete(s.googleUserInfo, email)
+	return nil
+}
+
+// SaveGoogleUserInfo saves Google user info
+func (s *Store) SaveGoogleUserInfo(email string, userInfo *GoogleUserInfo) error {
+	if email == "" {
+		return fmt.Errorf("email cannot be empty")
+	}
+	if userInfo == nil {
+		return fmt.Errorf("userInfo cannot be nil")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.googleUserInfo[email] = userInfo
+	return nil
+}
+
+// GetGoogleUserInfo retrieves Google user info
+func (s *Store) GetGoogleUserInfo(email string) (*GoogleUserInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	userInfo, ok := s.googleUserInfo[email]
+	if !ok {
+		return nil, fmt.Errorf("Google user info not found for user: %s", email)
+	}
+
+	return userInfo, nil
 }

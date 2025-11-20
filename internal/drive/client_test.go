@@ -245,20 +245,6 @@ func TestHasToken(t *testing.T) {
 	_ = HasTokenForAccount("test")
 }
 
-func TestGetAuthURL(t *testing.T) {
-	// This test just ensures the functions exist and can be called
-	// Actual functionality is tested in the google package
-	url := GetAuthURL()
-	if url == "" {
-		t.Error("Expected non-empty auth URL")
-	}
-
-	url = GetAuthURLForAccount("test")
-	if url == "" {
-		t.Error("Expected non-empty auth URL for account")
-	}
-}
-
 func TestFolderMimeType(t *testing.T) {
 	expectedMimeType := "application/vnd.google-apps.folder"
 	if FolderMimeType != expectedMimeType {

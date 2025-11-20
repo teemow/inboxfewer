@@ -12,6 +12,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/gmail"
+	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
@@ -137,7 +138,7 @@ func handleListAttachments(ctx context.Context, request mcp.CallToolRequest, sc 
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
-			authURL := gmail.GetAuthURLForAccount(account)
+			authURL := google.GetAuthenticationErrorMessage(account)
 			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
@@ -223,7 +224,7 @@ func handleGetAttachment(ctx context.Context, request mcp.CallToolRequest, sc *s
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
-			authURL := gmail.GetAuthURLForAccount(account)
+			authURL := google.GetAuthenticationErrorMessage(account)
 			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
@@ -291,7 +292,7 @@ func handleGetMessageBodies(ctx context.Context, request mcp.CallToolRequest, sc
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
-			authURL := gmail.GetAuthURLForAccount(account)
+			authURL := google.GetAuthenticationErrorMessage(account)
 			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
@@ -345,7 +346,7 @@ func handleExtractDocLinks(ctx context.Context, request mcp.CallToolRequest, sc 
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
-			authURL := gmail.GetAuthURLForAccount(account)
+			authURL := google.GetAuthenticationErrorMessage(account)
 			errorMsg := fmt.Sprintf(`Gmail OAuth token not found. To authorize access:
 
 1. Visit this URL in your browser:
@@ -423,20 +424,7 @@ func handleTransferAttachmentsToDrive(ctx context.Context, request mcp.CallToolR
 	gmailClient := sc.GmailClientForAccount(account)
 	if gmailClient == nil {
 		if !gmail.HasTokenForAccount(account) {
-			authURL := gmail.GetAuthURLForAccount(account)
-			errorMsg := fmt.Sprintf(`Gmail OAuth token not found for account "%s". To authorize access:
-
-1. Visit this URL in your browser:
-   %s
-
-2. Sign in with your Google account
-3. Grant access to Gmail
-4. Copy the authorization code
-
-5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
-
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL)
+			errorMsg := google.GetAuthenticationErrorMessage(account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
@@ -452,20 +440,7 @@ Note: You only need to authorize once. The tokens will be automatically refreshe
 	driveClient := sc.DriveClientForAccount(account)
 	if driveClient == nil {
 		if !drive.HasTokenForAccount(account) {
-			authURL := drive.GetAuthURLForAccount(account)
-			errorMsg := fmt.Sprintf(`Google Drive OAuth token not found for account "%s". To authorize access:
-
-1. Visit this URL in your browser:
-   %s
-
-2. Sign in with your Google account
-3. Grant access to Google Drive
-4. Copy the authorization code
-
-5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool to complete authentication.
-
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL)
+			errorMsg := google.GetAuthenticationErrorMessage(account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 

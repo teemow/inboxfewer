@@ -2,118 +2,95 @@ package oauth
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
+
+	"golang.org/x/oauth2"
 )
 
 // contextKey is the type for context keys
 type contextKey string
 
 const (
-	// tokenContextKey is the key for storing the token in the request context
-	tokenContextKey contextKey = "oauth_token"
+	// userContextKey is the key for storing the user info in the request context
+	userContextKey contextKey = "oauth_user"
 
-	// clientContextKey is the key for storing the client in the request context
-	clientContextKey contextKey = "oauth_client"
+	// tokenContextKey is the key for storing the Google token in the request context
+	tokenContextKey contextKey = "google_token"
 )
 
-// ValidateToken is middleware that validates the OAuth access token
-func (h *Handler) ValidateToken(next http.Handler) http.Handler {
+// ValidateGoogleToken is middleware that validates Google OAuth tokens
+// It validates the token with Google's userinfo endpoint and stores user info in context
+func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract token from Authorization header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			h.writeError(w, "invalid_token", "Missing Authorization header", http.StatusUnauthorized)
+			// Return 401 with WWW-Authenticate header pointing to resource metadata
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+				`Bearer realm="%s", resource_metadata="/.well-known/oauth-protected-resource"`,
+				h.config.Resource,
+			))
+			h.writeUnauthorizedError(w, "missing_token", "Missing Authorization header")
 			return
 		}
 
 		// Check for Bearer token
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			h.writeError(w, "invalid_token", "Invalid Authorization header format", http.StatusUnauthorized)
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+				`Bearer realm="%s", resource_metadata="/.well-known/oauth-protected-resource", error="invalid_token", error_description="Invalid Authorization header format"`,
+				h.config.Resource,
+			))
+			h.writeUnauthorizedError(w, "invalid_token", "Invalid Authorization header format")
 			return
 		}
 
 		accessToken := parts[1]
 
-		// Get token from store
-		token, err := h.store.GetToken(accessToken)
+		// Create OAuth2 token
+		token := &oauth2.Token{
+			AccessToken: accessToken,
+			TokenType:   "Bearer",
+		}
+
+		// Validate token by calling Google's userinfo endpoint
+		userInfo, err := h.getUserInfoFromGoogle(r.Context(), token)
 		if err != nil {
-			h.writeError(w, "invalid_token", "Invalid or expired token", http.StatusUnauthorized)
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+				`Bearer realm="%s", resource_metadata="/.well-known/oauth-protected-resource", error="invalid_token", error_description="Token validation failed"`,
+				h.config.Resource,
+			))
+			h.writeUnauthorizedError(w, "invalid_token", fmt.Sprintf("Token validation failed: %v", err))
 			return
 		}
 
-		// Validate resource (RFC 8707)
-		if token.Resource != h.config.Resource {
-			h.writeError(w, "invalid_token", "Token not valid for this resource", http.StatusForbidden)
-			return
-		}
+		// Store user info and token in context
+		ctx := context.WithValue(r.Context(), userContextKey, userInfo)
+		ctx = context.WithValue(ctx, tokenContextKey, token)
 
-		// Get client info
-		client, err := h.store.GetClient(token.ClientID)
-		if err != nil {
-			h.writeError(w, "invalid_token", "Client not found", http.StatusUnauthorized)
-			return
+		// Save the token for this user so we can use it to access Google APIs
+		// Use email as the account identifier
+		if err := h.store.SaveGoogleToken(userInfo.Email, token); err != nil {
+			// Log but don't fail - we can still process the request
+			fmt.Printf("Warning: Failed to save Google token for user %s: %v\n", userInfo.Email, err)
 		}
-
-		// Add token and client to request context
-		ctx := context.WithValue(r.Context(), tokenContextKey, token)
-		ctx = context.WithValue(ctx, clientContextKey, client)
 
 		// Call next handler
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// ValidateTokenFunc is a function-based middleware that validates the OAuth access token
-func (h *Handler) ValidateTokenFunc(next http.HandlerFunc) http.HandlerFunc {
-	return h.ValidateToken(next).ServeHTTP
+// ValidateGoogleTokenFunc is a function-based middleware that validates Google OAuth tokens
+func (h *Handler) ValidateGoogleTokenFunc(next http.HandlerFunc) http.HandlerFunc {
+	return h.ValidateGoogleToken(next).ServeHTTP
 }
 
-// GetTokenFromContext retrieves the token from the request context
-func GetTokenFromContext(ctx context.Context) (*Token, bool) {
-	token, ok := ctx.Value(tokenContextKey).(*Token)
-	return token, ok
-}
-
-// GetClientFromContext retrieves the client from the request context
-func GetClientFromContext(ctx context.Context) (*ClientInfo, bool) {
-	client, ok := ctx.Value(clientContextKey).(*ClientInfo)
-	return client, ok
-}
-
-// RequireScope is middleware that requires specific scopes
-func (h *Handler) RequireScope(scopes ...string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token, ok := GetTokenFromContext(r.Context())
-			if !ok {
-				h.writeError(w, "invalid_token", "No token in context", http.StatusUnauthorized)
-				return
-			}
-
-			// Check if token has required scopes
-			tokenScopes := strings.Split(token.Scope, " ")
-			scopeMap := make(map[string]bool)
-			for _, scope := range tokenScopes {
-				scopeMap[scope] = true
-			}
-
-			for _, requiredScope := range scopes {
-				if !scopeMap[requiredScope] {
-					h.writeError(w, "insufficient_scope", "Token missing required scope: "+requiredScope, http.StatusForbidden)
-					return
-				}
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// OptionalToken is middleware that optionally validates the OAuth access token
+// OptionalGoogleToken is middleware that optionally validates Google OAuth tokens
 // If a token is present, it validates it; if not, it continues without authentication
-func (h *Handler) OptionalToken(next http.Handler) http.Handler {
+func (h *Handler) OptionalGoogleToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract token from Authorization header
 		authHeader := r.Header.Get("Authorization")
@@ -126,37 +103,93 @@ func (h *Handler) OptionalToken(next http.Handler) http.Handler {
 		// Token provided, validate it
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			h.writeError(w, "invalid_token", "Invalid Authorization header format", http.StatusUnauthorized)
+			h.writeUnauthorizedError(w, "invalid_token", "Invalid Authorization header format")
 			return
 		}
 
 		accessToken := parts[1]
 
-		// Get token from store
-		token, err := h.store.GetToken(accessToken)
+		// Create OAuth2 token
+		token := &oauth2.Token{
+			AccessToken: accessToken,
+			TokenType:   "Bearer",
+		}
+
+		// Validate token by calling Google's userinfo endpoint
+		userInfo, err := h.getUserInfoFromGoogle(r.Context(), token)
 		if err != nil {
-			h.writeError(w, "invalid_token", "Invalid or expired token", http.StatusUnauthorized)
+			h.writeUnauthorizedError(w, "invalid_token", fmt.Sprintf("Token validation failed: %v", err))
 			return
 		}
 
-		// Validate resource
-		if token.Resource != h.config.Resource {
-			h.writeError(w, "invalid_token", "Token not valid for this resource", http.StatusForbidden)
-			return
-		}
+		// Store user info and token in context
+		ctx := context.WithValue(r.Context(), userContextKey, userInfo)
+		ctx = context.WithValue(ctx, tokenContextKey, token)
 
-		// Get client info
-		client, err := h.store.GetClient(token.ClientID)
-		if err != nil {
-			h.writeError(w, "invalid_token", "Client not found", http.StatusUnauthorized)
-			return
+		// Save the token for this user
+		if err := h.store.SaveGoogleToken(userInfo.Email, token); err != nil {
+			fmt.Printf("Warning: Failed to save Google token for user %s: %v\n", userInfo.Email, err)
 		}
-
-		// Add token and client to request context
-		ctx := context.WithValue(r.Context(), tokenContextKey, token)
-		ctx = context.WithValue(ctx, clientContextKey, client)
 
 		// Call next handler
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// getUserInfoFromGoogle validates a token by calling Google's userinfo endpoint
+func (h *Handler) getUserInfoFromGoogle(ctx context.Context, token *oauth2.Token) (*GoogleUserInfo, error) {
+	// Create HTTP client with the token
+	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(token))
+
+	// Call Google's userinfo endpoint
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("userinfo request failed with status %d", resp.StatusCode)
+	}
+
+	// Parse user info
+	var userInfo GoogleUserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return nil, fmt.Errorf("failed to decode user info: %w", err)
+	}
+
+	return &userInfo, nil
+}
+
+// GetUserFromContext retrieves the Google user info from the request context
+func GetUserFromContext(ctx context.Context) (*GoogleUserInfo, bool) {
+	userInfo, ok := ctx.Value(userContextKey).(*GoogleUserInfo)
+	return userInfo, ok
+}
+
+// GetGoogleTokenFromContext retrieves the Google token from the request context
+func GetGoogleTokenFromContext(ctx context.Context) (*oauth2.Token, bool) {
+	token, ok := ctx.Value(tokenContextKey).(*oauth2.Token)
+	return token, ok
+}
+
+// writeUnauthorizedError writes an OAuth error response with 401 status
+func (h *Handler) writeUnauthorizedError(w http.ResponseWriter, errorCode, description string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	json.NewEncoder(w).Encode(ErrorResponse{
+		Error:            errorCode,
+		ErrorDescription: description,
+	})
+}
+
+// CacheGoogleToken caches a Google token for future use
+// This can be called by endpoints that receive tokens through other means
+func (h *Handler) CacheGoogleToken(email string, token *oauth2.Token) error {
+	return h.store.SaveGoogleToken(email, token)
+}
+
+// GetCachedGoogleToken retrieves a cached Google token for a user
+func (h *Handler) GetCachedGoogleToken(email string) (*oauth2.Token, error) {
+	return h.store.GetGoogleToken(email)
 }

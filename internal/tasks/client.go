@@ -1,11 +1,8 @@
 package tasks
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"time"
 
@@ -36,57 +33,13 @@ func HasToken() bool {
 	return google.HasToken()
 }
 
-// GetAuthURLForAccount returns the OAuth URL for user authorization for a specific account
-func GetAuthURLForAccount(account string) string {
-	return google.GetAuthURLForAccount(account)
-}
-
-// GetAuthURL returns the OAuth URL for user authorization for the default account
-func GetAuthURL() string {
-	return google.GetAuthURL()
-}
-
-// SaveTokenForAccount exchanges an authorization code for tokens and saves them for a specific account
-func SaveTokenForAccount(ctx context.Context, account string, authCode string) error {
-	return google.SaveTokenForAccount(ctx, account, authCode)
-}
-
-// SaveToken exchanges an authorization code for tokens and saves them for the default account
-func SaveToken(ctx context.Context, authCode string) error {
-	return google.SaveToken(ctx, authCode)
-}
-
 // NewClientForAccount creates a new Tasks client with OAuth2 authentication for a specific account
-// For CLI usage, it will prompt for auth code via stdin if no token exists
-// For MCP usage, it will return an error if no token exists
+// The OAuth token must be provided by the MCP client through the OAuth middleware
 func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
-	// Try to get existing token
+	// Get HTTP client with OAuth token
 	client, err := google.GetHTTPClientForAccount(ctx, account)
 	if err != nil {
-		// Check if we're in a terminal (CLI mode)
-		if isTerminal() {
-			authURL := google.GetAuthURLForAccount(account)
-			log.Printf("Go to %v", authURL)
-			log.Printf("Authorizing for account: %s", account)
-			io.WriteString(os.Stdout, "Enter code> ")
-
-			bs := bufio.NewScanner(os.Stdin)
-			if !bs.Scan() {
-				return nil, io.EOF
-			}
-			code := bs.Text()
-			if err := google.SaveTokenForAccount(ctx, account, code); err != nil {
-				return nil, err
-			}
-			// Try again with the new token
-			client, err = google.GetHTTPClientForAccount(ctx, account)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// MCP mode - return error with instructions
-			return nil, fmt.Errorf("no valid Google OAuth token found for account %s. Use google_get_auth_url and google_save_auth_code tools to authenticate", account)
-		}
+		return nil, fmt.Errorf("no valid Google OAuth token found for account %s: %w. Please authenticate with Google through your MCP client", account, err)
 	}
 
 	svc, err := tasks.NewService(ctx, option.WithHTTPClient(client))

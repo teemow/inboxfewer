@@ -78,29 +78,27 @@ func HasToken() bool {
 	return HasTokenForAccount(defaultAccount)
 }
 
-// GetAuthURLForAccount returns the OAuth URL for user authorization for a specific account
-func GetAuthURLForAccount(account string) string {
-	conf := getOAuthConfig()
-	// Include account name in state for better user experience
-	return conf.AuthCodeURL(fmt.Sprintf("state-%s", account))
+// GetAuthenticationErrorMessage returns a user-friendly error message when authentication is required
+func GetAuthenticationErrorMessage(account string) string {
+	return fmt.Sprintf(`Google OAuth authentication required for account "%s".
+
+For HTTP/SSE transports:
+  Your MCP client (e.g., Cursor, Claude Desktop) will automatically handle
+  the OAuth flow with Google. Make sure you're connected to an MCP server
+  that supports OAuth authentication.
+
+For STDIO transport:
+  Authentication tokens should be managed through environment variables or
+  the Google Cloud SDK.
+
+Account: %s`, account, account)
 }
 
-// GetAuthURL returns the OAuth URL for user authorization for the default account
-func GetAuthURL() string {
-	return GetAuthURLForAccount(defaultAccount)
-}
-
-// SaveTokenForAccount exchanges an authorization code for tokens and saves them for a specific account
-func SaveTokenForAccount(ctx context.Context, account string, authCode string) error {
+// SaveTokenForAccount saves a Google OAuth token for a specific account
+// This is called by the OAuth middleware after validating the user's token
+func SaveTokenForAccount(ctx context.Context, account string, token *oauth2.Token) error {
 	if err := validateAccountName(account); err != nil {
 		return fmt.Errorf("invalid account name: %w", err)
-	}
-
-	conf := getOAuthConfig()
-
-	t, err := conf.Exchange(ctx, authCode)
-	if err != nil {
-		return fmt.Errorf("failed to exchange auth code for account %s: %w", account, err)
 	}
 
 	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
@@ -110,18 +108,13 @@ func SaveTokenForAccount(ctx context.Context, account string, authCode string) e
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
-	tokenData := t.AccessToken + " " + t.RefreshToken
+	tokenData := token.AccessToken + " " + token.RefreshToken
 	if err := os.WriteFile(tokenFile, []byte(tokenData), 0600); err != nil {
 		return fmt.Errorf("failed to write token file for account %s: %w", account, err)
 	}
 
 	log.Printf("Saved OAuth token for account: %s", account)
 	return nil
-}
-
-// SaveToken exchanges an authorization code for tokens and saves them for the default account
-func SaveToken(ctx context.Context, authCode string) error {
-	return SaveTokenForAccount(ctx, defaultAccount, authCode)
 }
 
 // getOAuthConfig returns the OAuth2 configuration for all Google services

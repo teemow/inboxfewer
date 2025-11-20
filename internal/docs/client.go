@@ -33,28 +33,8 @@ func HasToken() bool {
 	return google.HasToken()
 }
 
-// GetAuthURLForAccount returns the OAuth URL for user authorization for a specific account
-func GetAuthURLForAccount(account string) string {
-	return google.GetAuthURLForAccount(account)
-}
-
-// GetAuthURL returns the OAuth URL for user authorization for the default account
-func GetAuthURL() string {
-	return google.GetAuthURL()
-}
-
-// SaveTokenForAccount exchanges an authorization code for tokens and saves them for a specific account
-func SaveTokenForAccount(ctx context.Context, account string, authCode string) error {
-	return google.SaveTokenForAccount(ctx, account, authCode)
-}
-
-// SaveToken exchanges an authorization code for tokens and saves them for the default account
-func SaveToken(ctx context.Context, authCode string) error {
-	return google.SaveToken(ctx, authCode)
-}
-
 // NewClientForAccount creates a new Google Docs client with OAuth2 authentication for a specific account
-// Returns an error if no valid token exists - use HasTokenForAccount() to check first
+// The OAuth token must be provided by the MCP client through the OAuth middleware
 func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
 	client, err := google.GetHTTPClientForAccount(ctx, account)
 	if err != nil {
