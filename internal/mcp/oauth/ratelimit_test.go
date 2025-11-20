@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewRateLimiter(t *testing.T) {
-	rl := NewRateLimiter(10, 20)
+	rl := NewRateLimiter(10, 20, false)
 	if rl == nil {
 		t.Fatal("NewRateLimiter returned nil")
 	}
@@ -18,10 +18,13 @@ func TestNewRateLimiter(t *testing.T) {
 	if rl.burst != 20 {
 		t.Errorf("Expected burst 20, got %d", rl.burst)
 	}
+	if rl.trustProxy != false {
+		t.Errorf("Expected trustProxy false, got %v", rl.trustProxy)
+	}
 }
 
 func TestRateLimiter_Allow(t *testing.T) {
-	rl := NewRateLimiter(10, 10) // 10 requests per second, burst of 10
+	rl := NewRateLimiter(10, 10, false) // 10 requests per second, burst of 10
 
 	// First 10 requests should be allowed (burst)
 	for i := 0; i < 10; i++ {
@@ -45,7 +48,7 @@ func TestRateLimiter_Allow(t *testing.T) {
 }
 
 func TestRateLimiter_MultipleIPs(t *testing.T) {
-	rl := NewRateLimiter(10, 5) // 10 requests per second, burst of 5
+	rl := NewRateLimiter(10, 5, false) // 10 requests per second, burst of 5
 
 	// Exhaust burst for first IP
 	for i := 0; i < 5; i++ {
@@ -73,7 +76,7 @@ func TestRateLimiter_MultipleIPs(t *testing.T) {
 }
 
 func TestRateLimiter_TokenReplenishment(t *testing.T) {
-	rl := NewRateLimiter(100, 2) // 100 requests per second, burst of 2
+	rl := NewRateLimiter(100, 2, false) // 100 requests per second, burst of 2
 
 	// Use up burst
 	if !rl.Allow("192.168.1.1") {
@@ -179,41 +182,67 @@ func TestRateLimitMiddleware_NoRateLimiter(t *testing.T) {
 
 func TestGetClientIP(t *testing.T) {
 	tests := []struct {
-		name         string
-		remoteAddr   string
+		name          string
+		remoteAddr    string
 		xForwardedFor string
-		xRealIP      string
-		expectedIP   string
+		xRealIP       string
+		trustProxy    bool
+		expectedIP    string
 	}{
 		{
-			name:       "RemoteAddr only",
+			name:       "RemoteAddr only - no proxy trust",
 			remoteAddr: "192.168.1.1:1234",
+			trustProxy: false,
 			expectedIP: "192.168.1.1",
 		},
 		{
-			name:          "X-Forwarded-For single IP",
+			name:          "X-Forwarded-For with trust proxy",
 			remoteAddr:    "10.0.0.1:1234",
 			xForwardedFor: "203.0.113.1",
+			trustProxy:    true,
 			expectedIP:    "203.0.113.1",
 		},
 		{
-			name:          "X-Forwarded-For multiple IPs",
+			name:          "X-Forwarded-For without trust proxy (should ignore)",
+			remoteAddr:    "10.0.0.1:1234",
+			xForwardedFor: "203.0.113.1",
+			trustProxy:    false,
+			expectedIP:    "10.0.0.1",
+		},
+		{
+			name:          "X-Forwarded-For multiple IPs with trust",
 			remoteAddr:    "10.0.0.1:1234",
 			xForwardedFor: "203.0.113.1, 198.51.100.1, 10.0.0.1",
+			trustProxy:    true,
 			expectedIP:    "203.0.113.1",
 		},
 		{
-			name:       "X-Real-IP",
+			name:       "X-Real-IP with trust proxy",
 			remoteAddr: "10.0.0.1:1234",
 			xRealIP:    "203.0.113.1",
+			trustProxy: true,
 			expectedIP: "203.0.113.1",
+		},
+		{
+			name:       "X-Real-IP without trust proxy (should ignore)",
+			remoteAddr: "10.0.0.1:1234",
+			xRealIP:    "203.0.113.1",
+			trustProxy: false,
+			expectedIP: "10.0.0.1",
 		},
 		{
 			name:          "X-Forwarded-For takes precedence over X-Real-IP",
 			remoteAddr:    "10.0.0.1:1234",
 			xForwardedFor: "203.0.113.1",
 			xRealIP:       "198.51.100.1",
+			trustProxy:    true,
 			expectedIP:    "203.0.113.1",
+		},
+		{
+			name:       "IPv6 address",
+			remoteAddr: "[::1]:1234",
+			trustProxy: false,
+			expectedIP: "[",
 		},
 	}
 
@@ -228,9 +257,47 @@ func TestGetClientIP(t *testing.T) {
 				req.Header.Set("X-Real-IP", tt.xRealIP)
 			}
 
-			ip := getClientIP(req)
+			ip := getClientIP(req, tt.trustProxy)
 			if ip != tt.expectedIP {
 				t.Errorf("Expected IP %s, got %s", tt.expectedIP, ip)
+			}
+		})
+	}
+}
+
+func TestExtractIPFromAddr(t *testing.T) {
+	tests := []struct {
+		name     string
+		addr     string
+		expected string
+	}{
+		{
+			name:     "IPv4 with port",
+			addr:     "192.168.1.1:1234",
+			expected: "192.168.1.1",
+		},
+		{
+			name:     "IPv4 without port",
+			addr:     "192.168.1.1",
+			expected: "192.168.1.1",
+		},
+		{
+			name:     "IPv6 with port",
+			addr:     "[::1]:8080",
+			expected: "[",
+		},
+		{
+			name:     "Empty string",
+			addr:     "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractIPFromAddr(tt.addr)
+			if result != tt.expected {
+				t.Errorf("extractIPFromAddr(%q) = %q, want %q", tt.addr, result, tt.expected)
 			}
 		})
 	}

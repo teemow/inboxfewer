@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 // Config holds the OAuth handler configuration
@@ -24,6 +27,10 @@ type Config struct {
 
 	// CleanupInterval is how often to cleanup expired tokens (default: 1 minute)
 	CleanupInterval time.Duration
+
+	// TrustProxy indicates whether to trust X-Forwarded-For and X-Real-IP headers
+	// Only set to true if the server is behind a trusted proxy
+	TrustProxy bool
 }
 
 // Handler implements OAuth 2.1 endpoints for the MCP server
@@ -32,6 +39,7 @@ type Handler struct {
 	config      *Config      // Lowercase for internal use, exposed via getter if needed
 	store       *Store
 	rateLimiter *RateLimiter // Optional rate limiter for protecting endpoints
+	oauthConfig *oauth2.Config // Google OAuth config for token refresh
 }
 
 // NewHandler creates a new OAuth handler
@@ -67,13 +75,22 @@ func NewHandler(config *Config) (*Handler, error) {
 		if burst == 0 {
 			burst = config.RateLimitRate * 2 // Default burst is 2x rate
 		}
-		rateLimiter = NewRateLimiter(config.RateLimitRate, burst)
+		rateLimiter = NewRateLimiter(config.RateLimitRate, burst, config.TrustProxy)
+	}
+
+	// Create Google OAuth config for token refresh
+	// Note: ClientID and ClientSecret would need to be provided for actual refresh
+	// For now, we create a minimal config that can be used with existing tokens
+	oauthConfig := &oauth2.Config{
+		Endpoint: google.Endpoint,
+		Scopes:   config.SupportedScopes,
 	}
 
 	return &Handler{
 		config:      config,
 		store:       NewStoreWithInterval(config.CleanupInterval),
 		rateLimiter: rateLimiter,
+		oauthConfig: oauthConfig,
 	}, nil
 }
 

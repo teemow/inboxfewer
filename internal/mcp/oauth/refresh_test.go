@@ -149,4 +149,3 @@ func TestRefreshGoogleToken_NoRefreshToken(t *testing.T) {
 		t.Errorf("Expected 'no refresh token available' error, got: %v", err)
 	}
 }
-

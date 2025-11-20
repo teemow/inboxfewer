@@ -311,18 +311,32 @@ func (s *Store) cleanupExpiredTokens() {
 		if len(expiredTokens) > 0 || len(expiredCodes) > 0 || len(expiredGoogleTokens) > 0 {
 			s.mu.Lock()
 
+			// Re-check expiration under write lock to avoid race conditions
+			// Tokens might have been refreshed between read and write locks
 			for _, accessToken := range expiredTokens {
-				delete(s.tokens, accessToken)
+				if token, ok := s.tokens[accessToken]; ok && token.IsExpired() {
+					delete(s.tokens, accessToken)
+					// Also delete refresh token if it exists
+					if token.RefreshToken != "" {
+						delete(s.refreshTokens, token.RefreshToken)
+					}
+				}
 			}
-			for _, refreshToken := range expiredRefreshTokens {
-				delete(s.refreshTokens, refreshToken)
-			}
+			
+			// Re-check authorization codes
 			for _, code := range expiredCodes {
-				delete(s.authorizationCodes, code)
+				if authCode, ok := s.authorizationCodes[code]; ok && (authCode.IsExpired() || authCode.Used) {
+					delete(s.authorizationCodes, code)
+				}
 			}
+			
+			// Re-check Google tokens
+			currentTime := time.Now()
 			for _, email := range expiredGoogleTokens {
-				delete(s.googleTokens, email)
-				delete(s.googleUserInfo, email)
+				if token, ok := s.googleTokens[email]; ok && token.Expiry.Before(currentTime) {
+					delete(s.googleTokens, email)
+					delete(s.googleUserInfo, email)
+				}
 			}
 
 			s.mu.Unlock()

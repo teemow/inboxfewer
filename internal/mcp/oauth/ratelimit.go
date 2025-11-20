@@ -9,11 +9,12 @@ import (
 
 // RateLimiter implements a token bucket rate limiter per IP address
 type RateLimiter struct {
-	mu       sync.RWMutex
-	limiters map[string]*bucket
-	rate     int           // tokens per second
-	burst    int           // max burst size
-	cleanup  time.Duration // cleanup interval for inactive limiters
+	mu         sync.RWMutex
+	limiters   map[string]*bucket
+	rate       int           // tokens per second
+	burst      int           // max burst size
+	cleanup    time.Duration // cleanup interval for inactive limiters
+	trustProxy bool          // whether to trust proxy headers
 }
 
 // bucket represents a token bucket for rate limiting
@@ -24,13 +25,14 @@ type bucket struct {
 }
 
 // NewRateLimiter creates a new rate limiter
-// rate: tokens per second, burst: maximum burst size
-func NewRateLimiter(rate, burst int) *RateLimiter {
+// rate: tokens per second, burst: maximum burst size, trustProxy: whether to trust proxy headers
+func NewRateLimiter(rate, burst int, trustProxy bool) *RateLimiter {
 	rl := &RateLimiter{
-		limiters: make(map[string]*bucket),
-		rate:     rate,
-		burst:    burst,
-		cleanup:  5 * time.Minute,
+		limiters:   make(map[string]*bucket),
+		rate:       rate,
+		burst:      burst,
+		cleanup:    5 * time.Minute,
+		trustProxy: trustProxy,
 	}
 
 	// Start cleanup goroutine
@@ -106,12 +108,10 @@ func (h *Handler) RateLimitMiddleware(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract IP address
-		ip := getClientIP(r)
+		ip := getClientIP(r, h.rateLimiter.trustProxy)
 
 		if !h.rateLimiter.Allow(ip) {
 			w.Header().Set("Retry-After", "1")
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
 			h.writeError(w, "rate_limit_exceeded", 
 				fmt.Sprintf("Rate limit exceeded for %s. Please try again later", ip),
 				http.StatusTooManyRequests)
@@ -123,31 +123,39 @@ func (h *Handler) RateLimitMiddleware(next http.Handler) http.Handler {
 }
 
 // getClientIP extracts the client IP address from the request
-func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header (set by proxies)
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Take the first IP if multiple
-		for i := 0; i < len(xff); i++ {
-			if xff[i] == ',' {
-				return xff[:i]
+// trustProxy: if true, trust X-Forwarded-For and X-Real-IP headers (only if behind trusted proxy)
+func getClientIP(r *http.Request, trustProxy bool) string {
+	// Only trust proxy headers if explicitly configured
+	if trustProxy {
+		// Check X-Forwarded-For header (set by proxies)
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			// Take the first IP if multiple
+			for i := 0; i < len(xff); i++ {
+				if xff[i] == ',' {
+					return xff[:i]
+				}
 			}
+			return xff
 		}
-		return xff
+
+		// Check X-Real-IP header
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return xri
+		}
 	}
 
-	// Check X-Real-IP header
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
-	}
-
-	// Fall back to RemoteAddr
+	// Fall back to RemoteAddr (always trusted)
 	// RemoteAddr is in format "IP:port", extract just the IP
-	for i := 0; i < len(r.RemoteAddr); i++ {
-		if r.RemoteAddr[i] == ':' {
-			return r.RemoteAddr[:i]
+	return extractIPFromAddr(r.RemoteAddr)
+}
+
+// extractIPFromAddr extracts the IP address from "IP:port" format
+func extractIPFromAddr(addr string) string {
+	for i := 0; i < len(addr); i++ {
+		if addr[i] == ':' {
+			return addr[:i]
 		}
 	}
-
-	return r.RemoteAddr
+	return addr
 }
 

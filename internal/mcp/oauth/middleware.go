@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"golang.org/x/oauth2"
 )
@@ -56,7 +57,12 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 		TokenType:   "Bearer",
 	}
 
-	// Validate token by calling Google's userinfo endpoint
+	// Try to get cached token with refresh token and expiry info
+	// This allows us to refresh if needed
+	var cachedToken *oauth2.Token
+	var userEmail string
+	
+	// First validate to get user email, then check if we need refresh
 	userInfo, err := h.getUserInfoFromGoogle(r.Context(), token)
 	if err != nil {
 		// Provide more actionable error messages based on error type
@@ -70,15 +76,40 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 		h.writeUnauthorizedError(w, "invalid_token", errorDesc)
 		return
 	}
+	
+	userEmail = userInfo.Email
+	
+	// Try to get cached token to see if we have expiry info and refresh token
+	cachedToken, err = h.store.GetGoogleToken(userEmail)
+	if err == nil && cachedToken != nil {
+		// Check if cached token needs refresh (expires within 5 minutes)
+		if isTokenExpired(cachedToken, 5*time.Minute) && cachedToken.RefreshToken != "" {
+			// Attempt to refresh the token
+			newToken, refreshErr := refreshGoogleToken(r.Context(), cachedToken, h.oauthConfig)
+			if refreshErr == nil {
+				// Successfully refreshed - use the new token
+				token = newToken
+				cachedToken = newToken
+				// Save refreshed token
+				if saveErr := h.store.SaveGoogleToken(userEmail, newToken); saveErr != nil {
+					fmt.Printf("Warning: Failed to save refreshed token for user %s: %v\n", userEmail, saveErr)
+				}
+			} else {
+				// Refresh failed - log but continue with existing token
+				fmt.Printf("Warning: Failed to refresh token for user %s: %v\n", userEmail, refreshErr)
+			}
+		}
+	}
+	
 	// Store user info and token in context
 	ctx := context.WithValue(r.Context(), userContextKey, userInfo)
 	ctx = context.WithValue(ctx, tokenContextKey, token)
 
 	// Save the token for this user so we can use it to access Google APIs
 	// Use email as the account identifier
-	if err := h.store.SaveGoogleToken(userInfo.Email, token); err != nil {
+	if err := h.store.SaveGoogleToken(userEmail, token); err != nil {
 		// Log but don't fail - we can still process the request
-		fmt.Printf("Warning: Failed to save Google token for user %s: %v\n", userInfo.Email, err)
+		fmt.Printf("Warning: Failed to save Google token for user %s: %v\n", userEmail, err)
 	}
 
 	// Call next handler

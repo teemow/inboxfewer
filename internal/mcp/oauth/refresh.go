@@ -59,4 +59,3 @@ func (h *Handler) RefreshGoogleTokenIfNeeded(ctx context.Context, email string, 
 
 	return newToken, nil
 }
-
