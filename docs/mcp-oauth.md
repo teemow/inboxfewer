@@ -181,6 +181,77 @@ The MCP server requests the following Google OAuth scopes:
 - `https://www.googleapis.com/auth/meetings.space.readonly` - Access Google Meet recordings
 - `https://www.googleapis.com/auth/tasks` - Manage Google Tasks
 
+## Advanced Features
+
+### Rate Limiting
+
+The MCP server includes built-in rate limiting to protect against abuse:
+
+- **Per-IP Rate Limiting**: Each IP address has its own token bucket
+- **Configurable Limits**: Set both rate (requests/second) and burst size
+- **Automatic Cleanup**: Inactive rate limiters are removed after 10 minutes
+- **Graceful Degradation**: Returns `429 Too Many Requests` with `Retry-After` header
+
+**Configuration**:
+```go
+RateLimitRate:  10,  // 10 requests per second
+RateLimitBurst: 20,  // Allow burst of 20 requests
+```
+
+**Rate limit disabled**: Set `RateLimitRate` to `0` to disable rate limiting entirely.
+
+### Token Refresh
+
+The server automatically handles token refresh for long-running sessions:
+
+- **Proactive Refresh**: Tokens are refreshed 5 minutes before expiration
+- **Transparent**: Happens automatically during Google API calls
+- **Fallback**: If refresh fails, user is prompted to re-authenticate
+
+**How it works**:
+1. Google API clients check token expiry before each request
+2. If token expires within 5 minutes, refresh is attempted
+3. New token is stored in the OAuth store
+4. Request proceeds with fresh token
+
+### Token Revocation
+
+Administrators can revoke tokens to force re-authentication:
+
+**Revoke a specific user's token**:
+```go
+err := oauthHandler.RevokeToken("user@example.com")
+```
+
+**Via HTTP endpoint**:
+```bash
+curl -X POST https://mcp.example.com/oauth/revoke \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com"}'
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "message": "Token revoked for user@example.com"
+}
+```
+
+After revocation, the user must re-authenticate through their MCP client.
+
+### Enhanced Error Messages
+
+The server provides actionable error messages for common issues:
+
+| Error Type | User-Friendly Message |
+|------------|----------------------|
+| 401 Unauthorized | "Google token is invalid or expired. Please re-authenticate through your MCP client." |
+| 403 Forbidden | "Access denied by Google. Please ensure your token has the required scopes." |
+| Network errors | "Unable to verify token with Google due to network issues. Please try again." |
+| Rate limits | "Google API rate limit exceeded. Please wait a moment and try again." |
+| Server errors | "Google authentication service is temporarily unavailable. Please try again later." |
+
 ## Security Considerations
 
 ### Token Validation
@@ -189,8 +260,18 @@ The MCP server validates every Bearer token by:
 1. Calling Google's userinfo endpoint: `https://www.googleapis.com/oauth2/v2/userinfo`
 2. Verifying the response is successful (HTTP 200)
 3. Extracting user identity (email, user ID, name)
+4. Automatically refreshing tokens that are close to expiration
 
-Invalid or expired tokens receive a `401 Unauthorized` response.
+Invalid or expired tokens receive a `401 Unauthorized` response with actionable error messages.
+
+### Rate Limiting Protection
+
+Built-in rate limiting protects the server from:
+- **Brute force attacks**: Limits authentication attempts per IP
+- **Token validation floods**: Prevents excessive validation requests
+- **Resource exhaustion**: Protects against DoS attacks
+
+Each IP address gets an independent token bucket with configurable rate and burst limits.
 
 ### Token Storage
 
@@ -205,7 +286,8 @@ Invalid or expired tokens receive a `401 Unauthorized` response.
 
 According to OAuth 2.1 specification:
 - **Production**: All OAuth endpoints MUST use HTTPS
-- **Development**: `localhost` may use HTTP for testing
+- **Development**: Only true loopback addresses (`localhost`, `127.0.0.1`, `::1`) may use HTTP for testing
+- **Validation**: Server performs strict URL parsing to prevent bypass attempts (e.g., `localhost.evil.com`)
 
 ### PKCE (Proof Key for Code Exchange)
 
@@ -240,6 +322,13 @@ config := &oauth.Config{
         "https://www.googleapis.com/auth/drive",
         // ... other Google scopes
     },
+    
+    // Rate Limiting (protects against abuse)
+    RateLimitRate:   10,             // 10 requests per second per IP
+    RateLimitBurst:  20,             // Allow burst of 20 requests
+    
+    // Token Management
+    CleanupInterval: 1 * time.Minute, // Cleanup expired tokens every minute
 }
 
 handler, err := oauth.NewHandler(config)

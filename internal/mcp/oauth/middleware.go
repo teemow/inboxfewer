@@ -48,38 +48,41 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 			return
 		}
 
-		accessToken := parts[1]
+	accessToken := parts[1]
 
-		// Create OAuth2 token
-		token := &oauth2.Token{
-			AccessToken: accessToken,
-			TokenType:   "Bearer",
-		}
+	// Create OAuth2 token
+	token := &oauth2.Token{
+		AccessToken: accessToken,
+		TokenType:   "Bearer",
+	}
 
-		// Validate token by calling Google's userinfo endpoint
-		userInfo, err := h.getUserInfoFromGoogle(r.Context(), token)
-		if err != nil {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
-				`Bearer realm="%s", resource_metadata="/.well-known/oauth-protected-resource", error="invalid_token", error_description="Token validation failed"`,
-				h.config.Resource,
-			))
-			h.writeUnauthorizedError(w, "invalid_token", fmt.Sprintf("Token validation failed: %v", err))
-			return
-		}
+	// Validate token by calling Google's userinfo endpoint
+	userInfo, err := h.getUserInfoFromGoogle(r.Context(), token)
+	if err != nil {
+		// Provide more actionable error messages based on error type
+		errorDesc := getActionableErrorMessage(err)
+		
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+			`Bearer realm="%s", resource_metadata="/.well-known/oauth-protected-resource", error="invalid_token", error_description="%s"`,
+			h.config.Resource,
+			errorDesc,
+		))
+		h.writeUnauthorizedError(w, "invalid_token", errorDesc)
+		return
+	}
+	// Store user info and token in context
+	ctx := context.WithValue(r.Context(), userContextKey, userInfo)
+	ctx = context.WithValue(ctx, tokenContextKey, token)
 
-		// Store user info and token in context
-		ctx := context.WithValue(r.Context(), userContextKey, userInfo)
-		ctx = context.WithValue(ctx, tokenContextKey, token)
+	// Save the token for this user so we can use it to access Google APIs
+	// Use email as the account identifier
+	if err := h.store.SaveGoogleToken(userInfo.Email, token); err != nil {
+		// Log but don't fail - we can still process the request
+		fmt.Printf("Warning: Failed to save Google token for user %s: %v\n", userInfo.Email, err)
+	}
 
-		// Save the token for this user so we can use it to access Google APIs
-		// Use email as the account identifier
-		if err := h.store.SaveGoogleToken(userInfo.Email, token); err != nil {
-			// Log but don't fail - we can still process the request
-			fmt.Printf("Warning: Failed to save Google token for user %s: %v\n", userInfo.Email, err)
-		}
-
-		// Call next handler
-		next.ServeHTTP(w, r.WithContext(ctx))
+	// Call next handler
+	next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -181,6 +184,37 @@ func (h *Handler) writeUnauthorizedError(w http.ResponseWriter, errorCode, descr
 		Error:            errorCode,
 		ErrorDescription: description,
 	})
+}
+
+// getActionableErrorMessage converts technical errors into user-friendly, actionable messages
+func getActionableErrorMessage(err error) string {
+	errStr := err.Error()
+	
+	// Check for common error patterns and provide actionable guidance
+	if strings.Contains(errStr, "401") || strings.Contains(errStr, "Unauthorized") {
+		return "Google token is invalid or expired. Please re-authenticate through your MCP client to continue."
+	}
+	
+	if strings.Contains(errStr, "403") || strings.Contains(errStr, "Forbidden") {
+		return "Access denied by Google. Please ensure your token has the required scopes and re-authenticate through your MCP client."
+	}
+	
+	if strings.Contains(errStr, "network") || strings.Contains(errStr, "connection") || 
+	   strings.Contains(errStr, "timeout") || strings.Contains(errStr, "dial") {
+		return "Unable to verify token with Google due to network issues. Please try again in a moment."
+	}
+	
+	if strings.Contains(errStr, "429") || strings.Contains(errStr, "rate limit") {
+		return "Google API rate limit exceeded. Please wait a moment and try again."
+	}
+	
+	if strings.Contains(errStr, "500") || strings.Contains(errStr, "502") || 
+	   strings.Contains(errStr, "503") || strings.Contains(errStr, "504") {
+		return "Google authentication service is temporarily unavailable. Please try again in a few minutes."
+	}
+	
+	// Default message with error details
+	return fmt.Sprintf("Token validation failed: %v. Please re-authenticate through your MCP client.", err)
 }
 
 // CacheGoogleToken caches a Google token for future use

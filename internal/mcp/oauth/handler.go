@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // Config holds the OAuth handler configuration
@@ -14,13 +15,23 @@ type Config struct {
 
 	// SupportedScopes are all available scopes
 	SupportedScopes []string
+
+	// RateLimitRate is the number of requests per second allowed per IP (0 = no limit)
+	RateLimitRate int
+
+	// RateLimitBurst is the maximum burst size allowed per IP
+	RateLimitBurst int
+
+	// CleanupInterval is how often to cleanup expired tokens (default: 1 minute)
+	CleanupInterval time.Duration
 }
 
 // Handler implements OAuth 2.1 endpoints for the MCP server
 // It acts as an OAuth 2.1 Resource Server with Google as the Authorization Server
 type Handler struct {
-	config *Config // Lowercase for internal use, exposed via getter if needed
-	store  *Store
+	config      *Config      // Lowercase for internal use, exposed via getter if needed
+	store       *Store
+	rateLimiter *RateLimiter // Optional rate limiter for protecting endpoints
 }
 
 // NewHandler creates a new OAuth handler
@@ -44,9 +55,25 @@ func NewHandler(config *Config) (*Handler, error) {
 		}
 	}
 
+	// Set default cleanup interval if not specified
+	if config.CleanupInterval == 0 {
+		config.CleanupInterval = 1 * time.Minute
+	}
+
+	// Create rate limiter if configured
+	var rateLimiter *RateLimiter
+	if config.RateLimitRate > 0 {
+		burst := config.RateLimitBurst
+		if burst == 0 {
+			burst = config.RateLimitRate * 2 // Default burst is 2x rate
+		}
+		rateLimiter = NewRateLimiter(config.RateLimitRate, burst)
+	}
+
 	return &Handler{
-		config: config,
-		store:  NewStore(),
+		config:      config,
+		store:       NewStoreWithInterval(config.CleanupInterval),
+		rateLimiter: rateLimiter,
 	}, nil
 }
 
@@ -103,5 +130,48 @@ func (h *Handler) writeError(w http.ResponseWriter, errorCode, description strin
 	json.NewEncoder(w).Encode(ErrorResponse{
 		Error:            errorCode,
 		ErrorDescription: description,
+	})
+}
+
+// RevokeToken revokes a Google OAuth token for a specific user
+// This removes the token from the store, forcing re-authentication
+func (h *Handler) RevokeToken(email string) error {
+	return h.store.DeleteGoogleToken(email)
+}
+
+// ServeRevoke handles token revocation requests
+// POST /oauth/revoke with {"email": "user@example.com"}
+func (h *Handler) ServeRevoke(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, "invalid_request", "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Email == "" {
+		h.writeError(w, "invalid_request", "Email is required", http.StatusBadRequest)
+		return
+	}
+
+	// Revoke the token
+	if err := h.RevokeToken(req.Email); err != nil {
+		h.writeError(w, "server_error", fmt.Sprintf("Failed to revoke token: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"message": fmt.Sprintf("Token revoked for %s", req.Email),
 	})
 }

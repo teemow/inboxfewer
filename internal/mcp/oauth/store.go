@@ -17,10 +17,16 @@ type Store struct {
 	authorizationCodes map[string]*AuthorizationCode
 	googleTokens       map[string]*oauth2.Token   // user email -> Google token
 	googleUserInfo     map[string]*GoogleUserInfo // user email -> Google user info
+	cleanupInterval    time.Duration              // How often to cleanup expired tokens
 }
 
-// NewStore creates a new in-memory OAuth store
+// NewStore creates a new in-memory OAuth store with default cleanup interval
 func NewStore() *Store {
+	return NewStoreWithInterval(1 * time.Minute)
+}
+
+// NewStoreWithInterval creates a new in-memory OAuth store with custom cleanup interval
+func NewStoreWithInterval(cleanupInterval time.Duration) *Store {
 	s := &Store{
 		clients:            make(map[string]*ClientInfo),
 		tokens:             make(map[string]*Token),
@@ -28,6 +34,7 @@ func NewStore() *Store {
 		authorizationCodes: make(map[string]*AuthorizationCode),
 		googleTokens:       make(map[string]*oauth2.Token),
 		googleUserInfo:     make(map[string]*GoogleUserInfo),
+		cleanupInterval:    cleanupInterval,
 	}
 
 	// Start background cleanup goroutine
@@ -265,7 +272,7 @@ func (s *Store) DeleteTokenByRefreshToken(refreshToken string) error {
 // cleanupExpiredTokens periodically removes expired tokens and authorization codes
 // Uses optimized locking strategy to minimize write lock duration
 func (s *Store) cleanupExpiredTokens() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(s.cleanupInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {

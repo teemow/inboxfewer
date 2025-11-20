@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -37,6 +38,9 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, baseU
 			"https://www.googleapis.com/auth/meetings.space.readonly",
 			"https://www.googleapis.com/auth/tasks",
 		},
+		RateLimitRate:   10,              // 10 requests per second per IP
+		RateLimitBurst:  20,              // Allow burst of 20 requests
+		CleanupInterval: 1 * time.Minute, // Cleanup expired tokens every minute
 	}
 
 	oauthHandler, err := oauth.NewHandler(oauthConfig)
@@ -62,17 +66,17 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 	// Exception: localhost is allowed to use HTTP for development
 	config := s.oauthHandler.GetConfig()
 	baseURL := config.Resource
-	isLocalhost := contains(baseURL, "localhost") || contains(baseURL, "127.0.0.1")
-	if !isLocalhost && !contains(baseURL, "https://") {
-		return fmt.Errorf("OAuth 2.1 requires HTTPS for production (localhost may use HTTP): %s", baseURL)
+	if err := validateHTTPSRequirement(baseURL); err != nil {
+		return err
 	}
 
 	mux := http.NewServeMux()
 
-	// Register OAuth endpoints
+	// Register OAuth endpoints with rate limiting
 	// Protected Resource Metadata endpoint (RFC 9728)
 	// This tells MCP clients where to find the authorization server (Google)
-	mux.HandleFunc("/.well-known/oauth-protected-resource", s.oauthHandler.ServeProtectedResourceMetadata)
+	metadataHandler := http.HandlerFunc(s.oauthHandler.ServeProtectedResourceMetadata)
+	mux.Handle("/.well-known/oauth-protected-resource", s.oauthHandler.RateLimitMiddleware(metadataHandler))
 
 	// Register MCP endpoints based on server type
 	switch s.serverType {
@@ -83,16 +87,18 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 			mcpserver.WithMessageEndpoint("/message"),
 		)
 
-		// Wrap SSE endpoints with OAuth middleware
-		mux.Handle("/sse", s.oauthHandler.ValidateGoogleToken(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get the underlying SSE handler
-			// Note: This is a simplified approach. We may need to access the internal handler differently
+		// Wrap SSE endpoints with rate limiting and OAuth middleware
+		sseHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			sseServer.ServeHTTP(w, r)
-		})))
+		})
+		mux.Handle("/sse", s.oauthHandler.RateLimitMiddleware(
+			s.oauthHandler.ValidateGoogleToken(sseHandler)))
 
-		mux.Handle("/message", s.oauthHandler.ValidateGoogleToken(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		messageHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			sseServer.ServeHTTP(w, r)
-		})))
+		})
+		mux.Handle("/message", s.oauthHandler.RateLimitMiddleware(
+			s.oauthHandler.ValidateGoogleToken(messageHandler)))
 
 	case "streamable-http":
 		// Create Streamable HTTP server
@@ -100,10 +106,12 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 			mcpserver.WithEndpointPath("/mcp"),
 		)
 
-		// Wrap MCP endpoint with OAuth middleware
-		mux.Handle("/mcp", s.oauthHandler.ValidateGoogleToken(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Wrap MCP endpoint with rate limiting and OAuth middleware
+		mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			httpServer.ServeHTTP(w, r)
-		})))
+		})
+		mux.Handle("/mcp", s.oauthHandler.RateLimitMiddleware(
+			s.oauthHandler.ValidateGoogleToken(mcpHandler)))
 
 	default:
 		return fmt.Errorf("unsupported server type: %s", s.serverType)
@@ -135,12 +143,28 @@ func (s *OAuthHTTPServer) GetOAuthHandler() *oauth.Handler {
 	return s.oauthHandler
 }
 
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
-	for i := 0; i+len(substr) <= len(s); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
+// validateHTTPSRequirement ensures OAuth 2.1 HTTPS compliance
+// Allows HTTP only for loopback addresses (localhost, 127.0.0.1, ::1)
+func validateHTTPSRequirement(baseURL string) error {
+	if baseURL == "" {
+		return fmt.Errorf("base URL cannot be empty")
 	}
-	return false
+
+	// Parse URL to properly validate scheme and host
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+
+	// Allow HTTP only for loopback addresses
+	if u.Scheme == "http" {
+		host := u.Hostname()
+		if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+			return fmt.Errorf("OAuth 2.1 requires HTTPS for production (got: %s). Use HTTPS or localhost for development", baseURL)
+		}
+	} else if u.Scheme != "https" {
+		return fmt.Errorf("invalid URL scheme: %s. Must be http (localhost only) or https", u.Scheme)
+	}
+
+	return nil
 }
