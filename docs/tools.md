@@ -740,20 +740,9 @@ Update a task list's title
 
 ## OAuth Authentication
 
-### google_get_auth_url
+**For HTTP/SSE Transports:**
+OAuth authentication is handled automatically by your MCP client (e.g., Cursor, Claude Desktop) when you first try to use a Google API tool. The client will open a browser for you to authenticate with Google, and all tokens are managed securely by the MCP client.
 
-Get the OAuth URL to authorize Google services access (Gmail, Docs, Drive) for a specific account
-
-**Arguments:**
-- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-
-
-### google_save_auth_code
-
-Save the OAuth authorization code to complete Google services authentication (Gmail, Docs, Drive) for a specific account
-
-**Arguments:**
-- `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
-- `authCode` (required): The authorization code from Google OAuth
-
+**For STDIO Transport:**
+Tokens are managed through the file system in `~/.cache/inboxfewer/` and are loaded automatically when needed.
 

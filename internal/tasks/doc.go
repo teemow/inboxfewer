@@ -15,9 +15,8 @@
 // Tokens are stored per-account in the user's cache directory and provide access to:
 //   - Google Tasks (read/write)
 //
-// For CLI usage, the client will prompt for authorization if no token exists.
-// For MCP server usage, it will return an error with instructions to use the
-// google_get_auth_url and google_save_auth_code tools.
+// For HTTP/SSE transports: OAuth is handled automatically by the MCP client.
+// For STDIO transport: Tokens are loaded from the file system (~/.cache/inboxfewer/).
 //
 // # Example Usage
 //

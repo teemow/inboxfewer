@@ -28,20 +28,8 @@ func getMeetClient(ctx context.Context, account string, sc *server.ServerContext
 	if client == nil {
 		// Check if token exists before trying to create client
 		if !meet.HasTokenForAccount(account) {
-			authURL := google.GetAuthenticationErrorMessage(account)
-			return nil, fmt.Errorf(`Google OAuth token not found for account "%s". To authorize access:
-
-1. Visit this URL in your browser:
-   %s
-
-2. Sign in with your Google account
-3. Grant access to Google services (Calendar, Gmail, Docs, Drive, Meet)
-4. Copy the authorization code
-
-5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
-
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
+			errorMsg := google.GetAuthenticationErrorMessage(account)
+			return nil, fmt.Errorf("%s", errorMsg)
 		}
 
 		var err error

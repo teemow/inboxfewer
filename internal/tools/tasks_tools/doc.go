@@ -30,7 +30,7 @@
 //
 // # Authentication
 //
-// Tools use the unified Google OAuth system. If no valid token exists for an account,
-// tools will return a helpful error message with instructions to use the
-// google_get_auth_url and google_save_auth_code tools.
+// For HTTP/SSE transports: OAuth is handled automatically by the MCP client.
+// For STDIO transport: Tokens are loaded from the file system (~/.cache/inboxfewer/).
+// If no valid token exists, tools will return an error with authentication instructions.
 package tasks_tools

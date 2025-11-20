@@ -143,17 +143,16 @@ gmail_send_email({
 Each account requires separate OAuth authentication:
 
 ```bash
-# Authenticate default account
+# Start the server
 inboxfewer serve
-# Follow OAuth flow when prompted
 
-# Authenticate work account
-# In MCP client, use google_get_auth_url with account: "work"
-# Then use google_save_auth_code with account: "work"
+# For HTTP/SSE transports:
+# Your MCP client will automatically handle OAuth authentication with Google
+# when you first try to use a Google API tool.
 
-# Authenticate personal account
-# In MCP client, use google_get_auth_url with account: "personal"
-# Then use google_save_auth_code with account: "personal"
+# For STDIO transport:
+# Tokens are managed through the file system (~/.cache/inboxfewer/)
+# and are loaded automatically when the server starts.
 ```
 
 ## MCP Server Configuration

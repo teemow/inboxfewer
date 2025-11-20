@@ -43,6 +43,6 @@
 //	http.Handle("/mcp", handler.ValidateGoogleToken(mcpHandler))
 //
 //	// Serve Protected Resource Metadata
-//	http.HandleFunc("/.well-known/oauth-protected-resource", 
+//	http.HandleFunc("/.well-known/oauth-protected-resource",
 //		handler.ServeProtectedResourceMetadata)
 package oauth

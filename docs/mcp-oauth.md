@@ -320,11 +320,21 @@ config := &oauth.Config{
     
     SupportedScopes: []string{
         "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.modify",
         "https://www.googleapis.com/auth/drive",
         // ... other Google scopes
     },
     
-    // Google OAuth Credentials (optional - enables automatic token refresh)
+    // Google OAuth Credentials (OPTIONAL - enables automatic token refresh)
+    // If not provided, tokens will not be automatically refreshed, and users
+    // will need to re-authenticate when their tokens expire.
+    // 
+    // To enable token refresh:
+    // 1. Create a Google Cloud Project at https://console.cloud.google.com
+    // 2. Enable the APIs you need (Gmail, Drive, Calendar, etc.)
+    // 3. Create OAuth 2.0 credentials (Web application type)
+    // 4. Add authorized redirect URIs (your MCP server endpoints)
+    // 5. Use the Client ID and Client Secret here
     GoogleClientID:     "your-client-id.apps.googleusercontent.com",
     GoogleClientSecret: "your-client-secret",
     
@@ -344,7 +354,74 @@ config := &oauth.Config{
 }
 
 handler, err := oauth.NewHandler(config)
+
+// Check if token refresh is enabled
+if handler.CanRefreshTokens() {
+    log.Info("Token refresh is enabled - tokens will be automatically refreshed before expiration")
+} else {
+    log.Warn("Token refresh is disabled - users will need to re-authenticate when tokens expire")
+}
 ```
+
+### Token Refresh Requirements
+
+**Automatic token refresh is OPTIONAL but recommended for production deployments.**
+
+#### Without Token Refresh (Default)
+- Users authenticate via their MCP client
+- Tokens are cached but NOT refreshed
+- When tokens expire (typically after 1 hour), users must re-authenticate
+- Suitable for: development, testing, short sessions
+
+#### With Token Refresh (Recommended for Production)
+- **Requires:** `GoogleClientID` and `GoogleClientSecret` configuration
+- Tokens are automatically refreshed 5 minutes before expiration
+- Seamless user experience with no interruptions
+- Users only re-authenticate if refresh token expires or is revoked
+- Suitable for: production deployments, long-running sessions
+
+#### How to Enable Token Refresh
+
+1. **Create Google Cloud Project:**
+   - Visit https://console.cloud.google.com
+   - Create a new project or select existing one
+
+2. **Enable APIs:**
+   - Navigate to "APIs & Services" > "Library"
+   - Enable: Gmail API, Drive API, Calendar API, etc.
+
+3. **Create OAuth 2.0 Credentials:**
+   - Go to "APIs & Services" > "Credentials"
+   - Click "Create Credentials" > "OAuth 2.0 Client ID"
+   - Application type: "Web application"
+   - Add authorized redirect URIs (your MCP server endpoints)
+   - Note the Client ID and Client Secret
+
+4. **Configure Handler:**
+   ```go
+   config := &oauth.Config{
+       Resource:           "https://mcp.example.com",
+       GoogleClientID:     "YOUR_CLIENT_ID.apps.googleusercontent.com",
+       GoogleClientSecret: "YOUR_CLIENT_SECRET",
+       // ... other config
+   }
+   ```
+
+5. **Verify:**
+   ```go
+   handler, _ := oauth.NewHandler(config)
+   if !handler.CanRefreshTokens() {
+       log.Fatal("Token refresh not enabled - check credentials")
+   }
+   ```
+
+#### Token Refresh Behavior
+
+- **Automatic:** Middleware checks token expiry on every request
+- **Proactive:** Refreshes tokens 5 minutes before they expire
+- **Transparent:** Users never see "token expired" errors
+- **Fallback:** If refresh fails, returns 401 with actionable error message
+- **Logging:** All refresh attempts are logged for debugging
 
 ### Integration with HTTP Server
 
