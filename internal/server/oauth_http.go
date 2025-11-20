@@ -47,13 +47,6 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, baseU
 		return nil, fmt.Errorf("failed to create OAuth handler: %w", err)
 	}
 
-	// Create OAuth token provider for Google API clients
-	// This will be passed to clients via dependency injection through MCP server context
-	_ = oauth.NewTokenProvider(oauthHandler.GetStore())
-
-	// TODO: Pass tokenProvider to ServerContext when creating MCP server
-	// For now, clients will be created with the token provider from oauth middleware
-
 	return &OAuthHTTPServer{
 		mcpServer:    mcpServer,
 		oauthHandler: oauthHandler,

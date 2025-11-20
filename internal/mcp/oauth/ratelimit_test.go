@@ -104,8 +104,8 @@ func TestRateLimiter_TokenReplenishment(t *testing.T) {
 func TestRateLimitMiddleware(t *testing.T) {
 	config := &Config{
 		Resource:        "https://test.example.com",
-		RateLimitRate:   2,  // 2 requests per second
-		RateLimitBurst:  2,  // burst of 2
+		RateLimitRate:   2, // 2 requests per second
+		RateLimitBurst:  2, // burst of 2
 		CleanupInterval: 10 * time.Minute,
 	}
 
@@ -303,4 +303,3 @@ func TestExtractIPFromAddr(t *testing.T) {
 		})
 	}
 }
-

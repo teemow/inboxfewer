@@ -54,7 +54,7 @@ func (h *Handler) RefreshGoogleTokenIfNeeded(ctx context.Context, email string, 
 	// Update the token in the store
 	if err := h.store.SaveGoogleToken(email, newToken); err != nil {
 		// Log but don't fail - we still have the new token
-		fmt.Printf("Warning: Failed to save refreshed token for %s: %v\n", email, err)
+		h.logger.Warn("Failed to save refreshed token", "email", email, "error", err)
 	}
 
 	return newToken, nil
