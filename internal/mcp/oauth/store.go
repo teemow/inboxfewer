@@ -287,6 +287,15 @@ func (s *Store) cleanupExpiredTokens() {
 			}
 		}
 
+		// Clean up expired Google tokens
+		now := time.Now()
+		for email, token := range s.googleTokens {
+			if token.Expiry.Before(now) {
+				delete(s.googleTokens, email)
+				delete(s.googleUserInfo, email)
+			}
+		}
+
 		s.mu.Unlock()
 	}
 }

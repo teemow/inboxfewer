@@ -105,13 +105,19 @@ The middleware (`internal/mcp/oauth/middleware.go`):
 - Caches Google tokens for accessing Google APIs
 - Returns 401 with `WWW-Authenticate` header for invalid/missing tokens
 
-### 3. Token Store
+### 3. Token Store & Provider
 
 The token store (`internal/mcp/oauth/store.go`):
 - Stores validated Google OAuth tokens in memory
 - Associates tokens with user email addresses
-- Provides tokens to Google API clients (Gmail, Drive, etc.)
+- Automatic cleanup of expired tokens (runs every minute)
 - No custom token generation - all tokens come from Google
+
+The token provider interface (`internal/google/token_provider.go`):
+- Abstracts token retrieval for Google API clients
+- File-based provider for STDIO transport (reads from `~/.cache/inboxfewer/`)
+- OAuth store provider for HTTP/SSE transports (reads from OAuth middleware cache)
+- Automatic selection based on transport type
 
 ## Authentication for Different Transports
 
@@ -188,10 +194,12 @@ Invalid or expired tokens receive a `401 Unauthorized` response.
 
 ### Token Storage
 
-- **Server-side**: Google tokens are cached in memory (per user session)
-- **No persistent storage**: Tokens are not written to disk on the server
-- **Client-side**: The MCP client manages token persistence and refresh
-- **LLM**: Never has access to tokens
+- **HTTP/SSE Transport**: Google tokens are cached in memory (per user session) by the OAuth middleware
+- **STDIO Transport**: Tokens are stored in `~/.cache/inboxfewer/google-{account}.token`
+- **No token leakage**: Tokens are never written to server logs or exposed to the LLM
+- **Client-side**: The MCP client manages token persistence and refresh for HTTP/SSE
+- **Automatic cleanup**: Expired tokens are removed from memory every minute
+- **Token provider pattern**: Google API clients automatically use the correct token source based on transport type
 
 ### HTTPS Requirement
 

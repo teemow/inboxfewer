@@ -117,7 +117,7 @@ func SaveTokenForAccount(ctx context.Context, account string, token *oauth2.Toke
 	return nil
 }
 
-// getOAuthConfig returns the OAuth2 configuration for all Google services
+// getOAuthConfig returns the OAuth2 configuration for all Google services (internal use)
 func getOAuthConfig() *oauth2.Config {
 	const OOB = "urn:ietf:wg:oauth:2.0:oob"
 	return &oauth2.Config{
@@ -139,6 +139,11 @@ func getOAuthConfig() *oauth2.Config {
 			tasks.TasksScope,                                          // Google Tasks access (read/write)
 		},
 	}
+}
+
+// GetOAuthConfig returns the OAuth2 configuration for all Google services (exported for use by clients)
+func GetOAuthConfig() *oauth2.Config {
+	return getOAuthConfig()
 }
 
 // GetTokenSourceForAccount returns an OAuth2 token source for the stored token for a specific account

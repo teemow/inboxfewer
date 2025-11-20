@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
+	"golang.org/x/oauth2"
 	drive "google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -31,21 +33,37 @@ func (c *Client) Account() string {
 
 // HasTokenForAccount checks if a valid OAuth token exists for the specified account
 func HasTokenForAccount(account string) bool {
-	return google.HasTokenForAccount(account)
+	return google.GetDefaultTokenProvider().HasTokenForAccount(account)
 }
 
 // HasToken checks if a valid OAuth token exists for the default account
 func HasToken() bool {
-	return google.HasToken()
+	return HasTokenForAccount("default")
 }
 
 // NewClientForAccount creates a new Google Drive client with OAuth2 authentication for a specific account
-// The OAuth token must be provided by the MCP client through the OAuth middleware
+// The OAuth token is retrieved from the configured token provider (OAuth store or file-based)
 func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
-	client, err := google.GetHTTPClientForAccount(ctx, account)
+	// Get token from the configured provider
+	tokenProvider := google.GetDefaultTokenProvider()
+	token, err := tokenProvider.GetTokenForAccount(ctx, account)
 	if err != nil {
-		return nil, fmt.Errorf("no valid Google OAuth token found for account %s: %w. Please authenticate with Google through your MCP client", account, err)
+		return nil, fmt.Errorf("failed to get Google OAuth token for account %s: %w", account, err)
 	}
+
+	// Create OAuth2 config and token source
+	conf := google.GetOAuthConfig()
+	tokenSource := conf.TokenSource(ctx, token)
+
+	// Create HTTP client with the token
+	client := oauth2.NewClient(ctx, tokenSource)
+
+	// Force HTTP/1.1 by disabling HTTP/2
+	transport := client.Transport.(*oauth2.Transport)
+	baseTransport := &http.Transport{
+		ForceAttemptHTTP2: false,
+	}
+	transport.Base = baseTransport
 
 	// Create Drive service
 	driveService, err := drive.NewService(ctx, option.WithHTTPClient(client))
