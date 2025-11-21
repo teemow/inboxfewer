@@ -787,3 +787,21 @@ func (c *Client) ForwardEmail(messageID string, to, cc, bcc []string, additional
 
 	return sent.Id, nil
 }
+
+// GetProfile returns the Gmail user profile
+func (c *Client) GetProfile(ctx context.Context) (*gmail.Profile, error) {
+	profile, err := c.svc.GetProfile("me").Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get profile: %w", err)
+	}
+	return profile, nil
+}
+
+// GetVacationSettings returns the vacation/auto-reply settings
+func (c *Client) GetVacationSettings(ctx context.Context) (*gmail.VacationSettings, error) {
+	settings, err := c.svc.Settings.GetVacation("me").Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vacation settings: %w", err)
+	}
+	return settings, nil
+}

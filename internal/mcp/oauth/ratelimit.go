@@ -97,26 +97,52 @@ func (rl *RateLimiter) Allow(ip string) bool {
 }
 
 // cleanupInactiveLimiters removes limiters that haven't been used recently
+// Uses optimized locking strategy to prevent deadlocks:
+// 1. Collect IPs to delete under read lock (doesn't block Allow())
+// 2. Delete collected IPs under write lock (minimal lock duration)
 func (rl *RateLimiter) cleanupInactiveLimiters() {
 	ticker := time.NewTicker(rl.cleanup)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		rl.mu.Lock()
 		now := time.Now()
-		removed := 0
+
+		// Phase 1: Identify inactive limiters under read lock
+		// This doesn't block Allow() from creating new limiters
+		rl.mu.RLock()
+		inactiveIPs := []string{}
 		for ip, b := range rl.limiters {
 			b.mu.Lock()
-			if now.Sub(b.lastUpdate) > 10*time.Minute {
-				delete(rl.limiters, ip)
-				removed++
-			}
+			lastUpdate := b.lastUpdate
 			b.mu.Unlock()
-		}
-		rl.mu.Unlock()
 
-		if removed > 0 {
-			rl.logger.Debug("Cleaned up inactive rate limiters", "count", removed)
+			if now.Sub(lastUpdate) > 10*time.Minute {
+				inactiveIPs = append(inactiveIPs, ip)
+			}
+		}
+		rl.mu.RUnlock()
+
+		// Phase 2: Delete inactive limiters under write lock
+		// Re-check staleness to handle race conditions
+		if len(inactiveIPs) > 0 {
+			rl.mu.Lock()
+			removed := 0
+			for _, ip := range inactiveIPs {
+				if b, exists := rl.limiters[ip]; exists {
+					b.mu.Lock()
+					// Re-check under write lock to avoid deleting recently active limiters
+					if now.Sub(b.lastUpdate) > 10*time.Minute {
+						delete(rl.limiters, ip)
+						removed++
+					}
+					b.mu.Unlock()
+				}
+			}
+			rl.mu.Unlock()
+
+			if removed > 0 {
+				rl.logger.Debug("Cleaned up inactive rate limiters", "count", removed)
+			}
 		}
 	}
 }

@@ -111,7 +111,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	}()
 
 	// Create MCP server
-	// TODO: Add WithTitle when API is available (Title field exists in Implementation struct per 0.43.0)
+	// Note: mcp.Implementation has Title field but WithTitle() ServerOption not available in v0.43.0
 	mcpSrv := mcpserver.NewMCPServer("inboxfewer", version,
 		mcpserver.WithToolCapabilities(true),
 		mcpserver.WithResourceCapabilities(false, false), // Subscribe and listChanged

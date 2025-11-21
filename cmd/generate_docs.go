@@ -55,7 +55,7 @@ func runGenerateDocs(outputFile string) error {
 	}()
 
 	// Create MCP server
-	// TODO: Add WithTitle when available in mcp-go (added in 0.43.0 per MCP spec)
+	// Note: mcp.Implementation has Title field but WithTitle() ServerOption not available in v0.43.0
 	mcpSrv := mcpserver.NewMCPServer("inboxfewer", version,
 		mcpserver.WithToolCapabilities(true),
 	)

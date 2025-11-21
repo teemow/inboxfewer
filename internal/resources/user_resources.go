@@ -7,6 +7,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/teemow/inboxfewer/internal/mcp/oauth"
 	"github.com/teemow/inboxfewer/internal/server"
 )
 
@@ -40,23 +41,40 @@ func RegisterUserResources(s *mcpserver.MCPServer, sc *server.ServerContext) err
 	return nil
 }
 
+// extractAccountFromContext extracts the user's email from OAuth context
+// Falls back to "default" for STDIO transport or if no OAuth context is available
+func extractAccountFromContext(ctx context.Context) string {
+	// Try to get user info from OAuth context (HTTP/SSE transport)
+	if userInfo, ok := oauth.GetUserFromContext(ctx); ok {
+		return userInfo.Email
+	}
+	// Fallback to default for STDIO transport
+	return "default"
+}
+
 // handleUserProfile returns information about the current user's profile
 func handleUserProfile(ctx context.Context, request mcp.ReadResourceRequest, sc *server.ServerContext) ([]mcp.ResourceContents, error) {
-	// Get the account from the session context or use default
-	account := "default"
-	// TODO: Extract account from session when SessionIdManager is integrated
+	// Extract account (email) from OAuth context
+	account := extractAccountFromContext(ctx)
 
 	gmailClient := sc.GmailClientForAccount(account)
 	if gmailClient == nil {
 		return nil, fmt.Errorf("no Gmail client available for account: %s", account)
 	}
 
-	// For now, return account information
-	// TODO: Add full profile information by exposing Gmail Users.GetProfile through Client
+	// Get full user profile from Gmail API
+	profile, err := gmailClient.GetProfile(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user profile: %w", err)
+	}
+
 	profileData := map[string]interface{}{
-		"account":     account,
-		"description": "User profile for Google Workspace",
-		"note":        "Full profile details can be added by exposing Gmail API methods",
+		"account":       account,
+		"email":         profile.EmailAddress,
+		"historyId":     profile.HistoryId,
+		"messagesTotal": profile.MessagesTotal,
+		"threadsTotal":  profile.ThreadsTotal,
+		"description":   "User profile for Google Workspace",
 	}
 
 	jsonData, err := json.MarshalIndent(profileData, "", "  ")
@@ -66,30 +84,40 @@ func handleUserProfile(ctx context.Context, request mcp.ReadResourceRequest, sc 
 
 	return []mcp.ResourceContents{
 		&mcp.TextResourceContents{
-			URI:       request.Params.URI,
-			MIMEType:  "application/json",
-			Text:      string(jsonData),
+			URI:      request.Params.URI,
+			MIMEType: "application/json",
+			Text:     string(jsonData),
 		},
 	}, nil
 }
 
 // handleGmailSettings returns Gmail settings for the current user
 func handleGmailSettings(ctx context.Context, request mcp.ReadResourceRequest, sc *server.ServerContext) ([]mcp.ResourceContents, error) {
-	// Get the account from the session context or use default
-	account := "default"
-	// TODO: Extract account from session when SessionIdManager is integrated
+	// Extract account (email) from OAuth context
+	account := extractAccountFromContext(ctx)
 
 	gmailClient := sc.GmailClientForAccount(account)
 	if gmailClient == nil {
 		return nil, fmt.Errorf("no Gmail client available for account: %s", account)
 	}
 
-	// For now, return placeholder settings info
-	// TODO: Add full settings by exposing Gmail Users.Settings API through Client
+	// Get vacation/auto-reply settings from Gmail API
+	settings, err := gmailClient.GetVacationSettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Gmail settings: %w", err)
+	}
+
 	settingsData := map[string]interface{}{
-		"account":     account,
-		"description": "Gmail settings for this account",
-		"note":        "Full settings details can be added by exposing Gmail Settings API methods",
+		"account":               account,
+		"enableAutoReply":       settings.EnableAutoReply,
+		"responseSubject":       settings.ResponseSubject,
+		"responseBodyPlainText": settings.ResponseBodyPlainText,
+		"responseBodyHtml":      settings.ResponseBodyHtml,
+		"restrictToContacts":    settings.RestrictToContacts,
+		"restrictToDomain":      settings.RestrictToDomain,
+		"startTime":             settings.StartTime,
+		"endTime":               settings.EndTime,
+		"description":           "Gmail vacation/auto-reply settings",
 	}
 
 	jsonData, err := json.MarshalIndent(settingsData, "", "  ")
@@ -99,9 +127,9 @@ func handleGmailSettings(ctx context.Context, request mcp.ReadResourceRequest, s
 
 	return []mcp.ResourceContents{
 		&mcp.TextResourceContents{
-			URI:       request.Params.URI,
-			MIMEType:  "application/json",
-			Text:      string(jsonData),
+			URI:      request.Params.URI,
+			MIMEType: "application/json",
+			Text:     string(jsonData),
 		},
 	}, nil
 }
