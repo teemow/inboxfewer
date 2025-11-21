@@ -2,7 +2,7 @@ apiVersion: v2
 name: inboxfewer
 description: A Helm chart for inboxfewer MCP server for Gmail and Google services integration
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "dev"
 home: https://github.com/teemow/inboxfewer
 sources:
