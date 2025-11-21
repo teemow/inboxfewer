@@ -89,7 +89,6 @@ inboxfewer serve [--transport TYPE] [--http-addr ADDR] [--yolo]
 
 **Transport Types:**
 - stdio: Standard input/output (default, for desktop apps)
-- sse: Server-Sent Events (HTTP server on --http-addr)
 - streamable-http: HTTP streaming (HTTP server on --http-addr)
 
 ## version
@@ -114,8 +113,8 @@ inboxfewer generate-docs -o FILE   # Output to file
 ```
 --account ACCOUNT      Google account name to use (default: "default")
 --debug                Enable debug logging
---transport TYPE       MCP transport: stdio, sse, streamable-http (default: stdio)
---http-addr ADDR       HTTP server address for sse/http transports (default: :8080)
+--transport TYPE       MCP transport: stdio, streamable-http (default: stdio)
+--http-addr ADDR       HTTP server address for http transport (default: :8080)
 --yolo                 Enable write operations in MCP server (default: read-only)
 ```
 
@@ -165,7 +164,7 @@ inboxfewer serve
 Start MCP server with HTTP transport:
 
 ```bash
-inboxfewer serve --transport sse --http-addr :8080
+inboxfewer serve --transport streamable-http --http-addr :8080
 ```
 
 Enable all write operations:

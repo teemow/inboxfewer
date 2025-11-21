@@ -10,39 +10,39 @@ import (
 
 func TestGetClientIP_WithProxyHeaders_TrustProxy(t *testing.T) {
 	tests := []struct {
-		name            string
-		xForwardedFor   string
-		xRealIP         string
-		remoteAddr      string
-		trustProxy      bool
-		expectedIP      string
+		name          string
+		xForwardedFor string
+		xRealIP       string
+		remoteAddr    string
+		trustProxy    bool
+		expectedIP    string
 	}{
 		{
-			name:            "trust proxy with X-Forwarded-For",
-			xForwardedFor:   "192.168.1.1, 10.0.0.1",
-			remoteAddr:      "127.0.0.1:1234",
-			trustProxy:      true,
-			expectedIP:      "192.168.1.1",
+			name:          "trust proxy with X-Forwarded-For",
+			xForwardedFor: "192.168.1.1, 10.0.0.1",
+			remoteAddr:    "127.0.0.1:1234",
+			trustProxy:    true,
+			expectedIP:    "192.168.1.1",
 		},
 		{
-			name:            "trust proxy with X-Real-IP",
-			xRealIP:         "192.168.1.1",
-			remoteAddr:      "127.0.0.1:1234",
-			trustProxy:      true,
-			expectedIP:      "192.168.1.1",
+			name:       "trust proxy with X-Real-IP",
+			xRealIP:    "192.168.1.1",
+			remoteAddr: "127.0.0.1:1234",
+			trustProxy: true,
+			expectedIP: "192.168.1.1",
 		},
 		{
-			name:            "don't trust proxy with X-Forwarded-For",
-			xForwardedFor:   "192.168.1.1",
-			remoteAddr:      "127.0.0.1:1234",
-			trustProxy:      false,
-			expectedIP:      "127.0.0.1",
+			name:          "don't trust proxy with X-Forwarded-For",
+			xForwardedFor: "192.168.1.1",
+			remoteAddr:    "127.0.0.1:1234",
+			trustProxy:    false,
+			expectedIP:    "127.0.0.1",
 		},
 		{
-			name:            "no proxy headers",
-			remoteAddr:      "192.168.1.1:5678",
-			trustProxy:      true,
-			expectedIP:      "192.168.1.1",
+			name:       "no proxy headers",
+			remoteAddr: "192.168.1.1:5678",
+			trustProxy: true,
+			expectedIP: "192.168.1.1",
 		},
 	}
 
@@ -139,4 +139,3 @@ func TestRateLimiter_BurstAllowance(t *testing.T) {
 		t.Error("Request should be denied after burst exhausted")
 	}
 }
-

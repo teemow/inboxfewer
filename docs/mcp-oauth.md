@@ -116,7 +116,7 @@ The token store (`internal/mcp/oauth/store.go`):
 The token provider interface (`internal/google/token_provider.go`):
 - Abstracts token retrieval for Google API clients
 - File-based provider for STDIO transport (reads from `~/.cache/inboxfewer/`)
-- OAuth store provider for HTTP/SSE transports (reads from OAuth middleware cache)
+- OAuth store provider for HTTP transport (reads from OAuth middleware cache)
 - Automatic selection based on transport type
 
 ## Authentication for Different Transports
@@ -131,14 +131,23 @@ For STDIO transport (local execution), OAuth is **not used**. Instead, follow th
 
 This follows the MCP specification recommendation: "Implementations using an STDIO transport SHOULD NOT follow this specification, and instead retrieve credentials from the environment."
 
-### HTTP/SSE Transports
+### HTTP Transport
 
-For HTTP-based transports (remote servers), OAuth authentication is **required**:
+For HTTP-based transport (remote servers), OAuth authentication is **required**:
 
 1. **Start server with HTTP transport**:
    ```bash
-   inboxfewer serve --transport sse --http-addr :8080
-   # or
+   # Basic (token refresh disabled)
+   inboxfewer serve --transport streamable-http --http-addr :8080
+   
+   # With automatic token refresh (recommended for production)
+   inboxfewer serve --transport streamable-http --http-addr :8080 \
+     --google-client-id "your-id.apps.googleusercontent.com" \
+     --google-client-secret "your-secret"
+   
+   # Or use environment variables
+   export GOOGLE_CLIENT_ID="your-id.apps.googleusercontent.com"
+   export GOOGLE_CLIENT_SECRET="your-secret"
    inboxfewer serve --transport streamable-http --http-addr :8080
    ```
 
@@ -275,10 +284,10 @@ Each IP address gets an independent token bucket with configurable rate and burs
 
 ### Token Storage
 
-- **HTTP/SSE Transport**: Google tokens are cached in memory (per user session) by the OAuth middleware
+- **HTTP Transport**: Google tokens are cached in memory (per user session) by the OAuth middleware
 - **STDIO Transport**: Tokens are stored in `~/.cache/inboxfewer/google-{account}.token`
 - **No token leakage**: Tokens are never written to server logs or exposed to the LLM
-- **Client-side**: The MCP client manages token persistence and refresh for HTTP/SSE
+- **Client-side**: The MCP client manages token persistence and refresh for HTTP transport
 - **Automatic cleanup**: Expired tokens are removed from memory every minute
 - **Token provider pattern**: Google API clients automatically use the correct token source based on transport type
 
@@ -427,7 +436,7 @@ if handler.CanRefreshTokens() {
 
 ```go
 // Create OAuth-enabled HTTP server
-oauthServer, err := server.NewOAuthHTTPServer(mcpServer, "sse", baseURL)
+oauthServer, err := server.NewOAuthHTTPServer(mcpServer, "streamable-http", baseURL)
 if err != nil {
     log.Fatal(err)
 }
@@ -476,7 +485,7 @@ The OAuth implementation includes tests for:
 **Cause**: No cached Google token for the requested account
 
 **Solution**: 
-- For HTTP/SSE: The MCP client will automatically initiate OAuth flow
+- For HTTP: The MCP client will automatically initiate OAuth flow
 - For STDIO: Run authentication setup or check token files in `~/.cache/inboxfewer/`
 
 ## Migrating from Old Authentication
@@ -500,7 +509,27 @@ The previous insecure authentication flow (where users pasted auth codes into th
 
 ## 🎉 Recent Improvements
 
-### Cleanup and Simplification (Latest)
+### OAuth Token Provider Integration Fix (Latest)
+
+**Critical fix**: Resolved OAuth token provider integration gap:
+
+1. **Fixed Token Flow**: 
+   - OAuth middleware now properly connects to Google API clients
+   - HTTP transport creates OAuth handler first
+   - ServerContext recreated with OAuth token provider
+   - Eliminates "no valid token" errors after successful authentication
+
+2. **CLI Enhancements**:
+   - Added `--google-client-id` and `--google-client-secret` flags
+   - Support for `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` env vars
+   - Clear visual feedback for token refresh status on startup
+
+3. **User Experience**:
+   - Server displays token refresh capability on startup
+   - Helpful messages guide users to enable automatic refresh
+   - Seamless integration between OAuth authentication and Google API access
+
+### Cleanup and Simplification
 
 The OAuth implementation has been significantly cleaned up:
 

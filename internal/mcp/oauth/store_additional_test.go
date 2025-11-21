@@ -150,4 +150,3 @@ func TestStore_CleanupExpiredTokens(t *testing.T) {
 		t.Errorf("After cleanup, google_tokens = %d, want 1", stats["google_tokens"])
 	}
 }
-

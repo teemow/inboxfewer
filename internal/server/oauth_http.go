@@ -18,14 +18,21 @@ type OAuthHTTPServer struct {
 	mcpServer    *mcpserver.MCPServer
 	oauthHandler *oauth.Handler
 	httpServer   *http.Server
-	serverType   string // "sse" or "streamable-http"
+	serverType   string // "streamable-http"
+}
+
+// OAuthConfig holds configuration for OAuth server creation
+type OAuthConfig struct {
+	BaseURL            string
+	GoogleClientID     string
+	GoogleClientSecret string
 }
 
 // NewOAuthHTTPServer creates a new OAuth-enabled HTTP server for MCP
-func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, baseURL string) (*OAuthHTTPServer, error) {
+func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, config OAuthConfig) (*OAuthHTTPServer, error) {
 	// Create OAuth handler with Google as the authorization server
 	oauthConfig := &oauth.Config{
-		Resource: baseURL,
+		Resource: config.BaseURL,
 		SupportedScopes: []string{
 			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/gmail.modify",
@@ -37,9 +44,11 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, baseU
 			"https://www.googleapis.com/auth/meetings.space.readonly",
 			"https://www.googleapis.com/auth/tasks",
 		},
-		RateLimitRate:   10,              // 10 requests per second per IP
-		RateLimitBurst:  20,              // Allow burst of 20 requests
-		CleanupInterval: 1 * time.Minute, // Cleanup expired tokens every minute
+		GoogleClientID:     config.GoogleClientID,
+		GoogleClientSecret: config.GoogleClientSecret,
+		RateLimitRate:      10,              // 10 requests per second per IP
+		RateLimitBurst:     20,              // Allow burst of 20 requests
+		CleanupInterval:    1 * time.Minute, // Cleanup expired tokens every minute
 	}
 
 	oauthHandler, err := oauth.NewHandler(oauthConfig)
@@ -47,6 +56,41 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, baseU
 		return nil, fmt.Errorf("failed to create OAuth handler: %w", err)
 	}
 
+	return &OAuthHTTPServer{
+		mcpServer:    mcpServer,
+		oauthHandler: oauthHandler,
+		serverType:   serverType,
+	}, nil
+}
+
+// CreateOAuthHandler creates an OAuth handler for use with HTTP transport
+// This allows creating the handler before the server to inject the token provider
+func CreateOAuthHandler(config OAuthConfig) (*oauth.Handler, error) {
+	oauthConfig := &oauth.Config{
+		Resource: config.BaseURL,
+		SupportedScopes: []string{
+			"https://www.googleapis.com/auth/gmail.readonly",
+			"https://www.googleapis.com/auth/gmail.modify",
+			"https://www.googleapis.com/auth/gmail.send",
+			"https://www.googleapis.com/auth/gmail.settings.basic",
+			"https://www.googleapis.com/auth/documents.readonly",
+			"https://www.googleapis.com/auth/drive",
+			"https://www.googleapis.com/auth/calendar",
+			"https://www.googleapis.com/auth/meetings.space.readonly",
+			"https://www.googleapis.com/auth/tasks",
+		},
+		GoogleClientID:     config.GoogleClientID,
+		GoogleClientSecret: config.GoogleClientSecret,
+		RateLimitRate:      10,              // 10 requests per second per IP
+		RateLimitBurst:     20,              // Allow burst of 20 requests
+		CleanupInterval:    1 * time.Minute, // Cleanup expired tokens every minute
+	}
+
+	return oauth.NewHandler(oauthConfig)
+}
+
+// NewOAuthHTTPServerWithHandler creates a new OAuth-enabled HTTP server with an existing handler
+func NewOAuthHTTPServerWithHandler(mcpServer *mcpserver.MCPServer, serverType string, oauthHandler *oauth.Handler) (*OAuthHTTPServer, error) {
 	return &OAuthHTTPServer{
 		mcpServer:    mcpServer,
 		oauthHandler: oauthHandler,
@@ -74,26 +118,6 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 
 	// Register MCP endpoints based on server type
 	switch s.serverType {
-	case "sse":
-		// Create SSE server
-		sseServer := mcpserver.NewSSEServer(s.mcpServer,
-			mcpserver.WithSSEEndpoint("/sse"),
-			mcpserver.WithMessageEndpoint("/message"),
-		)
-
-		// Wrap SSE endpoints with rate limiting and OAuth middleware
-		sseHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			sseServer.ServeHTTP(w, r)
-		})
-		mux.Handle("/sse", s.oauthHandler.RateLimitMiddleware(
-			s.oauthHandler.ValidateGoogleToken(sseHandler)))
-
-		messageHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			sseServer.ServeHTTP(w, r)
-		})
-		mux.Handle("/message", s.oauthHandler.RateLimitMiddleware(
-			s.oauthHandler.ValidateGoogleToken(messageHandler)))
-
 	case "streamable-http":
 		// Create Streamable HTTP server
 		httpServer := mcpserver.NewStreamableHTTPServer(s.mcpServer,

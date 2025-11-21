@@ -49,14 +49,14 @@ func TestNewHandler_WithoutGoogleCredentials(t *testing.T) {
 
 func TestNewHandler_WithRateLimiting(t *testing.T) {
 	config := &Config{
-		Resource:                   "https://mcp.example.com",
-		RateLimitRate:              10,
-		RateLimitBurst:             20,
-		RateLimitCleanupInterval:   5 * time.Minute,
-		CleanupInterval:            1 * time.Minute,
-		TrustProxy:                 false,
-		GoogleClientID:             "test-id",
-		GoogleClientSecret:         "test-secret",
+		Resource:                 "https://mcp.example.com",
+		RateLimitRate:            10,
+		RateLimitBurst:           20,
+		RateLimitCleanupInterval: 5 * time.Minute,
+		CleanupInterval:          1 * time.Minute,
+		TrustProxy:               false,
+		GoogleClientID:           "test-id",
+		GoogleClientSecret:       "test-secret",
 	}
 
 	handler, err := NewHandler(config)
@@ -262,4 +262,3 @@ func TestHandler_CanRefreshTokens(t *testing.T) {
 		}
 	})
 }
-

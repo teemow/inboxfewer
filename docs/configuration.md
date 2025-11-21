@@ -146,7 +146,7 @@ Each account requires separate OAuth authentication:
 # Start the server
 inboxfewer serve
 
-# For HTTP/SSE transports:
+# For HTTP transport:
 # Your MCP client will automatically handle OAuth authentication with Google
 # when you first try to use a Google API tool.
 
@@ -186,16 +186,6 @@ For read-write access:
 ```
 
 ### Other MCP Clients
-
-For SSE transport:
-
-```bash
-inboxfewer serve --transport sse --http-addr :8080
-```
-
-Configure your MCP client to connect to:
-- SSE endpoint: `http://localhost:8080/sse`
-- Message endpoint: `http://localhost:8080/message`
 
 For HTTP transport:
 
