@@ -14,6 +14,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/teemow/inboxfewer/internal/mcp/oauth"
+	"github.com/teemow/inboxfewer/internal/resources"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/calendar_tools"
 	"github.com/teemow/inboxfewer/internal/tools/docs_tools"
@@ -31,6 +32,7 @@ func newServeCmd() *cobra.Command {
 		yolo               bool
 		googleClientID     string
 		googleClientSecret string
+		disableStreaming   bool
 	)
 
 	cmd := &cobra.Command{
@@ -54,7 +56,7 @@ OAuth Token Refresh (HTTP only):
     GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
   Without these, users will need to re-authenticate when tokens expire (~1 hour).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret)
+			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming)
 		},
 	}
 
@@ -64,11 +66,12 @@ OAuth Token Refresh (HTTP only):
 	cmd.Flags().BoolVar(&yolo, "yolo", false, "Enable write operations (email sending, file deletion, etc.). Default is read-only mode.")
 	cmd.Flags().StringVar(&googleClientID, "google-client-id", "", "Google OAuth Client ID for automatic token refresh (HTTP transport only). Can also use GOOGLE_CLIENT_ID env var.")
 	cmd.Flags().StringVar(&googleClientSecret, "google-client-secret", "", "Google OAuth Client Secret for automatic token refresh (HTTP transport only). Can also use GOOGLE_CLIENT_SECRET env var.")
+	cmd.Flags().BoolVar(&disableStreaming, "disable-streaming", false, "Disable streaming for HTTP transport (for compatibility with certain clients)")
 
 	return cmd
 }
 
-func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string) error {
+func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool) error {
 	// Setup graceful shutdown
 	shutdownCtx, cancel := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
@@ -108,8 +111,10 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	}()
 
 	// Create MCP server
+	// TODO: Add WithTitle when API is available (Title field exists in Implementation struct per 0.43.0)
 	mcpSrv := mcpserver.NewMCPServer("inboxfewer", version,
 		mcpserver.WithToolCapabilities(true),
+		mcpserver.WithResourceCapabilities(false, false), // Subscribe and listChanged
 	)
 
 	// readOnly is the inverse of yolo
@@ -154,13 +159,18 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		return fmt.Errorf("failed to register Tasks tools: %w", err)
 	}
 
+	// Register user resources (session-specific)
+	if err := resources.RegisterUserResources(mcpSrv, serverContext); err != nil {
+		return fmt.Errorf("failed to register user resources: %w", err)
+	}
+
 	// Start the appropriate server based on transport type
 	switch transport {
 	case "stdio":
 		return runStdioServer(mcpSrv)
 	case "streamable-http":
 		fmt.Printf("Starting inboxfewer MCP server with %s transport...\n", transport)
-		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly)
+		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming)
 	default:
 		return fmt.Errorf("unsupported transport type: %s (supported: stdio, streamable-http)", transport)
 	}
@@ -182,7 +192,7 @@ func runStdioServer(mcpSrv *mcpserver.MCPServer) error {
 	return nil
 }
 
-func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool) error {
+func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool) error {
 	// Create OAuth-enabled HTTP server
 	// Base URL should be the full URL where the server is accessible
 	// For development, use http://localhost:8080
@@ -197,6 +207,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		BaseURL:            baseURL,
 		GoogleClientID:     googleClientID,
 		GoogleClientSecret: googleClientSecret,
+		DisableStreaming:   disableStreaming,
 	}
 
 	oauthHandler, err := server.CreateOAuthHandler(oauthConfig)
@@ -246,9 +257,13 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	if err := tasks_tools.RegisterTasksTools(mcpSrv, serverContext, readOnly); err != nil {
 		return fmt.Errorf("failed to register Tasks tools: %w", err)
 	}
+	// Re-register resources with the new context
+	if err := resources.RegisterUserResources(mcpSrv, serverContext); err != nil {
+		return fmt.Errorf("failed to register user resources: %w", err)
+	}
 
 	// Create OAuth server with existing handler
-	oauthServer, err := server.NewOAuthHTTPServerWithHandler(mcpSrv, "streamable-http", oauthHandler)
+	oauthServer, err := server.NewOAuthHTTPServerWithHandler(mcpSrv, "streamable-http", oauthHandler, disableStreaming)
 	if err != nil {
 		return fmt.Errorf("failed to create OAuth HTTP server: %w", err)
 	}

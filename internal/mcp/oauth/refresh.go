@@ -3,16 +3,22 @@ package oauth
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"golang.org/x/oauth2"
 )
 
 // refreshGoogleToken attempts to refresh an expired Google OAuth token
-func refreshGoogleToken(ctx context.Context, token *oauth2.Token, config *oauth2.Config) (*oauth2.Token, error) {
+func refreshGoogleToken(ctx context.Context, token *oauth2.Token, config *oauth2.Config, httpClient *http.Client) (*oauth2.Token, error) {
 	// Check if we have a refresh token
 	if token.RefreshToken == "" {
 		return nil, fmt.Errorf("no refresh token available")
+	}
+
+	// Use custom HTTP client if provided
+	if httpClient != nil {
+		ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 	}
 
 	// Use the OAuth2 config to refresh the token
@@ -46,7 +52,7 @@ func (h *Handler) RefreshGoogleTokenIfNeeded(ctx context.Context, email string, 
 	}
 
 	// Attempt to refresh the token
-	newToken, err := refreshGoogleToken(ctx, token, config)
+	newToken, err := refreshGoogleToken(ctx, token, config, h.httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to refresh token for %s: %w", email, err)
 	}

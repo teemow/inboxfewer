@@ -44,6 +44,11 @@ type Config struct {
 
 	// Logger for structured logging (optional, uses default if not provided)
 	Logger *slog.Logger
+
+	// HTTPClient is a custom HTTP client for OAuth requests
+	// If not provided, uses the default HTTP client
+	// Can be used to add timeouts, logging, metrics, etc.
+	HTTPClient *http.Client
 }
 
 // Handler implements OAuth 2.1 endpoints for the MCP server
@@ -53,6 +58,7 @@ type Handler struct {
 	store       *Store
 	rateLimiter *RateLimiter   // Optional rate limiter for protecting endpoints
 	oauthConfig *oauth2.Config // Google OAuth config for token refresh
+	httpClient  *http.Client   // Custom HTTP client for OAuth requests
 	logger      *slog.Logger
 }
 
@@ -120,11 +126,20 @@ func NewHandler(config *Config) (*Handler, error) {
 	store := NewStoreWithInterval(config.CleanupInterval)
 	store.SetLogger(logger)
 
+	// Use custom HTTP client if provided, otherwise use default
+	httpClient := config.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{
+			Timeout: 30 * time.Second,
+		}
+	}
+
 	return &Handler{
 		config:      config,
 		store:       store,
 		rateLimiter: rateLimiter,
 		oauthConfig: oauthConfig,
+		httpClient:  httpClient,
 		logger:      logger,
 	}, nil
 }

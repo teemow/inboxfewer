@@ -139,7 +139,7 @@ func TestRefreshGoogleToken_NoRefreshToken(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, err := refreshGoogleToken(ctx, token, &oauth2.Config{})
+	_, err := refreshGoogleToken(ctx, token, &oauth2.Config{}, nil)
 
 	if err == nil {
 		t.Error("Expected error when no refresh token is available")

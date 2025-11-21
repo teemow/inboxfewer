@@ -91,7 +91,7 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 			if isTokenExpired(cachedToken, 5*time.Minute) && cachedToken.RefreshToken != "" {
 				h.logger.Info("Token expiring soon, attempting refresh", "email", userEmail)
 				// Attempt to refresh the token
-				newToken, refreshErr := refreshGoogleToken(r.Context(), cachedToken, h.oauthConfig)
+				newToken, refreshErr := refreshGoogleToken(r.Context(), cachedToken, h.oauthConfig, h.httpClient)
 				if refreshErr == nil {
 					// Successfully refreshed - use the new token
 					h.logger.Info("Token refreshed successfully", "email", userEmail)

@@ -15,10 +15,11 @@ import (
 // It implements RFC 9728 Protected Resource Metadata for MCP clients to discover
 // Google as the authorization server
 type OAuthHTTPServer struct {
-	mcpServer    *mcpserver.MCPServer
-	oauthHandler *oauth.Handler
-	httpServer   *http.Server
-	serverType   string // "streamable-http"
+	mcpServer        *mcpserver.MCPServer
+	oauthHandler     *oauth.Handler
+	httpServer       *http.Server
+	serverType       string // "streamable-http"
+	disableStreaming bool
 }
 
 // OAuthConfig holds configuration for OAuth server creation
@@ -26,6 +27,7 @@ type OAuthConfig struct {
 	BaseURL            string
 	GoogleClientID     string
 	GoogleClientSecret string
+	DisableStreaming   bool
 }
 
 // NewOAuthHTTPServer creates a new OAuth-enabled HTTP server for MCP
@@ -57,9 +59,10 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, confi
 	}
 
 	return &OAuthHTTPServer{
-		mcpServer:    mcpServer,
-		oauthHandler: oauthHandler,
-		serverType:   serverType,
+		mcpServer:        mcpServer,
+		oauthHandler:     oauthHandler,
+		serverType:       serverType,
+		disableStreaming: config.DisableStreaming,
 	}, nil
 }
 
@@ -90,11 +93,12 @@ func CreateOAuthHandler(config OAuthConfig) (*oauth.Handler, error) {
 }
 
 // NewOAuthHTTPServerWithHandler creates a new OAuth-enabled HTTP server with an existing handler
-func NewOAuthHTTPServerWithHandler(mcpServer *mcpserver.MCPServer, serverType string, oauthHandler *oauth.Handler) (*OAuthHTTPServer, error) {
+func NewOAuthHTTPServerWithHandler(mcpServer *mcpserver.MCPServer, serverType string, oauthHandler *oauth.Handler, disableStreaming bool) (*OAuthHTTPServer, error) {
 	return &OAuthHTTPServer{
-		mcpServer:    mcpServer,
-		oauthHandler: oauthHandler,
-		serverType:   serverType,
+		mcpServer:        mcpServer,
+		oauthHandler:     oauthHandler,
+		serverType:       serverType,
+		disableStreaming: disableStreaming,
 	}, nil
 }
 
@@ -120,9 +124,17 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 	switch s.serverType {
 	case "streamable-http":
 		// Create Streamable HTTP server
-		httpServer := mcpserver.NewStreamableHTTPServer(s.mcpServer,
-			mcpserver.WithEndpointPath("/mcp"),
-		)
+		var httpServer http.Handler
+		if s.disableStreaming {
+			httpServer = mcpserver.NewStreamableHTTPServer(s.mcpServer,
+				mcpserver.WithEndpointPath("/mcp"),
+				mcpserver.WithDisableStreaming(true),
+			)
+		} else {
+			httpServer = mcpserver.NewStreamableHTTPServer(s.mcpServer,
+				mcpserver.WithEndpointPath("/mcp"),
+			)
+		}
 
 		// Wrap MCP endpoint with rate limiting and OAuth middleware
 		mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
