@@ -90,6 +90,23 @@ The following table lists the configurable parameters of the inboxfewer chart an
 | `service.port` | Service port | `8080` |
 | `service.targetPort` | Container port | `8080` |
 
+### Health Probes
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `livenessProbe.enabled` | Enable liveness probe | `true` |
+| `livenessProbe.initialDelaySeconds` | Initial delay before probe starts | `15` |
+| `livenessProbe.periodSeconds` | How often to perform probe | `20` |
+| `livenessProbe.timeoutSeconds` | Probe timeout | `5` |
+| `livenessProbe.failureThreshold` | Failure threshold | `3` |
+| `readinessProbe.enabled` | Enable readiness probe | `true` |
+| `readinessProbe.initialDelaySeconds` | Initial delay before probe starts | `5` |
+| `readinessProbe.periodSeconds` | How often to perform probe | `10` |
+| `readinessProbe.timeoutSeconds` | Probe timeout | `3` |
+| `readinessProbe.failureThreshold` | Failure threshold | `3` |
+
+**Note:** Health probes use TCP socket checks by default, which verify the port is accepting connections.
+
 ### Ingress Configuration
 
 | Parameter | Description | Default |
@@ -98,6 +115,8 @@ The following table lists the configurable parameters of the inboxfewer chart an
 | `ingress.className` | Ingress class name | `""` |
 | `ingress.hosts` | Ingress hosts | `[{host: inboxfewer.local, paths: [{path: /, pathType: Prefix}]}]` |
 | `ingress.tls` | Ingress TLS configuration | `[]` |
+
+**Note:** The chart uses both the annotation (`kubernetes.io/ingress.class`) and spec field (`spec.ingressClassName`) for maximum compatibility with both legacy and modern ingress controllers.
 
 ### Resource Limits
 
@@ -116,6 +135,13 @@ The following table lists the configurable parameters of the inboxfewer chart an
 | `autoscaling.minReplicas` | Minimum number of replicas | `1` |
 | `autoscaling.maxReplicas` | Maximum number of replicas | `10` |
 | `autoscaling.targetCPUUtilizationPercentage` | Target CPU utilization | `80` |
+
+### Pod Disruption Budget
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `podDisruptionBudget.enabled` | Enable PodDisruptionBudget | `false` |
+| `podDisruptionBudget.maxUnavailable` | Maximum unavailable pods during disruptions | `1` |
 
 ## Examples
 
@@ -276,6 +302,9 @@ The chart follows security best practices:
 - Read-only root filesystem
 - Drops all capabilities
 - Does not allow privilege escalation
+- Service account token auto-mount disabled (app doesn't need Kubernetes API access)
+- Rolling updates with zero downtime (maxUnavailable: 0, maxSurge: 1)
+- TCP health probes enabled by default for pod health monitoring
 
 ## Documentation
 

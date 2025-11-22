@@ -2,7 +2,7 @@
 # This Dockerfile is used by the docker-release.yml workflow to create
 # multi-architecture images (amd64, arm64) using binaries built by GoReleaser.
 
-FROM alpine:latest
+FROM alpine:3.19
 
 # Build arguments
 ARG TARGETARCH

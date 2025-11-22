@@ -519,21 +519,34 @@ spec:
 
 ### Health Checks
 
+The Helm chart includes TCP-based health probes by default:
+
 ```yaml
-# In deployment
+# In deployment (configured via values.yaml)
 livenessProbe:
-  httpGet:
-    path: /health
-    port: 8080
-  initialDelaySeconds: 30
-  periodSeconds: 10
+  tcpSocket:
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 readinessProbe:
-  httpGet:
-    path: /ready
-    port: 8080
+  tcpSocket:
+    port: http
   initialDelaySeconds: 5
-  periodSeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+```
+
+Health probes are **enabled by default** in the Helm chart. To disable them:
+
+```yaml
+livenessProbe:
+  enabled: false
+readinessProbe:
+  enabled: false
 ```
 
 ### Logs
@@ -607,37 +620,98 @@ If release images fail to build:
 
 ## Best Practices
 
-1. **Pin Versions in Production:**
+The Helm chart implements production-ready best practices out of the box:
+
+### 1. **Version Pinning**
    ```yaml
+   # Dockerfile uses pinned Alpine version
+   FROM alpine:3.19  # Not 'latest'
+   
+   # Helm chart defaults to specific appVersion
    image:
-     tag: v1.2.3  # Not 'latest'
+     tag: ""  # Defaults to Chart.appVersion (e.g., 1.2.3)
    ```
 
-2. **Use Resource Limits:**
+### 2. **Resource Management**
    ```yaml
    resources:
      limits:
        cpu: 500m
        memory: 512Mi
+     requests:
+       cpu: 100m
+       memory: 128Mi
    ```
 
-3. **Enable Security Context:**
+### 3. **Security Hardening**
    ```yaml
+   # Pod security context
+   podSecurityContext:
+     runAsNonRoot: true
+     runAsUser: 1000
+     fsGroup: 1000
+   
+   # Container security context
    securityContext:
      runAsNonRoot: true
      runAsUser: 1000
      readOnlyRootFilesystem: true
+     allowPrivilegeEscalation: false
+     capabilities:
+       drop:
+       - ALL
+   
+   # Service account
+   serviceAccount:
+     automount: false  # App doesn't need K8s API access
    ```
 
-4. **Use Secrets for Sensitive Data:**
-   - Never commit credentials
-   - Use Kubernetes secrets or external secret managers
-   - Rotate tokens regularly
+### 4. **Zero-Downtime Deployments**
+   ```yaml
+   strategy:
+     type: RollingUpdate
+     rollingUpdate:
+       maxUnavailable: 0  # No downtime
+       maxSurge: 1        # One extra pod during rollout
+   ```
 
-5. **Monitor Resource Usage:**
-   - Set up alerts for high memory/CPU
+### 5. **Health Monitoring**
+   ```yaml
+   # TCP probes enabled by default
+   livenessProbe:
+     enabled: true
+     tcpSocket:
+       port: http
+   
+   readinessProbe:
+     enabled: true
+     tcpSocket:
+       port: http
+   ```
+
+### 6. **Secrets Management**
+   - Never commit credentials
+   - Use Kubernetes secrets or external secret managers (e.g., External Secrets Operator)
+   - Rotate tokens regularly
+   ```yaml
+   google:
+     clientId: ""  # Set via --set or values file
+     clientSecret: ""
+   existingSecret: "my-oauth-secret"  # Or use existing secret
+   ```
+
+### 7. **Controlled Disruptions** (Optional)
+   ```yaml
+   podDisruptionBudget:
+     enabled: true
+     maxUnavailable: 1
+   ```
+
+### 8. **Monitoring & Alerting**
+   - Set up alerts for high memory/CPU usage
    - Monitor MCP server response times
    - Track OAuth token refresh failures
+   - Watch pod restart counts
 
 ## See Also
 

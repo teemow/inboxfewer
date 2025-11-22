@@ -14,7 +14,8 @@ serviceAccount:
   # Specifies whether a service account should be created
   create: true
   # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  # Set to false as the app doesn't need Kubernetes API access
+  automount: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
@@ -69,20 +70,22 @@ resources:
     memory: 128Mi
 
 livenessProbe:
-  enabled: false
-  httpGet:
-    path: /
+  enabled: true
+  tcpSocket:
     port: http
-  initialDelaySeconds: 30
-  periodSeconds: 10
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 readinessProbe:
-  enabled: false
-  httpGet:
-    path: /
+  enabled: true
+  tcpSocket:
     port: http
   initialDelaySeconds: 5
-  periodSeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
 
 autoscaling:
   enabled: false
@@ -90,6 +93,11 @@ autoscaling:
   maxReplicas: 10
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
+
+# Pod disruption budget for controlled disruptions
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: 1
 
 # Additional volumes on the output Deployment definition.
 volumes: []

@@ -8,16 +8,20 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       {{- include "inboxfewer.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- with .Values.podAnnotations }}
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
+      {{- end }}
       labels:
         {{- include "inboxfewer.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
@@ -52,6 +56,7 @@ spec:
           {{- if .Values.config.disableStreaming }}
           - --disable-streaming
           {{- end }}
+        {{- if or .Values.google.clientId .Values.google.clientSecret .Values.existingSecret }}
         env:
           {{- if or .Values.google.clientId .Values.existingSecret }}
           - name: GOOGLE_CLIENT_ID
@@ -67,21 +72,28 @@ spec:
                 name: {{ .Values.existingSecret | default (include "inboxfewer.fullname" .) }}
                 key: google-client-secret
           {{- end }}
+        {{- end }}
         ports:
           - name: http
             containerPort: {{ .Values.service.targetPort }}
             protocol: TCP
         {{- if .Values.livenessProbe.enabled }}
         livenessProbe:
-          {{- toYaml .Values.livenessProbe.httpGet | nindent 12 }}
+          tcpSocket:
+            {{- toYaml .Values.livenessProbe.tcpSocket | nindent 12 }}
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
         {{- end }}
         {{- if .Values.readinessProbe.enabled }}
         readinessProbe:
-          {{- toYaml .Values.readinessProbe.httpGet | nindent 12 }}
+          tcpSocket:
+            {{- toYaml .Values.readinessProbe.tcpSocket | nindent 12 }}
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
         {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
