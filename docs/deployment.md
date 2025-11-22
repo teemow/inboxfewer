@@ -432,6 +432,70 @@ Each release produces:
 
 ## Configuration
 
+### ⚠️ Security: Secrets Management
+
+**CRITICAL: Never pass secrets via command line or commit to Git!**
+
+```bash
+# ❌ UNSAFE - Exposed in shell history and Helm history
+helm install inboxfewer --set google.clientSecret="secret"
+
+# ❌ UNSAFE - Never commit to Git
+echo "google.clientSecret: mysecret" >> my-values.yaml
+git add my-values.yaml  # DON'T!
+```
+
+**Recommended approaches:**
+
+1. **Use Kubernetes Secrets (Basic):**
+```bash
+# Create secret
+kubectl create secret generic inboxfewer-oauth \
+  --from-literal=google-client-id="YOUR_CLIENT_ID" \
+  --from-literal=google-client-secret="YOUR_CLIENT_SECRET"
+
+# Reference in Helm
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
+  --set existingSecret=inboxfewer-oauth
+```
+
+2. **Use External Secrets Operator (Recommended for Production):**
+```yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: inboxfewer-oauth
+spec:
+  secretStoreRef:
+    name: aws-secrets-manager  # or azure-keyvault, gcp-secretmanager, vault
+    kind: SecretStore
+  target:
+    name: inboxfewer-oauth
+  data:
+  - secretKey: google-client-id
+    remoteRef:
+      key: inboxfewer/oauth
+      property: client_id
+  - secretKey: google-client-secret
+    remoteRef:
+      key: inboxfewer/oauth
+      property: client_secret
+```
+
+3. **Use Sealed Secrets (GitOps-friendly):**
+```bash
+# Encrypt secret
+kubectl create secret generic inboxfewer-oauth \
+  --from-literal=google-client-id="..." \
+  --from-literal=google-client-secret="..." \
+  --dry-run=client -o yaml | \
+  kubeseal -o yaml > sealed-secret.yaml
+
+# Commit sealed secret (safe to commit)
+git add sealed-secret.yaml
+git commit -m "Add encrypted OAuth credentials"
+```
+
 ### Image Pull Secrets
 
 For private repositories:
@@ -730,6 +794,7 @@ The Helm chart implements production-ready best practices out of the box:
 
 ## See Also
 
+- [Security Guide](security.md) - **READ THIS FIRST** for production deployments
 - [Configuration Guide](configuration.md)
 - [Development Guide](development.md)
 - [Debugging Guide](debugging.md)

@@ -163,4 +163,45 @@ github:
 # Keys should be: github-user, github-token
 githubSecret: ""
 
+# Network policies for defense-in-depth security
+networkPolicy:
+  # Enable NetworkPolicy for controlling pod network access
+  enabled: false
+  policyTypes:
+    - Ingress
+    - Egress
+  # Ingress rules - who can connect to this pod
+  ingress:
+    - from:
+      # Allow ingress from pods with specific labels
+      - podSelector:
+          matchLabels:
+            app: allowed-client
+      # Allow ingress from specific namespaces
+      # - namespaceSelector:
+      #     matchLabels:
+      #       name: allowed-namespace
+      ports:
+      - protocol: TCP
+        port: 8080
+  # Egress rules - where this pod can connect to
+  egress:
+    # Allow HTTPS to external APIs (Google, GitHub)
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 443
+    # Allow DNS queries
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: kube-system
+      - podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+      ports:
+      - protocol: UDP
+        port: 53
+
 

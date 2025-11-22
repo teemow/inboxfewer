@@ -56,6 +56,77 @@ To uninstall/delete the `my-inboxfewer` deployment:
 helm delete my-inboxfewer
 ```
 
+## ⚠️ Security Best Practices
+
+### **CRITICAL: Never Use `--set` for Secrets in Production!**
+
+**DO NOT** pass secrets via command line or commit them to values files:
+
+```bash
+# ❌ UNSAFE - Secrets exposed in shell history and Helm history
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
+  --set google.clientSecret="my-secret-123"
+
+# ❌ UNSAFE - Never commit secrets to version control
+# values.yaml
+google:
+  clientSecret: "my-secret-123"  # DON'T DO THIS!
+```
+
+**DO** use Kubernetes secrets or external secret managers:
+
+```bash
+# ✅ SAFE - Create secret separately
+kubectl create secret generic inboxfewer-oauth \
+  --from-literal=google-client-id="your-client-id" \
+  --from-literal=google-client-secret="your-client-secret"
+
+# ✅ SAFE - Reference existing secret
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
+  --set existingSecret=inboxfewer-oauth
+```
+
+**Recommended Secret Management Solutions:**
+- [External Secrets Operator](https://external-secrets.io/) - Sync secrets from external providers (AWS Secrets Manager, Azure Key Vault, GCP Secret Manager, HashiCorp Vault)
+- [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) - Encrypt secrets in Git
+- [SOPS](https://github.com/mozilla/sops) - Encrypt secrets with age/PGP
+
+### Image Verification
+
+All images are scanned with Trivy for vulnerabilities. To verify image integrity:
+
+```bash
+# Check latest scan results in GitHub Security tab
+# https://github.com/teemow/inboxfewer/security/code-scanning
+
+# Verify image digest
+docker pull ghcr.io/teemow/inboxfewer:v1.2.3
+docker inspect ghcr.io/teemow/inboxfewer:v1.2.3 --format='{{.RepoDigests}}'
+```
+
+### Network Security
+
+Enable NetworkPolicy for defense-in-depth:
+
+```yaml
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app: allowed-client
+  egress:
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 443  # HTTPS for Google/GitHub APIs
+```
+
 ## Configuration
 
 The following table lists the configurable parameters of the inboxfewer chart and their default values.
@@ -143,6 +214,17 @@ The following table lists the configurable parameters of the inboxfewer chart an
 | `podDisruptionBudget.enabled` | Enable PodDisruptionBudget | `false` |
 | `podDisruptionBudget.maxUnavailable` | Maximum unavailable pods during disruptions | `1` |
 
+### Network Policy
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `networkPolicy.enabled` | Enable NetworkPolicy for pod network isolation | `false` |
+| `networkPolicy.policyTypes` | Policy types (Ingress, Egress) | `[Ingress, Egress]` |
+| `networkPolicy.ingress` | Ingress rules (who can connect to this pod) | See values.yaml |
+| `networkPolicy.egress` | Egress rules (where this pod can connect) | See values.yaml |
+
+**Note:** NetworkPolicy requires a CNI plugin that supports it (Calico, Cilium, Weave Net). It provides defense-in-depth by restricting network access to/from pods.
+
 ### Volumes and Storage
 
 | Parameter | Description | Default |
@@ -184,6 +266,15 @@ helm install inboxfewer ./charts/inboxfewer \
 helm install inboxfewer ./charts/inboxfewer \
   --set config.yolo=true
 ```
+
+### With NetworkPolicy Enabled
+
+```bash
+helm install inboxfewer ./charts/inboxfewer \
+  --set networkPolicy.enabled=true
+```
+
+**Note:** Ensure your Kubernetes cluster supports NetworkPolicy (requires compatible CNI plugin).
 
 ### Using Existing Secret
 

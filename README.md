@@ -201,6 +201,7 @@ See [docs/tools.md](docs/tools.md) for the complete tool reference (auto-generat
 
 - [Configuration Guide](docs/configuration.md)
 - [Deployment Guide](docs/deployment.md) - Docker, Kubernetes, Helm
+- [Security Guide](docs/security.md) - Security best practices and compliance
 - [MCP Tools Reference](docs/tools.md)
 - [Development Guide](docs/development.md)
 - [Debugging Guide](docs/debugging.md)

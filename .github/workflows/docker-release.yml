@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write
+      security-events: write  # For Trivy scan results
 
     steps:
       - name: Checkout repository
@@ -84,6 +84,7 @@ jobs:
             org.opencontainers.image.version=${{ steps.get_tag.outputs.version }}
 
       - name: Build and push multi-arch Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -96,6 +97,28 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VERSION=${{ steps.get_tag.outputs.version }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_tag.outputs.tag }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy vulnerability scanner (fail on critical)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_tag.outputs.tag }}
+          exit-code: '1'
+          severity: 'CRITICAL'
+          ignore-unfixed: true
 
       - name: Summary
         run: |
