@@ -1,0 +1,21 @@
+apiVersion: v2
+name: inboxfewer
+description: A Helm chart for inboxfewer MCP server for Gmail and Google services integration
+type: application
+version: 0.1.1
+# appVersion is automatically updated by the release workflow to match the latest release
+# Users can override with: --set image.tag=v1.2.3
+appVersion: "0.0.1"
+home: https://github.com/teemow/inboxfewer
+sources:
+  - https://github.com/teemow/inboxfewer
+keywords:
+  - gmail
+  - google
+  - mcp
+  - ai
+maintainers:
+  - name: teemow
+    url: https://github.com/teemow
+
+

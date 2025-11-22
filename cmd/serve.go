@@ -63,9 +63,16 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool) erro
 		os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Read GitHub config
+	// Read GitHub config (optional for serve mode - will use empty strings if not available)
+	// Users can authenticate via OAuth for MCP server usage
 	if err := readGithubConfig(); err != nil {
-		return fmt.Errorf("failed to read GitHub config: %w", err)
+		// Log warning but continue - GitHub config is optional for MCP server
+		if transport != "stdio" {
+			log.Printf("Warning: GitHub config not found (this is OK for MCP server): %v", err)
+		}
+		// Set empty values - server will work without GitHub integration
+		githubUser = ""
+		githubToken = ""
 	}
 
 	// Create server context

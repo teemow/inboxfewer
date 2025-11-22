@@ -1,0 +1,42 @@
+# Dockerfile.release - Uses pre-built binaries from GitHub releases
+# This Dockerfile is used by the docker-release.yml workflow to create
+# multi-architecture images (amd64, arm64) using binaries built by GoReleaser.
+
+FROM alpine:3.21@sha256:5405e8f36ce1878720f71217d664aa3dea32e5e5df11acbf07fc78ef5661465b
+
+# Build arguments
+ARG TARGETARCH
+ARG VERSION
+
+# Install ca-certificates for HTTPS
+RUN apk --no-cache add ca-certificates
+
+# Create non-root user
+RUN addgroup -g 1000 inboxfewer && \
+    adduser -D -u 1000 -G inboxfewer inboxfewer
+
+# Set working directory
+WORKDIR /app
+
+# Copy the appropriate pre-built binary based on architecture
+# The binaries are downloaded by the workflow and placed in ./binaries/
+COPY binaries/inboxfewer_linux_${TARGETARCH} /app/inboxfewer
+
+# Ensure binary is executable
+RUN chmod +x /app/inboxfewer
+
+# Change ownership
+RUN chown -R inboxfewer:inboxfewer /app
+
+# Switch to non-root user
+USER inboxfewer
+
+# Expose default HTTP port
+EXPOSE 8080
+
+# Set entrypoint
+ENTRYPOINT ["/app/inboxfewer"]
+
+# Default to serve command with streamable-http transport
+CMD ["serve", "--transport", "streamable-http", "--http-addr", ":8080"]
+

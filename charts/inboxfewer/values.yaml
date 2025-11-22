@@ -1,0 +1,207 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/teemow/inboxfewer
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  # Set to false as the app doesn't need Kubernetes API access
+  automount: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: inboxfewer.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: inboxfewer-tls
+  #    hosts:
+  #      - inboxfewer.local
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+livenessProbe:
+  enabled: true
+  tcpSocket:
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  tcpSocket:
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Pod disruption budget for controlled disruptions
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: 1
+
+# Additional volumes on the output Deployment definition.
+volumes:
+  # Cache directory for OAuth tokens and application cache
+  # Using emptyDir allows writes with readOnlyRootFilesystem: true
+  # Tokens are lost on pod restart, requiring re-authentication
+  - name: cache
+    emptyDir: {}
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  # Mount writable cache directory for OAuth tokens
+  - name: cache
+    mountPath: /home/inboxfewer/.cache
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Application configuration
+config:
+  # Transport type: stdio or streamable-http
+  transport: "streamable-http"
+  # HTTP server address
+  httpAddr: ":8080"
+  # Enable write operations (default: false for read-only mode)
+  yolo: false
+  # Enable debug logging
+  debug: false
+  # Disable streaming for HTTP transport
+  disableStreaming: false
+
+# Google OAuth configuration
+google:
+  # Google OAuth Client ID for automatic token refresh
+  # Set via environment variable or secret
+  clientId: ""
+  # Google OAuth Client Secret for automatic token refresh
+  # Set via environment variable or secret
+  clientSecret: ""
+
+# Existing secret containing Google OAuth credentials
+# Keys should be: google-client-id, google-client-secret
+existingSecret: ""
+
+# GitHub configuration (required for cleanup command)
+github:
+  # GitHub username
+  user: ""
+  # GitHub token
+  token: ""
+
+# Existing secret containing GitHub credentials
+# Keys should be: github-user, github-token
+githubSecret: ""
+
+# Network policies for defense-in-depth security
+networkPolicy:
+  # Enable NetworkPolicy for controlling pod network access
+  enabled: false
+  policyTypes:
+    - Ingress
+    - Egress
+  # Ingress rules - who can connect to this pod
+  ingress:
+    - from:
+      # Allow ingress from pods with specific labels
+      - podSelector:
+          matchLabels:
+            app: allowed-client
+      # Allow ingress from specific namespaces
+      # - namespaceSelector:
+      #     matchLabels:
+      #       name: allowed-namespace
+      ports:
+      - protocol: TCP
+        port: 8080
+  # Egress rules - where this pod can connect to
+  egress:
+    # Allow HTTPS to external APIs (Google, GitHub)
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 443
+    # Allow DNS queries
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: kube-system
+      - podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+      ports:
+      - protocol: UDP
+        port: 53
+
+
