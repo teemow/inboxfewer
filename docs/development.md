@@ -137,6 +137,69 @@ make tidy
 
 This runs `go mod tidy` to clean up dependencies.
 
+## Dockerfiles
+
+The project uses two Dockerfiles for different purposes:
+
+### Dockerfile (Feature Branches)
+
+**Purpose:** Build from source for feature branches and development
+
+**Used by:** `.github/workflows/docker-build.yml`
+
+**Build process:**
+- Multi-stage build
+- Compiles Go binary during image build
+- Single architecture (amd64)
+- Ideal for quick iteration and testing
+
+**When to use:**
+- Feature branch development
+- Local testing
+- Integration testing before merge
+- Quick prototype deployments
+
+**Build locally:**
+```bash
+docker build -t inboxfewer:dev .
+```
+
+### Dockerfile.release (Production Releases)
+
+**Purpose:** Use pre-built, optimized binaries from GitHub releases
+
+**Used by:** `.github/workflows/docker-release.yml`
+
+**Build process:**
+- Single-stage build (no compilation)
+- Uses binaries built by GoReleaser
+- Multi-architecture (amd64, arm64)
+- Smaller, faster builds
+- Consistent with released binaries
+
+**When to use:**
+- Production deployments
+- Official releases
+- Multi-architecture support needed
+- Maximum optimization required
+
+**Build locally:**
+```bash
+# First create release binaries
+make release-local
+
+# Copy binaries
+mkdir -p binaries
+cp dist/inboxfewer_linux_amd64*/inboxfewer binaries/inboxfewer_linux_amd64
+cp dist/inboxfewer_linux_arm64*/inboxfewer binaries/inboxfewer_linux_arm64
+
+# Build multi-arch image
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -f Dockerfile.release \
+  -t inboxfewer:release .
+```
+
 ## Project Structure
 
 ```
@@ -194,10 +257,22 @@ inboxfewer/
 │   └── start-mcp-server.sh # Development server script
 ├── .github/              # GitHub Actions workflows
 │   └── workflows/
-│       ├── ci.yaml       # Continuous integration
-│       └── auto-release.yaml # Automated releases
+│       ├── ci.yaml               # Continuous integration
+│       ├── auto-release.yaml     # Automated releases (binaries)
+│       ├── docker-build.yml      # Docker images (feature branches)
+│       ├── docker-release.yml    # Docker images (releases)
+│       └── helm-release.yml      # Helm chart publishing
+├── charts/               # Helm charts
+│   └── inboxfewer/
+│       ├── Chart.yaml    # Chart metadata
+│       ├── values.yaml   # Default configuration
+│       ├── templates/    # Kubernetes manifests
+│       └── README.md     # Chart documentation
+├── Dockerfile            # Container build from source (dev/feature branches)
+├── Dockerfile.release    # Container build from binaries (production)
 ├── main.go               # Application entry point
 ├── Makefile              # Build automation
+├── .goreleaser.yaml      # GoReleaser configuration
 └── go.mod                # Go module definition
 ```
 
@@ -244,7 +319,7 @@ inboxfewer/
 
 ### Automated Releases
 
-The project uses GitHub Actions for automated releases:
+The project uses GitHub Actions for a fully automated release pipeline:
 
 1. **CI Checks** (`.github/workflows/ci.yaml`)
    - Runs on every PR and push to main
@@ -258,12 +333,37 @@ The project uses GitHub Actions for automated releases:
    - Builds binaries for multiple platforms using GoReleaser
    - Publishes a GitHub release with artifacts
 
+3. **Docker Release** (`.github/workflows/docker-release.yml`)
+   - Triggers after Auto Release completes successfully
+   - Downloads pre-built binaries from the GitHub release
+   - Builds multi-architecture Docker images (amd64, arm64)
+   - Pushes to GitHub Container Registry (GHCR)
+   - Tags: `latest`, `v1.2.3`, `v1.2`, `v1`
+
+4. **Docker Build for Feature Branches** (`.github/workflows/docker-build.yml`)
+   - Triggers on PRs and feature branch pushes
+   - Builds single-arch (amd64) images from source
+   - Enables integration testing before merge
+   - Tags: `pr-123`, `feature-branch-name`, `sha-abc123`
+
+5. **Helm Chart Release** (`.github/workflows/helm-release.yml`)
+   - Triggers on changes to `charts/**`
+   - Packages and publishes Helm charts to GHCR
+   - Supports both stable releases and feature branch testing
+
 ### Supported Platforms
 
-Releases include pre-built binaries for:
+**Binaries:**
 - Linux (amd64, arm64)
 - macOS/Darwin (amd64, arm64)
 - Windows (amd64, arm64)
+
+**Container Images:**
+- linux/amd64
+- linux/arm64
+
+**Helm Charts:**
+- Published to OCI registry at `oci://ghcr.io/teemow/charts/inboxfewer`
 
 ### Manual Release
 
@@ -275,6 +375,116 @@ make release-dry-run
 
 # Create local release artifacts
 make release-local
+```
+
+### Container Image Builds
+
+#### Production Images (Multi-Arch)
+
+Production images are built automatically after each release:
+
+```bash
+# These are built automatically by CI after release
+# Uses Dockerfile.release with pre-built binaries
+# Supports: linux/amd64, linux/arm64
+# Tags: latest, v1.2.3, v1.2, v1
+```
+
+To test the release Dockerfile locally:
+
+```bash
+# First create release binaries
+make release-local
+
+# Copy binaries to expected location
+mkdir -p binaries
+cp dist/inboxfewer_linux_amd64*/inboxfewer binaries/inboxfewer_linux_amd64
+cp dist/inboxfewer_linux_arm64*/inboxfewer binaries/inboxfewer_linux_arm64
+
+# Build multi-arch image locally (requires Docker Buildx)
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -f Dockerfile.release \
+  -t ghcr.io/teemow/inboxfewer:test \
+  .
+```
+
+#### Feature Branch Images (Single-Arch)
+
+Feature branch images are built automatically on every push:
+
+```bash
+# Built from source using Dockerfile
+# Supports: linux/amd64 only (for faster CI)
+# Tags: pr-42, feature-branch-name, sha-abc123
+```
+
+To test the feature branch Dockerfile locally:
+
+```bash
+# Build from source (standard Dockerfile)
+docker build -t inboxfewer:local .
+
+# Run locally
+docker run -p 8080:8080 inboxfewer:local
+
+# Test with custom command
+docker run inboxfewer:local serve --debug
+```
+
+### Helm Chart Development
+
+#### Testing Chart Changes Locally
+
+```bash
+# Lint the chart
+helm lint charts/inboxfewer
+
+# Template the chart (dry-run)
+helm template inboxfewer charts/inboxfewer \
+  --values charts/inboxfewer/values.yaml
+
+# Install locally (requires local Kubernetes cluster)
+helm install inboxfewer charts/inboxfewer \
+  --set image.tag=local \
+  --set googleAuth.enabled=false \
+  --dry-run --debug
+
+# Install for real
+helm install inboxfewer charts/inboxfewer \
+  --set image.tag=latest
+```
+
+#### Chart Versioning
+
+Charts are versioned in `charts/inboxfewer/Chart.yaml`:
+
+```yaml
+apiVersion: v2
+name: inboxfewer
+version: 0.1.0  # Chart version
+appVersion: "1.2.3"  # App version (matches release)
+```
+
+When making chart changes:
+
+1. Update `version` in `Chart.yaml` (following semver)
+2. Update `appVersion` if needed
+3. Commit changes to `charts/**`
+4. On merge to main, chart is automatically published
+
+#### Feature Branch Chart Testing
+
+Feature branches get special chart versions:
+
+```bash
+# Chart version includes branch name and commit
+# Example: 0.1.0-feature-xyz-abc123
+
+# Install feature branch chart
+helm install inboxfewer-test \
+  oci://ghcr.io/teemow/charts/inboxfewer \
+  --version 0.1.0-feature-xyz-abc123
 ```
 
 ## Contributing
@@ -341,6 +551,24 @@ Closes #123
 - Update relevant documentation files
 - Include examples where helpful
 - Keep README.md concise (detailed docs go in `docs/`)
+
+## Container and Kubernetes Deployment
+
+For detailed information about deploying inboxfewer using Docker and Kubernetes:
+
+- **[Deployment Guide](deployment.md)** - Comprehensive guide to container images, Helm charts, and deployment scenarios
+- Container registry: `ghcr.io/teemow/inboxfewer`
+- Helm charts: `oci://ghcr.io/teemow/charts/inboxfewer`
+
+Quick deployment:
+
+```bash
+# Run with Docker
+docker run -p 8080:8080 ghcr.io/teemow/inboxfewer:latest
+
+# Deploy with Helm
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer
+```
 
 ## Debugging
 

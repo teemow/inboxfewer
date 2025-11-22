@@ -13,10 +13,39 @@ inboxfewer is a Model Context Protocol (MCP) server that provides AI assistants 
 
 ## Installing the Chart
 
-To install the chart with the release name `my-inboxfewer`:
+### From OCI Registry (Recommended)
+
+The chart is automatically published to GitHub Container Registry:
+
+```bash
+# Install latest version
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer
+
+# Install specific version
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer --version 0.1.0
+
+# Install with custom values
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
+  --set image.tag=v1.2.3 \
+  --values my-values.yaml
+```
+
+### From Local Source
+
+For development and testing:
 
 ```bash
 helm install my-inboxfewer ./charts/inboxfewer
+```
+
+### Feature Branch Testing
+
+Feature branch charts include the branch name in the version:
+
+```bash
+helm install inboxfewer-test \
+  oci://ghcr.io/teemow/charts/inboxfewer \
+  --version 0.1.0-feature-xyz-abc123
 ```
 
 ## Uninstalling the Chart
@@ -138,22 +167,105 @@ helm install inboxfewer ./charts/inboxfewer \
   --set existingSecret=inboxfewer-oauth
 ```
 
-## Using the Image from GitHub Container Registry
+## Versioning Strategy
 
-The chart is configured to use images from GitHub Container Registry (ghcr.io). Images are automatically built and pushed by the GitHub Actions workflow when code is pushed to the main branch or tags are created.
+The Helm chart follows **independent versioning** best practices:
 
-To use a specific version:
+- **Chart Version** (`version` in Chart.yaml): Only incremented when chart templates or configuration change
+- **App Version** (`appVersion` in Chart.yaml): **Automatically updated** during each release to match the application version
+- **Image Tag**: Defaults to `appVersion`, users can override with `--set image.tag=v1.2.3`
+
+### Automatic AppVersion Updates
+
+The `appVersion` in `Chart.yaml` is **automatically updated** by the auto-release workflow:
+
+1. PR is merged to main
+2. Auto-release workflow determines next version (e.g., `v1.2.3`)
+3. **Workflow updates `appVersion` in Chart.yaml to `1.2.3`**
+4. Changes are committed to main
+5. Git tag is created and release is published
+6. Docker images are built with matching version
+
+This ensures that:
+- ✅ Default image tag is always a specific, pinned version (not `latest`)
+- ✅ Deployments are reproducible and predictable
+- ✅ No manual updates required
+- ✅ Chart appVersion always matches the latest release
+
+### When to Bump Chart Version
+
+Chart version should only be incremented when:
+- ✅ Chart templates are modified
+- ✅ New configuration options are added
+- ✅ Dependencies change
+- ✅ Breaking changes to chart usage
+
+Chart version should **NOT** be bumped when:
+- ❌ Only the application version changes (appVersion is auto-updated)
+- ❌ Only documentation updates
+- ❌ Container image updates (without chart changes)
+
+### Specifying Application Version
 
 ```bash
-helm install inboxfewer ./charts/inboxfewer \
-  --set image.tag=v1.0.0
+# Use the default version (appVersion from Chart.yaml)
+# This will be the latest release version (e.g., 1.2.3)
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer
+
+# Pin to a specific older version
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
+  --set image.tag=v1.2.2
+
+# Use a specific chart version with specific app version
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
+  --version 0.1.1 \
+  --set image.tag=v1.2.3
 ```
 
-To use the latest version from main:
+## Automated Publishing
 
+Both the Helm chart and container images are automatically published to GitHub Container Registry (GHCR) via GitHub Actions:
+
+### Container Images
+
+**Release Images** (`.github/workflows/docker-release.yml`):
+- Triggered after successful releases
+- Multi-architecture: linux/amd64, linux/arm64
+- Uses pre-built binaries from GoReleaser
+- Tags: `latest`, `v1.2.3`, `v1.2`, `v1`
+
+**Feature Branch Images** (`.github/workflows/docker-build.yml`):
+- Built on every PR and feature branch push
+- Single architecture: linux/amd64 (faster CI)
+- Built from source code
+- Tags: `pr-42`, `feature-branch-name`, `sha-abc123`
+
+### Helm Charts
+
+Charts are published when changes are detected in `charts/**`:
+- Main branch: Stable versions (e.g., `0.1.0`)
+- Feature branches: Test versions (e.g., `0.1.0-feature-xyz-abc123`)
+
+### Using Specific Versions
+
+**Production (pinned version):**
 ```bash
-helm install inboxfewer ./charts/inboxfewer \
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
+  --version 0.1.0 \
+  --set image.tag=v1.2.3
+```
+
+**Production (latest):**
+```bash
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
   --set image.tag=latest
+```
+
+**Feature branch testing:**
+```bash
+helm install inboxfewer-test oci://ghcr.io/teemow/charts/inboxfewer \
+  --version 0.1.0-feature-xyz-abc123 \
+  --set image.tag=feature-xyz
 ```
 
 ## Security
@@ -164,6 +276,13 @@ The chart follows security best practices:
 - Read-only root filesystem
 - Drops all capabilities
 - Does not allow privilege escalation
+
+## Documentation
+
+For comprehensive deployment information, see:
+- **[Deployment Guide](../../docs/deployment.md)** - Complete guide to Docker, Kubernetes, and Helm deployments
+- **[Development Guide](../../docs/development.md)** - Development workflows and release process
+- **[Configuration Guide](../../docs/configuration.md)** - Application configuration
 
 ## Support
 

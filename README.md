@@ -16,6 +16,34 @@ inboxfewer is a tool that archives Gmail threads related to closed GitHub issues
 
 # INSTALLATION
 
+## Container Images
+
+Run with Docker:
+
+```bash
+# Latest stable release
+docker run -p 8080:8080 ghcr.io/teemow/inboxfewer:latest
+
+# Specific version
+docker run -p 8080:8080 ghcr.io/teemow/inboxfewer:v1.2.3
+```
+
+Deploy with Helm:
+
+```bash
+# Install from OCI registry
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer
+
+# With custom configuration
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
+  --set image.tag=v1.2.3 \
+  --values my-values.yaml
+```
+
+See [docs/deployment.md](docs/deployment.md) for comprehensive deployment documentation.
+
+## Binary Installation
+
 Download the latest release for your platform:
 
 ```bash
@@ -172,6 +200,7 @@ See [docs/tools.md](docs/tools.md) for the complete tool reference (auto-generat
 # SEE ALSO
 
 - [Configuration Guide](docs/configuration.md)
+- [Deployment Guide](docs/deployment.md) - Docker, Kubernetes, Helm
 - [MCP Tools Reference](docs/tools.md)
 - [Development Guide](docs/development.md)
 - [Debugging Guide](docs/debugging.md)

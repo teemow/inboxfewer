@@ -1,14 +1,13 @@
-name: Build and Push Docker Image
+name: Build and Push Docker Image (Feature Branches)
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - '**'
+      - '!main'  # Exclude main branch - releases handle main
 
 env:
   REGISTRY: ghcr.io
@@ -54,14 +53,12 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          # Build only amd64 for now to reduce resource usage
-          # Add linux/arm64 later if needed
+          file: ./Dockerfile
+          # Feature branches: build from source for amd64 only (faster testing)
+          # Release builds use pre-compiled binaries and support multi-arch
           platforms: linux/amd64
-          # Push images for PRs too (for testing in cluster)
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-
