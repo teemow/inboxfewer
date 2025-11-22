@@ -56,8 +56,12 @@ spec:
           {{- if .Values.config.disableStreaming }}
           - --disable-streaming
           {{- end }}
-        {{- if or .Values.google.clientId .Values.google.clientSecret .Values.existingSecret }}
+        {{- if or .Values.google.clientId .Values.google.clientSecret .Values.existingSecret .Values.config.baseURL }}
         env:
+          {{- if .Values.config.baseURL }}
+          - name: MCP_BASE_URL
+            value: {{ .Values.config.baseURL | quote }}
+          {{- end }}
           {{- if or .Values.google.clientId .Values.existingSecret }}
           - name: GOOGLE_CLIENT_ID
             valueFrom:

@@ -137,19 +137,23 @@ For HTTP-based transport (remote servers), OAuth authentication is **required**:
 
 1. **Start server with HTTP transport**:
    ```bash
-   # Basic (token refresh disabled)
+   # Development (localhost) - base URL auto-detected
    inboxfewer serve --transport streamable-http --http-addr :8080
    
-   # With automatic token refresh (recommended for production)
+   # Production (deployed instance) - MUST specify base URL
    inboxfewer serve --transport streamable-http --http-addr :8080 \
+     --base-url "https://inboxfewer.example.com" \
      --google-client-id "your-id.apps.googleusercontent.com" \
      --google-client-secret "your-secret"
    
-   # Or use environment variables
+   # Or use environment variables (recommended for containers/K8s)
+   export MCP_BASE_URL="https://inboxfewer.example.com"
    export GOOGLE_CLIENT_ID="your-id.apps.googleusercontent.com"
    export GOOGLE_CLIENT_SECRET="your-secret"
    inboxfewer serve --transport streamable-http --http-addr :8080
    ```
+   
+   **⚠️ Important:** For deployed instances (Kubernetes, Docker, cloud), you **MUST** set `--base-url` or `MCP_BASE_URL` to the public URL where clients connect. This value is used in the Protected Resource Metadata endpoint (RFC 9728) and must match the URL that MCP clients use to connect.
 
 2. **MCP Client discovers authentication**:
    - Client makes unauthenticated request
@@ -323,9 +327,11 @@ Each account has its own cached Google token, identified by the account name (em
 
 ### OAuth Handler Configuration
 
+**⚠️ CRITICAL for Deployed Instances:** The `Resource` field MUST match the public URL where clients connect. For deployed instances, use the `--base-url` flag or `MCP_BASE_URL` environment variable.
+
 ```go
 config := &oauth.Config{
-    Resource: "https://mcp.example.com",  // MCP server URL
+    Resource: "https://mcp.example.com",  // MCP server URL (MUST match public URL!)
     
     SupportedScopes: []string{
         "https://www.googleapis.com/auth/gmail.readonly",

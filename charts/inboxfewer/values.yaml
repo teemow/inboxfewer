@@ -132,6 +132,10 @@ config:
   transport: "streamable-http"
   # HTTP server address
   httpAddr: ":8080"
+  # Public base URL for OAuth (required for deployed instances)
+  # Example: "https://inboxfewer.example.com"
+  # If not set, auto-detected as http://localhost:8080 (development only)
+  baseURL: ""
   # Enable write operations (default: false for read-only mode)
   yolo: false
   # Enable debug logging

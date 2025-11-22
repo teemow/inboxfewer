@@ -33,6 +33,7 @@ func newServeCmd() *cobra.Command {
 		googleClientID     string
 		googleClientSecret string
 		disableStreaming   bool
+		baseURL            string
 	)
 
 	cmd := &cobra.Command{
@@ -49,14 +50,17 @@ Safety Mode:
   By default, the server operates in read-only mode, providing only safe operations.
   Use --yolo to enable write operations (email sending, file deletion, etc.)
 
-OAuth Token Refresh (HTTP only):
-  For automatic token refresh, provide Google OAuth credentials via:
+OAuth Configuration (HTTP only):
+  Base URL (required for deployed instances):
+    --base-url https://your-domain.com OR MCP_BASE_URL env var
+    Auto-detected for localhost (development only)
+  
+  Token Refresh (optional):
     --google-client-id and --google-client-secret flags
-  OR via environment variables:
-    GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
-  Without these, users will need to re-authenticate when tokens expire (~1 hour).`,
+    OR GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars
+    Without these, users will need to re-authenticate when tokens expire (~1 hour).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming)
+			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL)
 		},
 	}
 
@@ -67,11 +71,12 @@ OAuth Token Refresh (HTTP only):
 	cmd.Flags().StringVar(&googleClientID, "google-client-id", "", "Google OAuth Client ID for automatic token refresh (HTTP transport only). Can also use GOOGLE_CLIENT_ID env var.")
 	cmd.Flags().StringVar(&googleClientSecret, "google-client-secret", "", "Google OAuth Client Secret for automatic token refresh (HTTP transport only). Can also use GOOGLE_CLIENT_SECRET env var.")
 	cmd.Flags().BoolVar(&disableStreaming, "disable-streaming", false, "Disable streaming for HTTP transport (for compatibility with certain clients)")
+	cmd.Flags().StringVar(&baseURL, "base-url", "", "Public base URL for OAuth (HTTP transport only). Required for deployed instances. Can also use MCP_BASE_URL env var. Example: https://mcp.example.com")
 
 	return cmd
 }
 
-func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool) error {
+func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool, baseURL string) error {
 	// Setup graceful shutdown
 	shutdownCtx, cancel := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
@@ -170,7 +175,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		return runStdioServer(mcpSrv)
 	case "streamable-http":
 		fmt.Printf("Starting inboxfewer MCP server with %s transport...\n", transport)
-		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming)
+		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL)
 	default:
 		return fmt.Errorf("unsupported transport type: %s (supported: stdio, streamable-http)", transport)
 	}
@@ -192,14 +197,26 @@ func runStdioServer(mcpSrv *mcpserver.MCPServer) error {
 	return nil
 }
 
-func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool) error {
+func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string) error {
 	// Create OAuth-enabled HTTP server
 	// Base URL should be the full URL where the server is accessible
 	// For development, use http://localhost:8080
 	// For production, use the actual HTTPS URL
-	baseURL := fmt.Sprintf("http://%s", addr)
-	if addr[0] == ':' {
-		baseURL = fmt.Sprintf("http://localhost%s", addr)
+
+	// Determine base URL from flag, environment variable, or auto-detection
+	if baseURL == "" {
+		baseURL = os.Getenv("MCP_BASE_URL")
+	}
+	if baseURL == "" {
+		// Fall back to auto-detection for local development
+		baseURL = fmt.Sprintf("http://%s", addr)
+		if addr[0] == ':' {
+			baseURL = fmt.Sprintf("http://localhost%s", addr)
+		}
+		log.Printf("No base URL configured, using auto-detected: %s", baseURL)
+		log.Printf("For deployed instances, set --base-url flag or MCP_BASE_URL env var")
+	} else {
+		log.Printf("Using configured base URL: %s", baseURL)
 	}
 
 	// Create OAuth handler first so we can inject its token provider
