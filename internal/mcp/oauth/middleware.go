@@ -49,29 +49,27 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 			return
 		}
 
-		accessToken := parts[1]
+	accessToken := parts[1]
 
-		// Create OAuth2 token
-		token := &oauth2.Token{
-			AccessToken: accessToken,
-			TokenType:   "Bearer",
-		}
+	// Try to resolve the token (could be inboxfewer token or Google token)
+	var userEmail string
+	var googleToken *oauth2.Token
+	var userInfo *GoogleUserInfo
 
-		// Try to get cached token with refresh token and expiry info
-		// This allows us to refresh if needed
-		var cachedToken *oauth2.Token
-		var userEmail string
+	// First, try to look up the token as an inboxfewer token
+	cachedToken, err := h.store.GetGoogleToken(accessToken)
+	if err == nil && cachedToken != nil {
+		// This is an inboxfewer token - we have the mapped Google token
+		h.logger.Debug("Found inboxfewer token mapping", "token_prefix", accessToken[:min(8, len(accessToken))]+"...")
+		googleToken = cachedToken
 
-		// First validate to get user email, then check if we need refresh
-		userInfo, err := h.getUserInfoFromGoogle(r.Context(), token)
+		// Validate the Google token to get user info
+		userInfo, err = h.getUserInfoFromGoogle(r.Context(), googleToken)
 		if err != nil {
-			// Provide more actionable error messages based on error type
 			errorDesc := getActionableErrorMessage(err)
-
-			h.logger.Warn("Token validation failed",
+			h.logger.Warn("Google token validation failed for inboxfewer token",
 				"error", err,
 				"error_description", errorDesc)
-
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
 				`Bearer realm="%s", resource_metadata="/.well-known/oauth-protected-resource", error="invalid_token", error_description="%s"`,
 				h.config.Resource,
@@ -80,50 +78,79 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 			h.writeUnauthorizedError(w, "invalid_token", errorDesc)
 			return
 		}
-
 		userEmail = userInfo.Email
-		h.logger.Debug("Token validated", "email", userEmail)
+	} else {
+		// Not an inboxfewer token - try to validate directly with Google
+		// This provides backward compatibility for clients that have Google tokens
+		h.logger.Debug("Validating token directly with Google")
+		googleToken = &oauth2.Token{
+			AccessToken: accessToken,
+			TokenType:   "Bearer",
+		}
 
-		// Try to get cached token to see if we have expiry info and refresh token
-		cachedToken, err = h.store.GetGoogleToken(userEmail)
-		if err == nil && cachedToken != nil && h.CanRefreshTokens() {
-			// Check if cached token needs refresh (expires within 5 minutes)
-			if isTokenExpired(cachedToken, 5*time.Minute) && cachedToken.RefreshToken != "" {
-				h.logger.Info("Token expiring soon, attempting refresh", "email", userEmail)
-				// Attempt to refresh the token
-				newToken, refreshErr := refreshGoogleToken(r.Context(), cachedToken, h.oauthConfig, h.httpClient)
-				if refreshErr == nil {
-					// Successfully refreshed - use the new token
-					h.logger.Info("Token refreshed successfully", "email", userEmail)
-					token = newToken
-					cachedToken = newToken
-					// Save refreshed token
-					if saveErr := h.store.SaveGoogleToken(userEmail, newToken); saveErr != nil {
-						h.logger.Warn("Failed to save refreshed token",
-							"email", userEmail,
-							"error", saveErr)
-					}
-				} else {
-					// Refresh failed - log but continue with existing token
-					h.logger.Warn("Failed to refresh token",
+		// Validate with Google
+		userInfo, err = h.getUserInfoFromGoogle(r.Context(), googleToken)
+		if err != nil {
+			errorDesc := getActionableErrorMessage(err)
+			h.logger.Warn("Token validation failed",
+				"error", err,
+				"error_description", errorDesc)
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+				`Bearer realm="%s", resource_metadata="/.well-known/oauth-protected-resource", error="invalid_token", error_description="%s"`,
+				h.config.Resource,
+				errorDesc,
+			))
+			h.writeUnauthorizedError(w, "invalid_token", errorDesc)
+			return
+		}
+		userEmail = userInfo.Email
+	}
+
+	h.logger.Debug("Token validated", "email", userEmail)
+
+	// Check if Google token needs refresh
+	if h.CanRefreshTokens() && googleToken != nil {
+		// Check if cached token needs refresh (expires within 5 minutes)
+		if isTokenExpired(googleToken, 5*time.Minute) && googleToken.RefreshToken != "" {
+			h.logger.Info("Token expiring soon, attempting refresh", "email", userEmail)
+			// Attempt to refresh the token
+			newToken, refreshErr := refreshGoogleToken(r.Context(), googleToken, h.googleConfig, h.httpClient)
+			if refreshErr == nil {
+				// Successfully refreshed - use the new token
+				h.logger.Info("Token refreshed successfully", "email", userEmail)
+				googleToken = newToken
+				// Save refreshed Google token
+				if saveErr := h.store.SaveGoogleToken(userEmail, newToken); saveErr != nil {
+					h.logger.Warn("Failed to save refreshed token",
 						"email", userEmail,
-						"error", refreshErr)
+						"error", saveErr)
 				}
+				// Also update the inboxfewer token mapping
+				if saveErr := h.store.SaveGoogleToken(accessToken, newToken); saveErr != nil {
+					h.logger.Warn("Failed to update token mapping",
+						"error", saveErr)
+				}
+			} else {
+				// Refresh failed - log but continue with existing token
+				h.logger.Warn("Failed to refresh token",
+					"email", userEmail,
+					"error", refreshErr)
 			}
 		}
+	}
 
-		// Store user info and token in context
-		ctx := context.WithValue(r.Context(), userContextKey, userInfo)
-		ctx = context.WithValue(ctx, tokenContextKey, token)
+	// Store user info and Google token in context
+	ctx := context.WithValue(r.Context(), userContextKey, userInfo)
+	ctx = context.WithValue(ctx, tokenContextKey, googleToken)
 
-		// Save the token for this user so we can use it to access Google APIs
-		// Use email as the account identifier
-		if err := h.store.SaveGoogleToken(userEmail, token); err != nil {
-			// Log but don't fail - we can still process the request
-			h.logger.Warn("Failed to save Google token",
-				"email", userEmail,
-				"error", err)
-		}
+	// Save the Google token for this user so we can use it to access Google APIs
+	// Use email as the account identifier
+	if err := h.store.SaveGoogleToken(userEmail, googleToken); err != nil {
+		// Log but don't fail - we can still process the request
+		h.logger.Warn("Failed to save Google token",
+			"email", userEmail,
+			"error", err)
+	}
 
 		// Call next handler
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -272,4 +299,12 @@ func (h *Handler) CacheGoogleToken(email string, token *oauth2.Token) error {
 // GetCachedGoogleToken retrieves a cached Google token for a user
 func (h *Handler) GetCachedGoogleToken(email string) (*oauth2.Token, error) {
 	return h.store.GetGoogleToken(email)
+}
+
+// min returns the smaller of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

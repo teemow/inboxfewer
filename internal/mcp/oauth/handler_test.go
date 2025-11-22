@@ -73,12 +73,12 @@ func TestHandler_ServeProtectedResourceMetadata(t *testing.T) {
 		t.Errorf("metadata.Resource = %s, want https://mcp.example.com", metadata.Resource)
 	}
 
-	// Verify authorization servers (should point to Google)
+	// Verify authorization servers (should point to inboxfewer, not Google, in OAuth proxy mode)
 	if len(metadata.AuthorizationServers) != 1 {
 		t.Errorf("metadata.AuthorizationServers length = %d, want 1", len(metadata.AuthorizationServers))
 	}
-	if metadata.AuthorizationServers[0] != "https://accounts.google.com" {
-		t.Errorf("metadata.AuthorizationServers[0] = %s, want https://accounts.google.com", metadata.AuthorizationServers[0])
+	if metadata.AuthorizationServers[0] != "https://mcp.example.com" {
+		t.Errorf("metadata.AuthorizationServers[0] = %s, want https://mcp.example.com (OAuth proxy mode)", metadata.AuthorizationServers[0])
 	}
 
 	// Verify bearer methods

@@ -4,84 +4,152 @@ This document describes the OAuth 2.1 authentication implementation for the MCP 
 
 ## Overview
 
-The inboxfewer MCP server implements secure OAuth 2.1 authentication using **Google as the authorization server**. This architecture provides several benefits:
+The inboxfewer MCP server implements secure OAuth 2.1 authentication using an **OAuth Proxy architecture**. Inboxfewer acts as both an **OAuth Authorization Server** (for MCP clients) and an **OAuth Resource Server** (for Google services).
 
+### Key Benefits
+
+- **No Client Credentials Required**: MCP clients use Dynamic Client Registration (RFC 7591) - no need to create Google OAuth credentials
 - **Single Sign-On**: Users authenticate with their existing Google accounts
 - **Secure by Design**: The LLM never sees OAuth tokens - they're handled entirely by the MCP client
-- **Integrated Access**: The same Google credentials grant both access to the MCP server and Google services (Gmail, Drive, Calendar, etc.)
-- **Standards Compliant**: Full compliance with OAuth 2.1, PKCE, and RFC 9728 (Protected Resource Metadata)
+- **Integrated Access**: The same authentication flow grants access to both the MCP server and Google services (Gmail, Drive, Calendar, etc.)
+- **Standards Compliant**: Full compliance with OAuth 2.1, PKCE, RFC 7591 (DCR), RFC 8414, and RFC 9728
 
 ## Architecture
 
+### OAuth Proxy Pattern
+
+Inboxfewer uses an OAuth Proxy architecture where:
+
+1. **MCP Clients** authenticate with **inboxfewer** (not directly with Google)
+2. **Inboxfewer** proxies the authentication to **Google**
+3. **Inboxfewer** issues its own access tokens to MCP clients (backed by Google tokens)
+4. **Google tokens** are managed internally by inboxfewer
+
+This eliminates the need for every MCP client to have Google OAuth credentials.
+
 ### Roles
 
-1. **MCP Server** (inboxfewer): Acts as an **OAuth 2.1 Resource Server**
-   - Validates Google OAuth tokens
-   - Provides Google services (Gmail, Drive, Calendar, etc.)
-   - Protected by Bearer token authentication
+1. **MCP Client** (mcp-debug, Cursor, Claude Desktop, etc.): **OAuth 2.1 Client**
+   - Connects to inboxfewer's OAuth server
+   - Uses Dynamic Client Registration (no pre-configured credentials needed)
+   - Receives inboxfewer access tokens
+   - Includes Bearer tokens in MCP requests
 
-2. **Google**: Acts as the **OAuth 2.1 Authorization Server**
-   - Issues access tokens
-   - Handles user authentication and consent
-   - Provides token introspection/validation
+2. **Inboxfewer MCP Server**: **OAuth 2.1 Authorization Server + Resource Server**
+   - **As Authorization Server:**
+     - Provides Dynamic Client Registration (RFC 7591)
+     - Provides Authorization Server Metadata (RFC 8414)
+     - Proxies authorization to Google
+     - Issues inboxfewer access tokens
+   - **As Resource Server:**
+     - Validates inboxfewer Bearer tokens
+     - Maps inboxfewer tokens to Google tokens
+     - Provides Google services (Gmail, Drive, Calendar, etc.)
 
-3. **MCP Client** (Cursor, Claude Desktop, etc.): Acts as the **OAuth 2.1 Client**
-   - Discovers the authorization server via Protected Resource Metadata
-   - Handles the OAuth flow (opening browser, PKCE, token exchange)
-   - Includes Bearer tokens in requests to the MCP server
+3. **Google**: **Upstream Identity Provider**
+   - Authenticates users
+   - Issues Google OAuth tokens to inboxfewer
+   - Provides access to Google APIs
 
 4. **LLM**: Never sees tokens
    - Only receives responses from MCP tools
    - No access to sensitive authentication credentials
 
-### Security Flow
+### OAuth Proxy Flow
 
-According to the MCP specification, the authentication flow is:
+The complete authentication flow with the OAuth proxy:
 
 ```mermaid
 sequenceDiagram
     participant Client as MCP Client
-    participant Server as MCP Server
+    participant Inboxfewer as Inboxfewer<br/>(OAuth Proxy)
     participant Google as Google OAuth
     participant Browser as User Browser
 
-    Client->>Server: Request without token
-    Server-->>Client: 401 + WWW-Authenticate header
+    Note over Client,Google: 1. Discovery Phase
+    Client->>Inboxfewer: MCP request (no token)
+    Inboxfewer-->>Client: 401 + WWW-Authenticate header
     
-    Client->>Server: GET /.well-known/oauth-protected-resource
-    Server-->>Client: Resource metadata (points to Google)
+    Client->>Inboxfewer: GET /.well-known/oauth-protected-resource
+    Inboxfewer-->>Client: Resource metadata (points to inboxfewer)
     
-    Client->>Google: GET /.well-known/openid-configuration
-    Google-->>Client: Authorization server metadata
+    Client->>Inboxfewer: GET /.well-known/oauth-authorization-server
+    Inboxfewer-->>Client: Authorization server metadata + DCR endpoint
     
-    Client->>Browser: Open Google OAuth consent page
+    Note over Client,Google: 2. Dynamic Client Registration
+    Client->>Inboxfewer: POST /oauth/register
+    Inboxfewer-->>Client: client_id + client_secret
+    
+    Note over Client,Google: 3. Authorization Flow (Proxied to Google)
+    Client->>Inboxfewer: GET /oauth/authorize (with PKCE)
+    Inboxfewer->>Google: Redirect to Google OAuth
     Browser->>Google: User signs in & grants consent
-    Google-->>Browser: Authorization code
-    Browser->>Client: Authorization code
+    Google-->>Browser: Google authorization code
+    Browser->>Inboxfewer: Google authorization code
+    Inboxfewer->>Google: Exchange code for Google token
+    Google-->>Inboxfewer: Google access token + refresh token
+    Inboxfewer->>Inboxfewer: Generate inboxfewer authorization code
+    Inboxfewer-->>Client: Inboxfewer authorization code
     
-    Client->>Google: Exchange code for token (with PKCE)
-    Google-->>Client: Access token + refresh token
+    Note over Client,Google: 4. Token Exchange
+    Client->>Inboxfewer: POST /oauth/token (code + PKCE verifier)
+    Inboxfewer->>Inboxfewer: Validate PKCE + map tokens
+    Inboxfewer-->>Client: Inboxfewer access token
     
-    Client->>Server: MCP request with Bearer token
-    Server->>Google: Validate token (userinfo endpoint)
-    Google-->>Server: User info
-    Server-->>Client: MCP response
+    Note over Client,Google: 5. Authenticated Requests
+    Client->>Inboxfewer: MCP request + inboxfewer Bearer token
+    Inboxfewer->>Inboxfewer: Map inboxfewer token to Google token
+    Inboxfewer->>Google: API request with Google token
+    Google-->>Inboxfewer: API response
+    Inboxfewer-->>Client: MCP response
 ```
 
-## Components
+## Quick Start: Connecting with mcp-debug
+
+With the OAuth proxy architecture, connecting to inboxfewer is simple - **no Google OAuth credentials needed**:
+
+```bash
+# Connect with Dynamic Client Registration (recommended)
+mcp-debug --oauth --endpoint https://inboxfewer.example.com/mcp --repl
+
+# With OIDC features
+mcp-debug --oauth --oauth-oidc --endpoint https://inboxfewer.example.com/mcp --repl
+```
+
+The OAuth proxy handles everything:
+1. ✅ **Automatic client registration** - no need to create OAuth credentials
+2. ✅ **Browser-based authentication** - opens Google OAuth in your browser
+3. ✅ **Secure token management** - tokens are handled by mcp-debug, never exposed to LLM
+4. ✅ **Automatic token refresh** - seamless experience
+
+### What Happens Behind the Scenes
+
+When you run the command above:
+
+1. **mcp-debug** connects to inboxfewer and discovers it needs OAuth
+2. **Dynamic registration**: mcp-debug automatically registers with inboxfewer (gets client_id/secret)
+3. **Authorization**: mcp-debug opens your browser to Google OAuth
+4. **You authenticate** with your Google account
+5. **Google redirects** back to inboxfewer with authorization
+6. **Inboxfewer** exchanges with Google and issues inboxfewer tokens
+7. **mcp-debug** receives inboxfewer tokens and uses them for all MCP requests
+
+**You're done!** No manual OAuth setup, no credential management, no token handling.
+
+## OAuth Proxy Components
 
 ### 1. Protected Resource Metadata (RFC 9728)
 
-The MCP server provides an endpoint that tells clients where to find the authorization server:
+The MCP server provides an endpoint that tells clients where to find the authorization server (inboxfewer):
 
 **Endpoint**: `/.well-known/oauth-protected-resource`
 
 **Response**:
 ```json
 {
-  "resource": "https://mcp.example.com",
+  "resource": "https://inboxfewer.example.com",
   "authorization_servers": [
-    "https://accounts.google.com"
+    "https://inboxfewer.example.com"
   ],
   "bearer_methods_supported": [
     "header"
@@ -96,14 +164,152 @@ The MCP server provides an endpoint that tells clients where to find the authori
 }
 ```
 
-### 2. OAuth Middleware
+**Key Difference**: `authorization_servers` now points to **inboxfewer** (not Google), enabling the OAuth proxy pattern.
 
-The middleware (`internal/mcp/oauth/middleware.go`):
-- Validates Bearer tokens from the `Authorization` header
-- Calls Google's userinfo endpoint to validate tokens and extract user identity
-- Stores user identity and token in request context
-- Caches Google tokens for accessing Google APIs
+### 2. Authorization Server Metadata (RFC 8414)
+
+Inboxfewer provides OAuth Authorization Server metadata:
+
+**Endpoint**: `/.well-known/oauth-authorization-server`
+
+**Response**:
+```json
+{
+  "issuer": "https://inboxfewer.example.com",
+  "authorization_endpoint": "https://inboxfewer.example.com/oauth/authorize",
+  "token_endpoint": "https://inboxfewer.example.com/oauth/token",
+  "registration_endpoint": "https://inboxfewer.example.com/oauth/register",
+  "scopes_supported": [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    ...
+  ],
+  "response_types_supported": ["code"],
+  "grant_types_supported": ["authorization_code", "refresh_token"],
+  "token_endpoint_auth_methods_supported": [
+    "client_secret_basic",
+    "client_secret_post",
+    "none"
+  ],
+  "code_challenge_methods_supported": ["S256", "plain"]
+}
+```
+
+### 3. Dynamic Client Registration (RFC 7591)
+
+MCP clients can register dynamically without pre-configured credentials:
+
+**Endpoint**: `POST /oauth/register`
+
+**Request**:
+```json
+{
+  "redirect_uris": ["http://localhost:8765/callback"],
+  "client_name": "mcp-debug",
+  "grant_types": ["authorization_code"],
+  "response_types": ["code"]
+}
+```
+
+**Response**:
+```json
+{
+  "client_id": "abc123...",
+  "client_secret": "secret456...",
+  "client_id_issued_at": 1700000000,
+  "client_secret_expires_at": 0,
+  "redirect_uris": ["http://localhost:8765/callback"],
+  "client_name": "mcp-debug",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "client_secret_basic"
+}
+```
+
+**Security**: Client secrets are bcrypt-hashed for storage.
+
+### 4. Authorization Endpoint
+
+MCP clients redirect users here to start the OAuth flow:
+
+**Endpoint**: `GET /oauth/authorize`
+
+**Parameters**:
+- `client_id`: Client ID from registration
+- `redirect_uri`: Where to redirect after authorization
+- `state`: Client state for CSRF protection
+- `scope`: Requested Google scopes
+- `code_challenge`: PKCE code challenge (S256 or plain)
+- `code_challenge_method`: PKCE method (S256 recommended)
+
+**Flow**:
+1. Validates client_id and redirect_uri
+2. Redirects to Google OAuth for user authentication
+3. Google redirects back to `/oauth/google/callback`
+4. Inboxfewer exchanges Google code for Google tokens
+5. Generates inboxfewer authorization code
+6. Redirects to client's redirect_uri with inboxfewer code
+
+### 5. Token Endpoint
+
+MCP clients exchange authorization codes for access tokens:
+
+**Endpoint**: `POST /oauth/token`
+
+**Request** (authorization_code grant):
+```
+grant_type=authorization_code
+&code=<authorization_code>
+&redirect_uri=<same_as_authorization>
+&client_id=<client_id>
+&code_verifier=<pkce_verifier>
+```
+
+**Response**:
+```json
+{
+  "access_token": "inboxfewer_token_xyz...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "https://www.googleapis.com/auth/gmail.readonly ..."
+}
+```
+
+**PKCE Validation**: The server validates the `code_verifier` against the `code_challenge` from the authorization request.
+
+### 6. Google OAuth Callback
+
+Internal endpoint where Google redirects after user authentication:
+
+**Endpoint**: `GET /oauth/google/callback`
+
+This endpoint:
+1. Receives Google authorization code
+2. Exchanges it for Google access + refresh tokens
+3. Validates tokens with Google's userinfo endpoint
+4. Stores Google tokens internally
+5. Generates inboxfewer authorization code
+6. Redirects back to the MCP client
+
+### 7. Token Validation Middleware
+
+The middleware (`internal/mcp/oauth/middleware.go`) validates inboxfewer Bearer tokens:
+
+**Token Resolution**:
+1. Extract Bearer token from `Authorization` header
+2. Check if it's an inboxfewer token (look up in token store)
+3. If found, retrieve mapped Google token
+4. If not found, try validating directly with Google (backward compatibility)
+5. Validate Google token with Google's userinfo endpoint
+6. Store user info in request context
+
+**Token Mapping**:
+- Inboxfewer tokens → Google tokens (bidirectional mapping)
+- User email → Google tokens (for API access)
+- Automatic token refresh when Google tokens expire
+
+**Error Handling**:
 - Returns 401 with `WWW-Authenticate` header for invalid/missing tokens
+- Provides actionable error messages for common failure scenarios
 
 ### 3. Token Store & Provider
 
@@ -131,14 +337,16 @@ For STDIO transport (local execution), OAuth is **not used**. Instead, follow th
 
 This follows the MCP specification recommendation: "Implementations using an STDIO transport SHOULD NOT follow this specification, and instead retrieve credentials from the environment."
 
-### HTTP Transport
+### HTTP Transport (OAuth Proxy Mode)
 
-For HTTP-based transport (remote servers), OAuth authentication is **required**:
+For HTTP-based transport (remote servers), OAuth authentication is **required**. Inboxfewer runs as an **OAuth proxy**, so clients don't need Google OAuth credentials:
 
 1. **Start server with HTTP transport**:
    ```bash
    # Development (localhost) - base URL auto-detected
-   inboxfewer serve --transport streamable-http --http-addr :8080
+   inboxfewer serve --transport streamable-http --http-addr :8080 \
+     --google-client-id "your-id.apps.googleusercontent.com" \
+     --google-client-secret "your-secret"
    
    # Production (deployed instance) - MUST specify base URL
    inboxfewer serve --transport streamable-http --http-addr :8080 \
@@ -153,32 +361,46 @@ For HTTP-based transport (remote servers), OAuth authentication is **required**:
    inboxfewer serve --transport streamable-http --http-addr :8080
    ```
    
-   **⚠️ Important:** For deployed instances (Kubernetes, Docker, cloud), you **MUST** set `--base-url` or `MCP_BASE_URL` to the public URL where clients connect. This value is used in the Protected Resource Metadata endpoint (RFC 9728) and must match the URL that MCP clients use to connect.
+   **⚠️ Critical Configuration:**
+   - **Base URL**: For deployed instances (Kubernetes, Docker, cloud), you **MUST** set `--base-url` or `MCP_BASE_URL` to the public URL where clients connect
+   - **Google OAuth Credentials**: Required for OAuth proxy mode (single set of credentials for all clients)
+   - **Redirect URL**: Automatically configured as `{base-url}/oauth/google/callback`
 
-2. **MCP Client discovers authentication**:
+2. **MCP Client discovers OAuth proxy**:
    - Client makes unauthenticated request
    - Server returns `401 Unauthorized` with `WWW-Authenticate` header
    - Client fetches `/.well-known/oauth-protected-resource`
-   - Client discovers Google as the authorization server
+   - **Client discovers inboxfewer as the authorization server** (not Google!)
+   - Client fetches `/.well-known/oauth-authorization-server`
+   - Client discovers Dynamic Client Registration endpoint
 
-3. **MCP Client handles OAuth flow**:
-   - Client opens browser to Google OAuth consent page
-   - User signs in with Google account
-   - User grants requested permissions (Gmail, Drive, Calendar, etc.)
-   - Client receives authorization code
-   - Client exchanges code for access token using PKCE
+3. **MCP Client registers dynamically**:
+   - Client POSTs to `/oauth/register` with redirect_uri
+   - Inboxfewer returns `client_id` and `client_secret`
+   - **No pre-configured credentials needed!**
+
+4. **MCP Client handles OAuth flow**:
+   - Client opens browser to **inboxfewer's** `/oauth/authorize`
+   - Inboxfewer redirects to Google OAuth consent page
+   - User signs in with Google account and grants permissions
+   - Google redirects back to **inboxfewer** with authorization code
+   - Inboxfewer exchanges Google code for Google tokens
+   - Inboxfewer generates inboxfewer authorization code
+   - Client redirected back with inboxfewer authorization code
+   - Client exchanges inboxfewer code for **inboxfewer access token** (using PKCE)
    - All of this happens **without LLM involvement**
 
-4. **MCP Client makes authenticated requests**:
+5. **MCP Client makes authenticated requests**:
    ```
-   Authorization: Bearer {google_access_token}
+   Authorization: Bearer {inboxfewer_access_token}
    ```
 
-5. **MCP Server validates token**:
-   - Calls `https://www.googleapis.com/oauth2/v2/userinfo` with the token
-   - Extracts user identity (email, name, etc.)
-   - Caches token for accessing Google APIs
+6. **Inboxfewer validates and maps tokens**:
+   - Looks up inboxfewer token in token store
+   - Retrieves mapped Google token
+   - Uses Google token to access Google APIs
    - Processes MCP request
+   - Returns response to client
 
 ## Required Google OAuth Scopes
 
@@ -340,18 +562,25 @@ config := &oauth.Config{
         // ... other Google scopes
     },
     
-    // Google OAuth Credentials (OPTIONAL - enables automatic token refresh)
-    // If not provided, tokens will not be automatically refreshed, and users
-    // will need to re-authenticate when their tokens expire.
+    // Google OAuth Credentials (REQUIRED for OAuth proxy mode)
+    // These credentials are used by inboxfewer to authenticate with Google
+    // on behalf of all MCP clients (OAuth proxy pattern).
     // 
-    // To enable token refresh:
+    // MCP clients do NOT need their own Google credentials - they register
+    // dynamically with inboxfewer using RFC 7591 (Dynamic Client Registration).
+    // 
+    // Setup instructions:
     // 1. Create a Google Cloud Project at https://console.cloud.google.com
     // 2. Enable the APIs you need (Gmail, Drive, Calendar, etc.)
     // 3. Create OAuth 2.0 credentials (Web application type)
-    // 4. Add authorized redirect URIs (your MCP server endpoints)
+    // 4. Add authorized redirect URI: https://mcp.example.com/oauth/google/callback
     // 5. Use the Client ID and Client Secret here
     GoogleClientID:     "your-client-id.apps.googleusercontent.com",
     GoogleClientSecret: "your-client-secret",
+    
+    // Google Redirect URL (OPTIONAL - auto-configured if not provided)
+    // Default: {Resource}/oauth/google/callback
+    GoogleRedirectURL: "https://mcp.example.com/oauth/google/callback",
     
     // Rate Limiting (protects against abuse)
     RateLimitRate:              10,             // 10 requests per second per IP
@@ -380,20 +609,22 @@ if handler.CanRefreshTokens() {
 
 ### Token Refresh Requirements
 
-**Automatic token refresh is OPTIONAL but recommended for production deployments.**
+**Google OAuth credentials are REQUIRED for OAuth proxy mode.**
 
-#### Without Token Refresh (Default)
-- Users authenticate via their MCP client
-- Tokens are cached but NOT refreshed
-- When tokens expire (typically after 1 hour), users must re-authenticate
-- Suitable for: development, testing, short sessions
-
-#### With Token Refresh (Recommended for Production)
+#### OAuth Proxy Mode (Default for HTTP Transport)
 - **Requires:** `GoogleClientID` and `GoogleClientSecret` configuration
+- Inboxfewer uses these credentials to authenticate with Google on behalf of all MCP clients
+- MCP clients do NOT need their own Google credentials
+- MCP clients register dynamically using RFC 7591 (Dynamic Client Registration)
 - Tokens are automatically refreshed 5 minutes before expiration
 - Seamless user experience with no interruptions
-- Users only re-authenticate if refresh token expires or is revoked
-- Suitable for: production deployments, long-running sessions
+- Suitable for: all HTTP deployments (development, production)
+
+#### Direct Google OAuth (Backward Compatibility)
+- If a client sends a Google token directly (not an inboxfewer token)
+- Inboxfewer will validate it with Google and accept it
+- Maintains backward compatibility with older clients
+- Not recommended for new deployments
 
 #### How to Enable Token Refresh
 
@@ -513,7 +744,86 @@ The previous insecure authentication flow (where users pasted auth codes into th
 5. Client includes token in requests to MCP server
 6. **LLM never sees any tokens!**
 
+## OAuth Proxy Benefits
+
+The OAuth proxy architecture provides significant advantages over the traditional approach:
+
+### For Users
+
+- ✅ **Zero Setup**: No need to create Google OAuth credentials
+- ✅ **Single Authentication**: One login flow works everywhere
+- ✅ **Automatic Registration**: MCP clients register themselves dynamically
+- ✅ **Better Security**: Client credentials are ephemeral and client-specific
+- ✅ **Seamless Experience**: Same workflow as any OAuth-protected service
+
+### For Administrators
+
+- ✅ **Centralized Management**: One set of Google OAuth credentials for all clients
+- ✅ **Better Control**: Monitor and revoke client registrations
+- ✅ **Scalability**: No quota limits from Google per-client
+- ✅ **Standards Compliant**: Full RFC compliance (7591, 8414, 9728)
+- ✅ **Audit Trail**: All OAuth flows logged centrally
+
+### For Developers
+
+- ✅ **Standard Protocol**: Works with any OAuth 2.1 client
+- ✅ **No Custom Code**: Use existing OAuth libraries (like mcp-go)
+- ✅ **PKCE Support**: Enhanced security for public clients
+- ✅ **Token Refresh**: Automatic token refresh handled by inboxfewer
+
+### Architecture Comparison
+
+**Before (Direct Google OAuth)**:
+```
+MCP Client --[Google Token]--> Inboxfewer --[Same Token]--> Google APIs
+          ↑
+    Each client needs Google OAuth credentials
+```
+
+**After (OAuth Proxy)**:
+```
+MCP Client --[Inboxfewer Token]--> Inboxfewer --[Google Token]--> Google APIs
+          ↑                              ↑
+    Dynamic Client Registration     Single Google OAuth app
+```
+
 ## 🎉 Recent Improvements
+
+### OAuth Proxy Architecture (Latest)
+
+**Major architectural improvement**: Implemented OAuth proxy pattern with Dynamic Client Registration
+
+1. **OAuth Authorization Server**:
+   - Added Dynamic Client Registration (RFC 7591) at `/oauth/register`
+   - Added Authorization Server Metadata (RFC 8414) at `/.well-known/oauth-authorization-server`
+   - Added OAuth authorization endpoint at `/oauth/authorize`
+   - Added OAuth token endpoint at `/oauth/token`
+   - Added Google OAuth callback at `/oauth/google/callback`
+
+2. **Token Management**:
+   - Client registration store with bcrypt-hashed secrets
+   - OAuth flow state management with automatic cleanup
+   - Inboxfewer token ↔ Google token mapping
+   - PKCE support (S256 and plain methods)
+   - Automatic token expiration and cleanup
+
+3. **Client Experience**:
+   - **Zero configuration**: No Google OAuth credentials needed
+   - **Automatic registration**: `mcp-debug --oauth --endpoint <url>` just works
+   - **Standard compliant**: Works with any OAuth 2.1 client
+   - **Secure**: PKCE required for public clients (OAuth 2.1 requirement)
+
+4. **Testing & Quality**:
+   - Comprehensive test suite (100+ tests)
+   - Tests for client registration, OAuth flows, PKCE validation
+   - Tests for token mapping and validation
+   - All tests passing ✅
+
+5. **Documentation**:
+   - Updated architecture diagrams
+   - Quick start guide for mcp-debug
+   - Component documentation
+   - Security best practices
 
 ### OAuth Token Provider Integration Fix (Latest)
 

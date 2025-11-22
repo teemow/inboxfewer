@@ -114,11 +114,39 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 
 	mux := http.NewServeMux()
 
-	// Register OAuth endpoints with rate limiting
+	// ========== OAuth 2.1 Endpoints ==========
+
 	// Protected Resource Metadata endpoint (RFC 9728)
-	// This tells MCP clients where to find the authorization server (Google)
+	// This tells MCP clients where to find the authorization server (inboxfewer)
 	metadataHandler := http.HandlerFunc(s.oauthHandler.ServeProtectedResourceMetadata)
 	mux.Handle("/.well-known/oauth-protected-resource", s.oauthHandler.RateLimitMiddleware(metadataHandler))
+
+	// Authorization Server Metadata endpoint (RFC 8414)
+	// This tells MCP clients about inboxfewer's OAuth endpoints
+	authzMetadataHandler := http.HandlerFunc(s.oauthHandler.ServeAuthorizationServerMetadata)
+	mux.Handle("/.well-known/oauth-authorization-server", s.oauthHandler.RateLimitMiddleware(authzMetadataHandler))
+
+	// Dynamic Client Registration endpoint (RFC 7591)
+	// Allows MCP clients to register without pre-configured credentials
+	registrationHandler := http.HandlerFunc(s.oauthHandler.ServeDynamicClientRegistration)
+	mux.Handle("/oauth/register", s.oauthHandler.RateLimitMiddleware(registrationHandler))
+
+	// OAuth Authorization endpoint
+	// MCP clients redirect users here to start OAuth flow
+	authorizationHandler := http.HandlerFunc(s.oauthHandler.ServeAuthorization)
+	mux.Handle("/oauth/authorize", s.oauthHandler.RateLimitMiddleware(authorizationHandler))
+
+	// OAuth Token endpoint
+	// MCP clients exchange authorization codes for access tokens
+	tokenHandler := http.HandlerFunc(s.oauthHandler.ServeToken)
+	mux.Handle("/oauth/token", s.oauthHandler.RateLimitMiddleware(tokenHandler))
+
+	// Google OAuth Callback endpoint
+	// Google redirects here after user authentication
+	callbackHandler := http.HandlerFunc(s.oauthHandler.ServeGoogleCallback)
+	mux.Handle("/oauth/google/callback", s.oauthHandler.RateLimitMiddleware(callbackHandler))
+
+	// ========== MCP Endpoints ==========
 
 	// Register MCP endpoints based on server type
 	switch s.serverType {

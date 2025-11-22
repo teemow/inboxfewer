@@ -20,10 +20,16 @@ type Config struct {
 	// SupportedScopes are all available scopes
 	SupportedScopes []string
 
-	// Google OAuth credentials for token refresh
-	// If not provided, automatic token refresh will not be available
+	// Google OAuth credentials for proxying OAuth flow
+	// REQUIRED for OAuth proxy mode - these credentials are used to authenticate
+	// with Google on behalf of MCP clients
 	GoogleClientID     string
 	GoogleClientSecret string
+
+	// GoogleRedirectURL is the callback URL for Google OAuth flow
+	// This is where Google redirects after user authentication
+	// Default: {Resource}/oauth/google/callback
+	GoogleRedirectURL string
 
 	// RateLimitRate is the number of requests per second allowed per IP (0 = no limit)
 	RateLimitRate int
@@ -52,14 +58,17 @@ type Config struct {
 }
 
 // Handler implements OAuth 2.1 endpoints for the MCP server
-// It acts as an OAuth 2.1 Resource Server with Google as the Authorization Server
+// It acts as both an OAuth 2.1 Authorization Server (proxying to Google)
+// and an OAuth 2.1 Resource Server (validating tokens)
 type Handler struct {
-	config      *Config
-	store       *Store
-	rateLimiter *RateLimiter   // Optional rate limiter for protecting endpoints
-	oauthConfig *oauth2.Config // Google OAuth config for token refresh
-	httpClient  *http.Client   // Custom HTTP client for OAuth requests
-	logger      *slog.Logger
+	config       *Config
+	store        *Store        // Token store for resource server functionality
+	clientStore  *ClientStore  // Client registration store for authorization server
+	flowStore    *FlowStore    // OAuth flow state management
+	rateLimiter  *RateLimiter  // Optional rate limiter for protecting endpoints
+	googleConfig *oauth2.Config // Google OAuth config for proxying to Google
+	httpClient   *http.Client  // Custom HTTP client for OAuth requests
+	logger       *slog.Logger
 }
 
 // NewHandler creates a new OAuth handler
@@ -108,23 +117,37 @@ func NewHandler(config *Config) (*Handler, error) {
 		rateLimiter = NewRateLimiter(config.RateLimitRate, burst, config.TrustProxy, cleanupInterval, logger)
 	}
 
-	// Create Google OAuth config for token refresh
-	// Only enables refresh if ClientID and ClientSecret are provided
-	var oauthConfig *oauth2.Config
+	// Create Google OAuth config for OAuth proxy
+	// This is REQUIRED for OAuth proxy mode
+	var googleConfig *oauth2.Config
 	if config.GoogleClientID != "" && config.GoogleClientSecret != "" {
-		oauthConfig = &oauth2.Config{
+		// Set default redirect URL if not specified
+		redirectURL := config.GoogleRedirectURL
+		if redirectURL == "" {
+			redirectURL = config.Resource + "/oauth/google/callback"
+		}
+
+		googleConfig = &oauth2.Config{
 			ClientID:     config.GoogleClientID,
 			ClientSecret: config.GoogleClientSecret,
 			Endpoint:     google.Endpoint,
 			Scopes:       config.SupportedScopes,
+			RedirectURL:  redirectURL,
 		}
-		logger.Info("Token refresh enabled with Google OAuth credentials")
+		logger.Info("OAuth proxy mode enabled with Google credentials",
+			"redirect_url", redirectURL)
 	} else {
-		logger.Warn("Token refresh disabled: Google OAuth credentials not provided")
+		logger.Warn("OAuth proxy disabled: Google OAuth credentials not provided")
 	}
 
 	store := NewStoreWithInterval(config.CleanupInterval)
 	store.SetLogger(logger)
+
+	// Create client store for Dynamic Client Registration
+	clientStore := NewClientStore(logger)
+
+	// Create flow store for OAuth authorization flows
+	flowStore := NewFlowStore(logger)
 
 	// Use custom HTTP client if provided, otherwise use default
 	httpClient := config.HTTPClient
@@ -135,12 +158,14 @@ func NewHandler(config *Config) (*Handler, error) {
 	}
 
 	return &Handler{
-		config:      config,
-		store:       store,
-		rateLimiter: rateLimiter,
-		oauthConfig: oauthConfig,
-		httpClient:  httpClient,
-		logger:      logger,
+		config:       config,
+		store:        store,
+		clientStore:  clientStore,
+		flowStore:    flowStore,
+		rateLimiter:  rateLimiter,
+		googleConfig: googleConfig,
+		httpClient:   httpClient,
+		logger:       logger,
 	}, nil
 }
 
@@ -156,31 +181,32 @@ func (h *Handler) GetConfig() *Config {
 
 // CanRefreshTokens returns true if the handler can refresh tokens
 func (h *Handler) CanRefreshTokens() bool {
-	return h.oauthConfig != nil && h.oauthConfig.ClientID != ""
+	return h.googleConfig != nil && h.googleConfig.ClientID != ""
 }
 
 // ServeProtectedResourceMetadata serves the OAuth 2.0 Protected Resource Metadata (RFC 9728)
-// This endpoint tells MCP clients where to find the authorization server (Google)
+// This endpoint tells MCP clients where to find the authorization server (inboxfewer)
 //
 // The MCP client will:
 // 1. Make an unauthenticated request to the MCP server
 // 2. Receive a 401 with WWW-Authenticate header pointing to this endpoint
-// 3. Fetch this metadata to discover the authorization server
-// 4. Use Google's OAuth 2.0 flow to obtain an access token
-// 5. Include the token in subsequent requests to the MCP server
+// 3. Fetch this metadata to discover the authorization server (inboxfewer)
+// 4. Optionally use Dynamic Client Registration to register
+// 5. Use inboxfewer's OAuth 2.1 flow (which proxies to Google) to obtain an access token
+// 6. Include the token in subsequent requests to the MCP server
 func (h *Handler) ServeProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Point to Google as the authorization server
-	// MCP clients will use Google's well-known endpoint at:
-	// https://accounts.google.com/.well-known/openid-configuration
+	// Point to inboxfewer as the authorization server (OAuth proxy mode)
+	// MCP clients will use inboxfewer's authorization server metadata endpoint
+	// which will then proxy the OAuth flow to Google
 	metadata := ProtectedResourceMetadata{
 		Resource: h.config.Resource,
 		AuthorizationServers: []string{
-			"https://accounts.google.com",
+			h.config.Resource, // Point to ourselves as the authorization server
 		},
 		BearerMethodsSupported: []string{
 			"header", // Authorization: Bearer <token>
