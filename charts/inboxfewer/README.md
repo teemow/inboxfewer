@@ -143,6 +143,15 @@ The following table lists the configurable parameters of the inboxfewer chart an
 | `podDisruptionBudget.enabled` | Enable PodDisruptionBudget | `false` |
 | `podDisruptionBudget.maxUnavailable` | Maximum unavailable pods during disruptions | `1` |
 
+### Volumes and Storage
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `volumes` | Additional volumes for the pod | `[{name: cache, emptyDir: {}}]` |
+| `volumeMounts` | Additional volume mounts for the container | `[{name: cache, mountPath: /home/inboxfewer/.cache}]` |
+
+**Note:** The default configuration includes a cache volume (`emptyDir`) to allow OAuth token storage with `readOnlyRootFilesystem: true`. Tokens are ephemeral and lost on pod restart. For persistent tokens, replace `emptyDir` with a `persistentVolumeClaim`.
+
 ## Examples
 
 ### Basic Installation
@@ -191,6 +200,33 @@ Then install with:
 ```bash
 helm install inboxfewer ./charts/inboxfewer \
   --set existingSecret=inboxfewer-oauth
+```
+
+### With Persistent OAuth Token Storage
+
+By default, OAuth tokens are stored in an `emptyDir` volume and lost on pod restart. To persist tokens across restarts:
+
+```bash
+# Create a PVC for token storage
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inboxfewer-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+EOF
+
+# Install with persistent cache
+helm install inboxfewer ./charts/inboxfewer \
+  --set volumes[0].name=cache \
+  --set volumes[0].persistentVolumeClaim.claimName=inboxfewer-cache \
+  --set volumeMounts[0].name=cache \
+  --set volumeMounts[0].mountPath=/home/inboxfewer/.cache
 ```
 
 ## Versioning Strategy

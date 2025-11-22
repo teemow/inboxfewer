@@ -100,14 +100,22 @@ podDisruptionBudget:
   maxUnavailable: 1
 
 # Additional volumes on the output Deployment definition.
-volumes: []
+volumes:
+  # Cache directory for OAuth tokens and application cache
+  # Using emptyDir allows writes with readOnlyRootFilesystem: true
+  # Tokens are lost on pod restart, requiring re-authentication
+  - name: cache
+    emptyDir: {}
 # - name: foo
 #   secret:
 #     secretName: mysecret
 #     optional: false
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
+volumeMounts:
+  # Mount writable cache directory for OAuth tokens
+  - name: cache
+    mountPath: /home/inboxfewer/.cache
 # - name: foo
 #   mountPath: "/etc/foo"
 #   readOnly: true

@@ -486,7 +486,10 @@ stringData:
 
 ### Persistent Storage
 
-For OAuth token persistence:
+**Default Behavior (Helm Chart):**
+The Helm chart includes an `emptyDir` volume for the cache directory by default. This allows OAuth tokens to be written with `readOnlyRootFilesystem: true` security enabled. **Tokens are lost on pod restart**, requiring re-authentication.
+
+**For persistent OAuth tokens across restarts:**
 
 ```yaml
 apiVersion: v1
@@ -500,7 +503,7 @@ spec:
     requests:
       storage: 1Gi
 ---
-# In deployment
+# In deployment or via Helm values
 spec:
   template:
     spec:
@@ -513,6 +516,18 @@ spec:
       - name: cache
         persistentVolumeClaim:
           claimName: inboxfewer-cache
+```
+
+Using Helm:
+
+```bash
+# Create PVC first
+kubectl apply -f pvc.yaml
+
+# Install with persistent storage
+helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
+  --set volumes[0].name=cache \
+  --set volumes[0].persistentVolumeClaim.claimName=inboxfewer-cache
 ```
 
 ## Monitoring and Observability
