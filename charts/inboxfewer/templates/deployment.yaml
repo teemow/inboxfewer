@@ -92,7 +92,7 @@ spec:
           - name: MCP_OAUTH_ALLOW_NO_STATE
             value: "true"
           {{- end }}
-          {{- if ne .Values.oauthSecurity.maxClientsPerIP 10 }}
+          {{- if and .Values.oauthSecurity.maxClientsPerIP (ne (.Values.oauthSecurity.maxClientsPerIP | int) 10) }}
           - name: MCP_OAUTH_MAX_CLIENTS_PER_IP
             value: {{ .Values.oauthSecurity.maxClientsPerIP | quote }}
           {{- end }}
