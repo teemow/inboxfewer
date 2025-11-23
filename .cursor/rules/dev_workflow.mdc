@@ -160,10 +160,11 @@ Closes #52
     git add .
     git commit -m "..."
     ```
-3.  **Push Branch:**
+3.  **Never Amend Commits**: Amend is very difficult to handle with multiple people and with gitops. So avoid using this.
+4.  **Push Branch:**
     ```bash
     git push -u origin <your-branch-name>
     ```
-4.  **Create Pull Request:** Use `gh pr create` to create a PR targeting the `main` branch
-5.  **Mark Issue Done:** Set the task status to `done`.
-6.  **Announce Completion:** Inform the user that your changes have been pushed to a branch and a PR has been created.
+5.  **Create Pull Request:** Use `gh pr create` to create a PR targeting the `main` branch
+6.  **Mark Issue Done:** Set the task status to `done`.
+7.  **Announce Completion:** Inform the user that your changes have been pushed to a branch and a PR has been created.
