@@ -15,7 +15,7 @@ func TestClientStore_RegisterClient(t *testing.T) {
 		ResponseTypes: []string{"code"},
 	}
 
-	resp, err := store.RegisterClient(req)
+	resp, err := store.RegisterClient(req, "192.0.2.1")
 	if err != nil {
 		t.Fatalf("RegisterClient() error = %v", err)
 	}
@@ -46,7 +46,7 @@ func TestClientStore_GetClient(t *testing.T) {
 		ClientName:   "Test Client",
 	}
 
-	resp, err := store.RegisterClient(req)
+	resp, err := store.RegisterClient(req, "192.0.2.1")
 	if err != nil {
 		t.Fatalf("RegisterClient() error = %v", err)
 	}
@@ -83,7 +83,7 @@ func TestClientStore_ValidateClientSecret(t *testing.T) {
 		RedirectURIs: []string{"http://localhost:8080/callback"},
 	}
 
-	resp, err := store.RegisterClient(req)
+	resp, err := store.RegisterClient(req, "192.0.2.1")
 	if err != nil {
 		t.Fatalf("RegisterClient() error = %v", err)
 	}
@@ -112,7 +112,7 @@ func TestClientStore_ValidateRedirectURI(t *testing.T) {
 		},
 	}
 
-	resp, err := store.RegisterClient(req)
+	resp, err := store.RegisterClient(req, "192.0.2.1")
 	if err != nil {
 		t.Fatalf("RegisterClient() error = %v", err)
 	}
@@ -157,7 +157,7 @@ func TestClientStore_RegisterClient_Defaults(t *testing.T) {
 		RedirectURIs: []string{"http://localhost:8080/callback"},
 	}
 
-	resp, err := store.RegisterClient(req)
+	resp, err := store.RegisterClient(req, "192.0.2.1")
 	if err != nil {
 		t.Fatalf("RegisterClient() error = %v", err)
 	}

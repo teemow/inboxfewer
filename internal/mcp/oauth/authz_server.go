@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -61,6 +62,55 @@ func (h *Handler) ServeDynamicClientRegistration(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// OAuth 2.1: Require authentication for client registration (secure by default)
+	// Only allow unauthenticated registration if explicitly configured
+	if !h.config.AllowPublicClientRegistration {
+		// Check for registration access token
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			h.logger.Warn("Client registration rejected: missing authorization",
+				"client_ip", r.RemoteAddr)
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			h.writeError(w, "invalid_token",
+				"Registration access token required. "+
+					"Set AllowPublicClientRegistration=true to disable authentication (NOT recommended).",
+				http.StatusUnauthorized)
+			return
+		}
+
+		// Verify Bearer token
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+			h.logger.Warn("Client registration rejected: invalid authorization header",
+				"client_ip", r.RemoteAddr)
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			h.writeError(w, "invalid_token", "Invalid Authorization header format", http.StatusUnauthorized)
+			return
+		}
+
+		// Validate registration access token
+		providedToken := parts[1]
+		if h.config.RegistrationAccessToken == "" {
+			h.logger.Error("RegistrationAccessToken not configured but AllowPublicClientRegistration=false")
+			h.writeError(w, "server_error",
+				"Server configuration error: registration token not configured",
+				http.StatusInternalServerError)
+			return
+		}
+
+		if providedToken != h.config.RegistrationAccessToken {
+			h.logger.Warn("Client registration rejected: invalid registration token",
+				"client_ip", r.RemoteAddr)
+			h.writeError(w, "invalid_token", "Invalid registration access token", http.StatusUnauthorized)
+			return
+		}
+
+		h.logger.Info("Client registration authenticated with valid token")
+	} else {
+		h.logger.Warn("⚠️  Unauthenticated client registration (DoS risk)",
+			"client_ip", r.RemoteAddr)
+	}
+
 	// Parse registration request
 	var req ClientRegistrationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -76,14 +126,26 @@ func (h *Handler) ServeDynamicClientRegistration(w http.ResponseWriter, r *http.
 
 	// Validate redirect URIs with comprehensive security checks
 	for _, uri := range req.RedirectURIs {
-		if err := validateRedirectURI(uri, h.config.Resource); err != nil {
+		if err := validateRedirectURI(uri, h.config.Resource, h.config.AllowCustomRedirectSchemes, h.config.AllowedCustomSchemes); err != nil {
 			h.writeError(w, "invalid_redirect_uri", err.Error(), http.StatusBadRequest)
 			return
 		}
 	}
 
+	// Check per-IP client registration limit for DoS protection
+	clientIP := getClientIP(r, h.config.TrustProxy)
+	if err := h.clientStore.CheckIPLimit(clientIP, h.config.MaxClientsPerIP); err != nil {
+		h.logger.Warn("Client registration limit exceeded",
+			"client_ip", clientIP,
+			"limit", h.config.MaxClientsPerIP)
+		h.writeError(w, "invalid_request",
+			fmt.Sprintf("Client registration limit exceeded for your IP address (%d max)", h.config.MaxClientsPerIP),
+			http.StatusTooManyRequests)
+		return
+	}
+
 	// Register the client
-	resp, err := h.clientStore.RegisterClient(&req)
+	resp, err := h.clientStore.RegisterClient(&req, clientIP)
 	if err != nil {
 		h.logger.Error("Failed to register client", "error", err)
 		h.writeError(w, "server_error", "Failed to register client", http.StatusInternalServerError)
@@ -137,13 +199,24 @@ func (h *Handler) ServeAuthorization(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// OAuth 2.1: state is RECOMMENDED (not required) for CSRF protection
-	// We allow requests without state for compatibility with some clients (e.g., Cursor)
-	// However, this weakens CSRF protection
+	// OAuth 2.1: state is REQUIRED for CSRF protection (secure by default)
+	// Only allow missing state if explicitly configured (NOT recommended)
 	if state == "" {
-		h.logger.Warn("Authorization request without state parameter (CSRF protection disabled)",
+		if !h.config.AllowInsecureAuthWithoutState {
+			h.logger.Warn("Authorization request rejected: missing state parameter",
+				"client_id", clientID,
+				"redirect_uri", redirectURI)
+			h.writeError(w, "invalid_request",
+				"state parameter is required for CSRF protection. "+
+					"Set AllowInsecureAuthWithoutState=true to disable this check (NOT recommended for production).",
+				http.StatusBadRequest)
+			return
+		}
+		// Config allows insecure auth without state (user accepted the risk)
+		h.logger.Warn("⚠️  Authorization request without state parameter (CSRF protection weakened)",
 			"client_id", clientID,
-			"redirect_uri", redirectURI)
+			"redirect_uri", redirectURI,
+			"security_risk", "CSRF attacks possible")
 	}
 
 	// Validate requested scopes
@@ -588,15 +661,21 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 		// Generate inboxfewer refresh token
 		refreshToken, err := generateSecureToken(48)
 		if err == nil {
-			// Store refresh token mapping to user email
-			if saveErr := h.store.SaveRefreshToken(refreshToken, authCode.UserEmail); saveErr != nil {
+			// Calculate refresh token expiry
+			refreshTokenExpiresAt := time.Now().Add(h.config.RefreshTokenTTL).Unix()
+
+			// Store refresh token mapping to user email with expiry
+			if saveErr := h.store.SaveRefreshToken(refreshToken, authCode.UserEmail, refreshTokenExpiresAt); saveErr != nil {
 				h.logger.Warn("Failed to store refresh token",
 					"email", authCode.UserEmail,
 					"error", saveErr)
 				// Continue without refresh token in response
 			} else {
 				tokenResp.RefreshToken = refreshToken
-				h.logger.Debug("Issued refresh token", "email", authCode.UserEmail)
+				h.logger.Info("Issued refresh token",
+					"email", authCode.UserEmail,
+					"expires_at", time.Unix(refreshTokenExpiresAt, 0),
+					"ttl", h.config.RefreshTokenTTL)
 			}
 		} else {
 			h.logger.Warn("Failed to generate refresh token", "error", err)
@@ -712,8 +791,44 @@ func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request
 		ExpiresIn:   expiresIn,
 	}
 
-	// Include the same refresh token (refresh tokens are long-lived)
-	tokenResp.RefreshToken = refreshToken
+	// OAuth 2.1: Implement refresh token rotation (secure by default)
+	// Issue a new refresh token and invalidate the old one
+	if !h.config.DisableRefreshTokenRotation {
+		// Generate new refresh token
+		newRefreshToken, rotateErr := generateSecureToken(48)
+		if rotateErr == nil {
+			// Calculate new refresh token expiry
+			refreshTokenExpiresAt := time.Now().Add(h.config.RefreshTokenTTL).Unix()
+
+			// Invalidate old refresh token
+			h.store.DeleteRefreshToken(refreshToken)
+
+			// Store new refresh token
+			if saveErr := h.store.SaveRefreshToken(newRefreshToken, userEmail, refreshTokenExpiresAt); saveErr != nil {
+				h.logger.Warn("Failed to store rotated refresh token",
+					"email", userEmail,
+					"error", saveErr)
+				// Fall back to old refresh token
+				tokenResp.RefreshToken = refreshToken
+			} else {
+				tokenResp.RefreshToken = newRefreshToken
+				h.logger.Info("Refresh token rotated (OAuth 2.1 security)",
+					"email", userEmail,
+					"expires_at", time.Unix(refreshTokenExpiresAt, 0))
+			}
+		} else {
+			h.logger.Warn("Failed to generate rotated refresh token",
+				"email", userEmail,
+				"error", rotateErr)
+			// Fall back to old refresh token
+			tokenResp.RefreshToken = refreshToken
+		}
+	} else {
+		// Rotation disabled - return the same refresh token (insecure)
+		h.logger.Warn("⚠️  Refresh token rotation DISABLED - returning same token (security risk)",
+			"email", userEmail)
+		tokenResp.RefreshToken = refreshToken
+	}
 
 	h.setSecurityHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
@@ -769,7 +884,7 @@ func (h *Handler) validateScopes(scope string) error {
 }
 
 // validateRedirectURI validates a redirect URI according to OAuth 2.0 Security Best Current Practice
-func validateRedirectURI(uri string, serverResource string) error {
+func validateRedirectURI(uri string, serverResource string, allowCustomSchemes bool, allowedSchemes []string) error {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return fmt.Errorf("invalid redirect_uri format: %s", uri)
@@ -785,11 +900,42 @@ func validateRedirectURI(uri string, serverResource string) error {
 		return fmt.Errorf("redirect_uri must have a scheme: %s", uri)
 	}
 
-	// Allow custom schemes (for native apps like com.example.app:// or myapp://callback)
+	// Handle custom schemes (for native apps like com.example.app:// or myapp://callback)
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		// Custom schemes are allowed for native mobile/desktop apps
-		// We don't enforce structure requirements since custom schemes
-		// don't follow http/https rules
+		if !allowCustomSchemes {
+			return fmt.Errorf("custom redirect_uri schemes not allowed (only http/https permitted). Set AllowCustomRedirectSchemes=true to enable")
+		}
+
+		// Validate against dangerous schemes
+		dangerousSchemes := []string{"javascript", "data", "file", "vbscript", "about"}
+		schemeLower := strings.ToLower(parsed.Scheme)
+		for _, dangerous := range dangerousSchemes {
+			if schemeLower == dangerous {
+				return fmt.Errorf("redirect_uri scheme '%s' is not allowed for security reasons", parsed.Scheme)
+			}
+		}
+
+		// Validate against allowed patterns
+		if len(allowedSchemes) > 0 {
+			schemeValid := false
+			for _, pattern := range allowedSchemes {
+				// Use simple pattern matching (for now, exact match or regex)
+				matched, matchErr := regexp.MatchString(pattern, schemeLower)
+				if matchErr != nil {
+					return fmt.Errorf("invalid scheme pattern '%s': %w", pattern, matchErr)
+				}
+				if matched {
+					schemeValid = true
+					break
+				}
+			}
+			if !schemeValid {
+				return fmt.Errorf("redirect_uri scheme '%s' does not match allowed patterns (must match one of: %v)",
+					parsed.Scheme, allowedSchemes)
+			}
+		}
+
+		// Custom scheme is valid
 		return nil
 	}
 

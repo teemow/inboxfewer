@@ -587,7 +587,7 @@ config := &oauth.Config{
     RateLimitBurst:             20,             // Allow burst of 20 requests
     RateLimitCleanupInterval:   5 * time.Minute, // Cleanup inactive rate limiters
     
-    // Security
+    // Security (defaults shown - all optional)
     TrustProxy:      false,          // Only trust proxy headers if behind trusted proxy (secure by default)
     
     // Token Management
@@ -606,6 +606,282 @@ if handler.CanRefreshTokens() {
     log.Warn("Token refresh is disabled - users will need to re-authenticate when tokens expire")
 }
 ```
+
+### Security Configuration (OAuth 2.1 Hardening)
+
+The OAuth handler is **secure by default** with enterprise-grade security features. Each security feature can be optionally disabled for backward compatibility with weaker client implementations (not recommended for production).
+
+#### Security Features Overview
+
+| Feature | Default | Security Impact | Disable At Your Own Risk |
+|---------|---------|-----------------|--------------------------|
+| **Mandatory State Parameter** | ✅ Enabled | Prevents CSRF attacks | `AllowInsecureAuthWithoutState = true` |
+| **Refresh Token Rotation** | ✅ Enabled | Prevents token replay attacks | `DisableRefreshTokenRotation = true` |
+| **Authenticated Client Registration** | ✅ Enabled | Prevents DoS via mass registration | `AllowPublicClientRegistration = true` |
+| **Refresh Token Expiry** | ✅ 90 days | Limits stolen token lifetime | `RefreshTokenTTL = 0` (never expire) |
+| **Custom URI Scheme Validation** | ✅ Enabled | Blocks dangerous redirect schemes | `AllowCustomRedirectSchemes = false` |
+| **Per-IP Client Limits** | ✅ 10 clients | Prevents registration DoS | `MaxClientsPerIP = 0` (unlimited) |
+| **Per-User Rate Limiting** | ⚙️  Optional | Prevents user-based abuse | `UserRateLimitRate > 0` to enable |
+
+#### Complete Security Configuration Example
+
+```go
+config := &oauth.Config{
+    Resource: "https://mcp.example.com",
+    
+    // ============================================================
+    // Security Configuration (Secure by Default)
+    // ============================================================
+    
+    // 1. CSRF Protection (OAuth 2.1 Requirement)
+    // ⚠️  WARNING: Disabling this weakens CSRF protection
+    // State parameter is REQUIRED for security unless you know what you're doing
+    AllowInsecureAuthWithoutState: false,  // DEFAULT: false (state is REQUIRED)
+    
+    // 2. Refresh Token Rotation (OAuth 2.1 Best Practice)
+    // ⚠️  WARNING: Disabling this violates OAuth 2.1 security guidelines
+    // Without rotation, stolen refresh tokens can be used indefinitely
+    DisableRefreshTokenRotation: false,    // DEFAULT: false (rotation ENABLED)
+    
+    // 3. Authenticated Dynamic Client Registration (DoS Protection)
+    // ⚠️  WARNING: Enabling public registration allows unlimited client creation
+    // This can lead to DoS attacks via mass registration
+    AllowPublicClientRegistration: false,  // DEFAULT: false (auth REQUIRED)
+    RegistrationAccessToken: "your-secure-random-token-here",  // Required if AllowPublicClientRegistration = false
+    
+    // 4. Refresh Token Expiry (Security vs Usability Balance)
+    // Recommended: 30-90 days for balance between security and user experience
+    // Set to 0 to disable expiry (not recommended)
+    RefreshTokenTTL: 90 * 24 * time.Hour,  // DEFAULT: 90 days
+    
+    // 5. Per-IP Client Registration Limits (DoS Protection)
+    // Prevents attackers from registering unlimited clients from same IP
+    // Set to 0 to disable (not recommended)
+    MaxClientsPerIP: 10,                   // DEFAULT: 10 clients per IP
+    
+    // 6. Custom Redirect URI Scheme Validation (Injection Protection)
+    // When enabled, custom schemes (myapp://) are validated against patterns
+    // Dangerous schemes (javascript:, data:, file:) are always blocked
+    AllowCustomRedirectSchemes: true,      // DEFAULT: true (for native apps)
+    AllowedCustomSchemes: []string{
+        "^[a-z][a-z0-9+.-]*$",            // DEFAULT: RFC 3986 compliant schemes
+    },
+    
+    // 7. Per-User Rate Limiting (After Authentication)
+    // Protects against authenticated users abusing the system
+    // Set to 0 to disable (default)
+    UserRateLimitRate: 100,                // OPTIONAL: 100 requests per second per user
+    UserRateLimitBurst: 200,               // OPTIONAL: Allow burst of 200 requests
+    
+    // ... other config ...
+}
+```
+
+#### Security Feature Details
+
+##### 1. Mandatory State Parameter (CSRF Protection)
+
+**Default:** `AllowInsecureAuthWithoutState = false` (state is REQUIRED)
+
+The `state` parameter is a critical CSRF protection mechanism in OAuth 2.1. When enabled (default), the authorization server **rejects** authorization requests without a `state` parameter.
+
+**To disable (NOT recommended):**
+```go
+AllowInsecureAuthWithoutState: true  // ⚠️  SECURITY RISK: CSRF attacks possible
+```
+
+**When you might need to disable:**
+- Working with broken OAuth clients that don't support `state`
+- This is a **client bug** and should be fixed at the client level
+
+**Security impact when disabled:**
+- Attackers can trick users into authorizing access to attacker's application
+- Cross-Site Request Forgery (CSRF) attacks become possible
+
+---
+
+##### 2. Refresh Token Rotation (OAuth 2.1 Compliance)
+
+**Default:** `DisableRefreshTokenRotation = false` (rotation is ENABLED)
+
+OAuth 2.1 requires refresh token rotation. When enabled (default), the server issues a **new refresh token** on every refresh and **invalidates the old one**.
+
+**To disable (NOT recommended):**
+```go
+DisableRefreshTokenRotation: true  // ⚠️  SECURITY RISK: Token replay attacks possible
+```
+
+**When you might need to disable:**
+- Testing legacy clients that don't handle token rotation
+- This violates OAuth 2.1 specification
+
+**Security impact when disabled:**
+- Stolen refresh tokens can be used indefinitely
+- No detection of token theft
+- Attackers can refresh tokens even after user changes password
+
+---
+
+##### 3. Authenticated Dynamic Client Registration (DoS Protection)
+
+**Default:** `AllowPublicClientRegistration = false` (authentication REQUIRED)
+
+Dynamic Client Registration (RFC 7591) is protected by requiring a **registration access token**. This prevents attackers from registering unlimited clients.
+
+**To enable public registration (NOT recommended):**
+```go
+AllowPublicClientRegistration: true  // ⚠️  SECURITY RISK: DoS via mass registration
+```
+
+**Setting up authenticated registration (recommended):**
+```go
+AllowPublicClientRegistration: false
+RegistrationAccessToken: "your-long-random-token-here"  // Generate with: openssl rand -base64 48
+```
+
+Clients must include the token when registering:
+```bash
+curl -X POST https://mcp.example.com/oauth/register \
+  -H "Authorization: Bearer your-long-random-token-here" \
+  -H "Content-Type: application/json" \
+  -d '{"redirect_uris": ["http://localhost:8080/callback"]}'
+```
+
+**When you might need public registration:**
+- Development/testing environments
+- Internal networks with other security controls
+
+**Security impact when enabled:**
+- Anyone can register unlimited OAuth clients
+- Potential memory exhaustion via mass registration
+- Resource exhaustion attacks
+
+---
+
+##### 4. Refresh Token Expiry (Time-Limited Tokens)
+
+**Default:** `RefreshTokenTTL = 90 * 24 * time.Hour` (90 days)
+
+Refresh tokens automatically expire after the configured TTL. This limits the window of opportunity for stolen tokens.
+
+**To disable expiry (NOT recommended):**
+```go
+RefreshTokenTTL: 0  // ⚠️  SECURITY RISK: Tokens never expire
+```
+
+**Recommended values:**
+- **High security:** 30 days
+- **Balanced:** 90 days (default)
+- **User convenience:** 180 days
+
+**Security impact when disabled:**
+- Stolen refresh tokens are valid forever
+- No forced re-authentication
+- Compromised tokens remain active indefinitely
+
+---
+
+##### 5. Per-IP Client Registration Limits (DoS Protection)
+
+**Default:** `MaxClientsPerIP = 10`
+
+Limits the number of OAuth clients that can be registered from a single IP address.
+
+**To disable (NOT recommended):**
+```go
+MaxClientsPerIP: 0  // ⚠️  SECURITY RISK: Unlimited client registration
+```
+
+**Security impact when disabled:**
+- Attackers can register unlimited clients from same IP
+- Memory exhaustion possible
+- Denial of Service via resource consumption
+
+---
+
+##### 6. Custom Redirect URI Scheme Validation (Injection Protection)
+
+**Default:** `AllowCustomRedirectSchemes = true` with RFC 3986 validation
+
+Custom URI schemes (e.g., `myapp://callback`) are validated against security patterns. Dangerous schemes are always blocked.
+
+**Always blocked schemes:** `javascript:`, `data:`, `file:`, `vbscript:`, `about:`
+
+**To disable custom schemes (most restrictive):**
+```go
+AllowCustomRedirectSchemes: false  // Only http/https allowed
+```
+
+**To customize allowed patterns:**
+```go
+AllowCustomRedirectSchemes: true
+AllowedCustomSchemes: []string{
+    "^myapp$",           // Exact match: myapp://
+    "^com\\.example\\.", // Pattern: com.example.*://
+}
+```
+
+**Security impact:**
+- Custom schemes validated against RFC 3986
+- Dangerous schemes blocked by default
+- XSS and redirect attacks prevented
+
+---
+
+##### 7. Per-User Rate Limiting (Authenticated Abuse Protection)
+
+**Default:** Disabled (no per-user limits)
+
+Optional feature to rate-limit authenticated users independently of IP-based limits.
+
+**To enable:**
+```go
+UserRateLimitRate: 100,   // 100 requests per second per user
+UserRateLimitBurst: 200,  // Allow burst of 200 requests
+```
+
+**Use cases:**
+- Multi-tenant deployments
+- Preventing authenticated user abuse
+- Fair usage enforcement
+
+**When to enable:**
+- Production deployments with multiple users
+- When IP-based limiting isn't sufficient (NAT, VPNs)
+- Enforcing API quotas per user
+
+---
+
+#### Security Warnings and Logging
+
+When security features are disabled, the OAuth handler logs **warning messages** at startup:
+
+```
+⚠️  SECURITY WARNING: State parameter is OPTIONAL (CSRF protection weakened)
+    recommendation: Set AllowInsecureAuthWithoutState=false for production
+
+⚠️  SECURITY WARNING: Refresh token rotation is DISABLED
+    recommendation: Set DisableRefreshTokenRotation=false for production
+
+⚠️  SECURITY WARNING: Public client registration is ENABLED (DoS risk)
+    recommendation: Set AllowPublicClientRegistration=false and use RegistrationAccessToken
+```
+
+These warnings help developers identify security misconfigurations before deploying to production.
+
+---
+
+#### Security Best Practices
+
+1. **Never disable security features in production** without understanding the risks
+2. **Use authenticated client registration** with a strong registration token
+3. **Set reasonable refresh token TTL** (30-90 days recommended)
+4. **Enable per-user rate limiting** for multi-tenant deployments
+5. **Monitor security warnings** in logs during development
+6. **Regularly rotate** the `RegistrationAccessToken`
+7. **Audit registered clients** periodically and remove unused ones
+
+---
 
 ### Token Refresh Requirements
 

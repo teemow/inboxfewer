@@ -12,12 +12,14 @@ import (
 // Store manages Google OAuth tokens in memory
 // This is a simplified store that only handles Google tokens for authenticated users
 type Store struct {
-	mu              sync.RWMutex
-	googleTokens    map[string]*oauth2.Token   // user email or access token -> Google token
-	googleUserInfo  map[string]*GoogleUserInfo // user email -> Google user info
-	refreshTokens   map[string]string          // refresh token -> user email
-	cleanupInterval time.Duration              // How often to cleanup expired tokens
-	logger          *slog.Logger
+	mu                   sync.RWMutex
+	googleTokens         map[string]*oauth2.Token   // user email or access token -> Google token
+	googleUserInfo       map[string]*GoogleUserInfo // user email -> Google user info
+	refreshTokens        map[string]string          // refresh token -> user email
+	refreshTokenExpiries map[string]int64           // refresh token -> expiry timestamp
+	tokenToEmailMap      map[string]string          // inboxfewer access token -> user email (for cleanup)
+	cleanupInterval      time.Duration              // How often to cleanup expired tokens
+	logger               *slog.Logger
 }
 
 // NewStore creates a new in-memory Google token store with default cleanup interval
@@ -28,11 +30,13 @@ func NewStore() *Store {
 // NewStoreWithInterval creates a new in-memory Google token store with custom cleanup interval
 func NewStoreWithInterval(cleanupInterval time.Duration) *Store {
 	s := &Store{
-		googleTokens:    make(map[string]*oauth2.Token),
-		googleUserInfo:  make(map[string]*GoogleUserInfo),
-		refreshTokens:   make(map[string]string),
-		cleanupInterval: cleanupInterval,
-		logger:          slog.Default(),
+		googleTokens:         make(map[string]*oauth2.Token),
+		googleUserInfo:       make(map[string]*GoogleUserInfo),
+		refreshTokens:        make(map[string]string),
+		refreshTokenExpiries: make(map[string]int64),
+		tokenToEmailMap:      make(map[string]string),
+		cleanupInterval:      cleanupInterval,
+		logger:               slog.Default(),
 	}
 
 	// Start background cleanup goroutine
@@ -49,9 +53,10 @@ func (s *Store) SetLogger(logger *slog.Logger) {
 }
 
 // SaveGoogleToken saves a Google OAuth token for a user
-func (s *Store) SaveGoogleToken(email string, token *oauth2.Token) error {
-	if email == "" {
-		return fmt.Errorf("email cannot be empty")
+// The key can be either a user email (canonical storage) or an access token (for quick lookup)
+func (s *Store) SaveGoogleToken(key string, token *oauth2.Token) error {
+	if key == "" {
+		return fmt.Errorf("key cannot be empty")
 	}
 	if token == nil {
 		return fmt.Errorf("token cannot be nil")
@@ -60,8 +65,8 @@ func (s *Store) SaveGoogleToken(email string, token *oauth2.Token) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.googleTokens[email] = token
-	s.logger.Debug("Saved Google token", "email", email, "expiry", token.Expiry)
+	s.googleTokens[key] = token
+	s.logger.Debug("Saved Google token", "key", key, "expiry", token.Expiry)
 	return nil
 }
 
@@ -143,28 +148,62 @@ func (s *Store) cleanupExpiredTokens() {
 		s.mu.RLock()
 
 		expiredGoogleTokens := []string{}
+		expiredRefreshTokens := []string{}
 		now := time.Now()
-		for email, token := range s.googleTokens {
+		nowUnix := now.Unix()
+
+		// Find expired Google tokens
+		for key, token := range s.googleTokens {
 			if !token.Expiry.IsZero() && token.Expiry.Before(now) {
-				expiredGoogleTokens = append(expiredGoogleTokens, email)
+				expiredGoogleTokens = append(expiredGoogleTokens, key)
+			}
+		}
+
+		// Find expired refresh tokens
+		for refreshToken, expiresAt := range s.refreshTokenExpiries {
+			if nowUnix > expiresAt {
+				expiredRefreshTokens = append(expiredRefreshTokens, refreshToken)
 			}
 		}
 
 		s.mu.RUnlock()
 
 		// Delete in batch with write lock only if there's something to delete
-		if len(expiredGoogleTokens) > 0 {
+		if len(expiredGoogleTokens) > 0 || len(expiredRefreshTokens) > 0 {
 			s.mu.Lock()
 
 			// Re-check expiration under write lock to prevent race conditions
 			// Tokens might have been refreshed between read and write locks
 			currentTime := time.Now()
-			for _, email := range expiredGoogleTokens {
-				if token, ok := s.googleTokens[email]; ok {
+			currentTimeUnix := currentTime.Unix()
+
+			for _, key := range expiredGoogleTokens {
+				if token, ok := s.googleTokens[key]; ok {
 					if !token.Expiry.IsZero() && token.Expiry.Before(currentTime) {
-						delete(s.googleTokens, email)
-						delete(s.googleUserInfo, email)
-						s.logger.Debug("Cleaned up expired token", "email", email)
+						delete(s.googleTokens, key)
+						// Only delete user info if this is an email key (not an access token)
+						if email, hasEmail := s.tokenToEmailMap[key]; hasEmail {
+							delete(s.tokenToEmailMap, key)
+							// Check if this was the last token for this email
+							if _, stillHasToken := s.googleTokens[email]; !stillHasToken {
+								delete(s.googleUserInfo, email)
+							}
+						} else {
+							// This is an email key
+							delete(s.googleUserInfo, key)
+						}
+						s.logger.Debug("Cleaned up expired Google token", "key", key)
+					}
+				}
+			}
+
+			for _, refreshToken := range expiredRefreshTokens {
+				if expiresAt, ok := s.refreshTokenExpiries[refreshToken]; ok {
+					if currentTimeUnix > expiresAt {
+						email := s.refreshTokens[refreshToken]
+						delete(s.refreshTokens, refreshToken)
+						delete(s.refreshTokenExpiries, refreshToken)
+						s.logger.Debug("Cleaned up expired refresh token", "email", email)
 					}
 				}
 			}
@@ -174,8 +213,8 @@ func (s *Store) cleanupExpiredTokens() {
 	}
 }
 
-// SaveRefreshToken saves a refresh token mapping to user email
-func (s *Store) SaveRefreshToken(refreshToken, email string) error {
+// SaveRefreshToken saves a refresh token mapping to user email with expiry
+func (s *Store) SaveRefreshToken(refreshToken, email string, expiresAt int64) error {
 	if refreshToken == "" {
 		return fmt.Errorf("refresh token cannot be empty")
 	}
@@ -187,11 +226,15 @@ func (s *Store) SaveRefreshToken(refreshToken, email string) error {
 	defer s.mu.Unlock()
 
 	s.refreshTokens[refreshToken] = email
-	s.logger.Debug("Saved refresh token", "email", email)
+	s.refreshTokenExpiries[refreshToken] = expiresAt
+	s.logger.Debug("Saved refresh token",
+		"email", email,
+		"expires_at", time.Unix(expiresAt, 0))
 	return nil
 }
 
 // GetRefreshToken retrieves the user email associated with a refresh token
+// Returns an error if the token is expired
 func (s *Store) GetRefreshToken(refreshToken string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -201,16 +244,53 @@ func (s *Store) GetRefreshToken(refreshToken string) (string, error) {
 		return "", fmt.Errorf("refresh token not found")
 	}
 
+	// Check if refresh token is expired
+	if expiresAt, hasExpiry := s.refreshTokenExpiries[refreshToken]; hasExpiry {
+		if time.Now().Unix() > expiresAt {
+			return "", fmt.Errorf("refresh token expired")
+		}
+	}
+
 	return email, nil
 }
 
-// DeleteRefreshToken removes a refresh token
+// DeleteRefreshToken removes a refresh token and its expiry tracking
 func (s *Store) DeleteRefreshToken(refreshToken string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	delete(s.refreshTokens, refreshToken)
+	delete(s.refreshTokenExpiries, refreshToken)
 	s.logger.Debug("Deleted refresh token")
+	return nil
+}
+
+// SaveTokenWithEmailMapping saves a Google token by both email and access token
+// This is a convenience method to ensure tokens are stored consistently
+func (s *Store) SaveTokenWithEmailMapping(email, accessToken string, token *oauth2.Token) error {
+	if email == "" {
+		return fmt.Errorf("email cannot be empty")
+	}
+	if accessToken == "" {
+		return fmt.Errorf("access token cannot be empty")
+	}
+	if token == nil {
+		return fmt.Errorf("token cannot be nil")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Save by email (canonical)
+	s.googleTokens[email] = token
+	// Save by access token (for quick lookup)
+	s.googleTokens[accessToken] = token
+	// Track the mapping for cleanup
+	s.tokenToEmailMap[accessToken] = email
+
+	s.logger.Debug("Saved Google token with email mapping",
+		"email", email,
+		"token_prefix", accessToken[:min(10, len(accessToken))])
 	return nil
 }
 
@@ -220,8 +300,10 @@ func (s *Store) Stats() map[string]int {
 	defer s.mu.RUnlock()
 
 	return map[string]int{
-		"google_tokens":  len(s.googleTokens),
-		"user_info":      len(s.googleUserInfo),
-		"refresh_tokens": len(s.refreshTokens),
+		"google_tokens":         len(s.googleTokens),
+		"user_info":             len(s.googleUserInfo),
+		"refresh_tokens":        len(s.refreshTokens),
+		"refresh_token_expiries": len(s.refreshTokenExpiries),
+		"token_email_mappings":  len(s.tokenToEmailMap),
 	}
 }

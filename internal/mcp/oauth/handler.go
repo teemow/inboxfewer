@@ -41,6 +41,13 @@ type Config struct {
 	// RateLimitCleanupInterval is how often to cleanup inactive rate limiters (default: 5 minutes)
 	RateLimitCleanupInterval time.Duration
 
+	// UserRateLimitRate is the number of requests per second allowed per authenticated user (0 = no limit)
+	// This is in addition to IP-based rate limiting
+	UserRateLimitRate int
+
+	// UserRateLimitBurst is the maximum burst size allowed per authenticated user
+	UserRateLimitBurst int
+
 	// CleanupInterval is how often to cleanup expired tokens (default: 1 minute)
 	CleanupInterval time.Duration
 
@@ -56,20 +63,70 @@ type Config struct {
 	// If not provided, uses the default HTTP client
 	// Can be used to add timeouts, logging, metrics, etc.
 	HTTPClient *http.Client
+
+	// ============================================================
+	// Security Configuration (Secure by Default)
+	// ============================================================
+
+	// AllowInsecureAuthWithoutState allows authorization requests without state parameter
+	// WARNING: Disabling this weakens CSRF protection and is NOT recommended
+	// Only enable if you have clients that don't support state parameter
+	// Default: false (state is REQUIRED for security)
+	AllowInsecureAuthWithoutState bool
+
+	// DisableRefreshTokenRotation disables automatic refresh token rotation
+	// WARNING: Disabling this violates OAuth 2.1 security best practices
+	// Stolen refresh tokens can be used indefinitely without rotation
+	// Default: false (rotation is ENABLED for security)
+	DisableRefreshTokenRotation bool
+
+	// AllowPublicClientRegistration allows unauthenticated dynamic client registration
+	// WARNING: This can lead to DoS attacks via unlimited client registration
+	// When false, client registration requires a registration access token
+	// Default: false (authentication REQUIRED for security)
+	AllowPublicClientRegistration bool
+
+	// RegistrationAccessToken is the token required for client registration
+	// Only checked if AllowPublicClientRegistration is false
+	// Generate a secure random token and share it only with trusted client developers
+	RegistrationAccessToken string
+
+	// RefreshTokenTTL is the time-to-live for refresh tokens (0 = never expire)
+	// Recommended: 30-90 days for security vs usability balance
+	// Default: 90 days
+	RefreshTokenTTL time.Duration
+
+	// MaxClientsPerIP limits the number of clients that can be registered per IP
+	// Prevents DoS attacks via mass client registration
+	// 0 = no limit (not recommended)
+	// Default: 10
+	MaxClientsPerIP int
+
+	// AllowCustomRedirectSchemes allows non-http/https redirect URIs (e.g., myapp://)
+	// When false, only http/https schemes are allowed
+	// When true, custom schemes are validated against AllowedCustomSchemes pattern
+	// Default: true (for native app support)
+	AllowCustomRedirectSchemes bool
+
+	// AllowedCustomSchemes is a list of allowed custom scheme patterns (regex)
+	// Only used if AllowCustomRedirectSchemes is true
+	// Default: ["^[a-z][a-z0-9+.-]*$"] (RFC 3986 compliant schemes)
+	AllowedCustomSchemes []string
 }
 
 // Handler implements OAuth 2.1 endpoints for the MCP server
 // It acts as both an OAuth 2.1 Authorization Server (proxying to Google)
 // and an OAuth 2.1 Resource Server (validating tokens)
 type Handler struct {
-	config       *Config
-	store        *Store         // Token store for resource server functionality
-	clientStore  *ClientStore   // Client registration store for authorization server
-	flowStore    *FlowStore     // OAuth flow state management
-	rateLimiter  *RateLimiter   // Optional rate limiter for protecting endpoints
-	googleConfig *oauth2.Config // Google OAuth config for proxying to Google
-	httpClient   *http.Client   // Custom HTTP client for OAuth requests
-	logger       *slog.Logger
+	config          *Config
+	store           *Store         // Token store for resource server functionality
+	clientStore     *ClientStore   // Client registration store for authorization server
+	flowStore       *FlowStore     // OAuth flow state management
+	rateLimiter     *RateLimiter   // Optional IP-based rate limiter for protecting endpoints
+	userRateLimiter *RateLimiter   // Optional user-based rate limiter for authenticated requests
+	googleConfig    *oauth2.Config // Google OAuth config for proxying to Google
+	httpClient      *http.Client   // Custom HTTP client for OAuth requests
+	logger          *slog.Logger
 }
 
 // NewHandler creates a new OAuth handler
@@ -122,7 +179,46 @@ func NewHandler(config *Config) (*Handler, error) {
 		logger = slog.Default()
 	}
 
-	// Create rate limiter if configured
+	// ============================================================
+	// Set Secure Defaults for Security Configuration
+	// ============================================================
+
+	// Refresh token TTL defaults to 90 days (security vs usability balance)
+	if config.RefreshTokenTTL == 0 {
+		config.RefreshTokenTTL = 90 * 24 * time.Hour
+	}
+
+	// Max clients per IP defaults to 10 to prevent DoS
+	if config.MaxClientsPerIP == 0 {
+		config.MaxClientsPerIP = 10
+	}
+
+	// AllowCustomRedirectSchemes defaults to true for native app support
+	// Note: Go bool zero value is false, so we need explicit check
+	// If not explicitly set to false in a previous version, we allow custom schemes
+	// This is safe because AllowedCustomSchemes provides validation
+	if config.AllowedCustomSchemes == nil {
+		config.AllowCustomRedirectSchemes = true // Explicit default for clarity
+		config.AllowedCustomSchemes = []string{
+			"^[a-z][a-z0-9+.-]*$", // RFC 3986: scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+		}
+	}
+
+	// Log security configuration warnings
+	if config.AllowInsecureAuthWithoutState {
+		logger.Warn("⚠️  SECURITY WARNING: State parameter is OPTIONAL (CSRF protection weakened)",
+			"recommendation", "Set AllowInsecureAuthWithoutState=false for production")
+	}
+	if config.DisableRefreshTokenRotation {
+		logger.Warn("⚠️  SECURITY WARNING: Refresh token rotation is DISABLED",
+			"recommendation", "Set DisableRefreshTokenRotation=false for production")
+	}
+	if config.AllowPublicClientRegistration {
+		logger.Warn("⚠️  SECURITY WARNING: Public client registration is ENABLED (DoS risk)",
+			"recommendation", "Set AllowPublicClientRegistration=false and use RegistrationAccessToken")
+	}
+
+	// Create IP-based rate limiter if configured
 	var rateLimiter *RateLimiter
 	if config.RateLimitRate > 0 {
 		burst := config.RateLimitBurst
@@ -134,6 +230,27 @@ func NewHandler(config *Config) (*Handler, error) {
 			cleanupInterval = 5 * time.Minute
 		}
 		rateLimiter = NewRateLimiter(config.RateLimitRate, burst, config.TrustProxy, cleanupInterval, logger)
+		logger.Info("IP-based rate limiting enabled",
+			"rate", config.RateLimitRate,
+			"burst", burst)
+	}
+
+	// Create user-based rate limiter if configured
+	var userRateLimiter *RateLimiter
+	if config.UserRateLimitRate > 0 {
+		burst := config.UserRateLimitBurst
+		if burst == 0 {
+			burst = config.UserRateLimitRate * 2 // Default burst is 2x rate
+		}
+		cleanupInterval := config.RateLimitCleanupInterval
+		if cleanupInterval == 0 {
+			cleanupInterval = 5 * time.Minute
+		}
+		// User rate limiter doesn't need TrustProxy since it uses email addresses
+		userRateLimiter = NewRateLimiter(config.UserRateLimitRate, burst, false, cleanupInterval, logger)
+		logger.Info("User-based rate limiting enabled",
+			"rate", config.UserRateLimitRate,
+			"burst", burst)
 	}
 
 	// Create Google OAuth config for OAuth proxy
@@ -177,14 +294,15 @@ func NewHandler(config *Config) (*Handler, error) {
 	}
 
 	return &Handler{
-		config:       config,
-		store:        store,
-		clientStore:  clientStore,
-		flowStore:    flowStore,
-		rateLimiter:  rateLimiter,
-		googleConfig: googleConfig,
-		httpClient:   httpClient,
-		logger:       logger,
+		config:          config,
+		store:           store,
+		clientStore:     clientStore,
+		flowStore:       flowStore,
+		rateLimiter:     rateLimiter,
+		userRateLimiter: userRateLimiter,
+		googleConfig:    googleConfig,
+		httpClient:      httpClient,
+		logger:          logger,
 	}, nil
 }
 

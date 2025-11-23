@@ -86,7 +86,8 @@ func TestHandler_ServeAuthorizationServerMetadata_MethodNotAllowed(t *testing.T)
 
 func TestHandler_ServeDynamicClientRegistration(t *testing.T) {
 	handler, err := NewHandler(&Config{
-		Resource: "https://mcp.example.com",
+		Resource:                      "https://mcp.example.com",
+		AllowPublicClientRegistration: true, // For testing only
 	})
 	if err != nil {
 		t.Fatalf("NewHandler() error = %v", err)
@@ -143,7 +144,8 @@ func TestHandler_ServeDynamicClientRegistration(t *testing.T) {
 
 func TestHandler_ServeDynamicClientRegistration_NoRedirectURIs(t *testing.T) {
 	handler, _ := NewHandler(&Config{
-		Resource: "https://mcp.example.com",
+		Resource:                      "https://mcp.example.com",
+		AllowPublicClientRegistration: true, // For testing only
 	})
 
 	regReq := &ClientRegistrationRequest{
@@ -173,7 +175,8 @@ func TestHandler_ServeDynamicClientRegistration_NoRedirectURIs(t *testing.T) {
 
 func TestHandler_ServeDynamicClientRegistration_InvalidRedirectURI(t *testing.T) {
 	handler, _ := NewHandler(&Config{
-		Resource: "https://mcp.example.com",
+		Resource:                      "https://mcp.example.com",
+		AllowPublicClientRegistration: true, // For testing only
 	})
 
 	tests := []struct {
@@ -400,9 +403,9 @@ func TestHandler_ValidateScopes(t *testing.T) {
 	})
 
 	tests := []struct {
-		name        string
-		scope       string
-		wantError   bool
+		name      string
+		scope     string
+		wantError bool
 		errContains string
 	}{
 		{

@@ -13,9 +13,10 @@ import (
 
 // ClientStore manages registered OAuth clients
 type ClientStore struct {
-	clients map[string]*RegisteredClient
-	mu      sync.RWMutex
-	logger  *slog.Logger
+	clients       map[string]*RegisteredClient
+	clientsPerIP  map[string]int // Track number of clients per IP for DoS protection
+	mu            sync.RWMutex
+	logger        *slog.Logger
 }
 
 // NewClientStore creates a new client store
@@ -25,13 +26,33 @@ func NewClientStore(logger *slog.Logger) *ClientStore {
 	}
 
 	return &ClientStore{
-		clients: make(map[string]*RegisteredClient),
-		logger:  logger,
+		clients:      make(map[string]*RegisteredClient),
+		clientsPerIP: make(map[string]int),
+		logger:       logger,
 	}
 }
 
+// CheckIPLimit checks if an IP has reached the client registration limit
+// Returns an error if the limit is reached
+func (s *ClientStore) CheckIPLimit(ip string, maxClientsPerIP int) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if maxClientsPerIP <= 0 {
+		return nil // No limit
+	}
+
+	count := s.clientsPerIP[ip]
+	if count >= maxClientsPerIP {
+		return fmt.Errorf("client registration limit reached for IP %s (%d/%d)", ip, count, maxClientsPerIP)
+	}
+
+	return nil
+}
+
 // RegisterClient registers a new OAuth client and returns the client info
-func (s *ClientStore) RegisterClient(req *ClientRegistrationRequest) (*ClientRegistrationResponse, error) {
+// clientIP is used for DoS protection via per-IP limits
+func (s *ClientStore) RegisterClient(req *ClientRegistrationRequest, clientIP string) (*ClientRegistrationResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -89,9 +110,16 @@ func (s *ClientStore) RegisterClient(req *ClientRegistrationRequest) (*ClientReg
 	// Store the client
 	s.clients[clientID] = client
 
+	// Increment IP counter for DoS protection
+	if clientIP != "" {
+		s.clientsPerIP[clientIP]++
+	}
+
 	s.logger.Info("Registered new OAuth client",
 		"client_id", clientID,
 		"client_name", req.ClientName,
+		"client_ip", clientIP,
+		"clients_from_ip", s.clientsPerIP[clientIP],
 		"redirect_uris", req.RedirectURIs,
 		"grant_types", grantTypes,
 	)
