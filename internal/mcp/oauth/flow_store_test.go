@@ -129,7 +129,7 @@ func TestFlowStore_AuthorizationCode(t *testing.T) {
 	if err == nil {
 		t.Error("GetAuthorizationCode() should return error for already used code (code should be deleted)")
 	}
-	
+
 	// Verify the error message indicates code not found
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("Expected 'not found' error, got: %v", err)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -386,5 +387,83 @@ func TestHandler_UpdatedProtectedResourceMetadata(t *testing.T) {
 
 	if metadata.AuthorizationServers[0] != "https://mcp.example.com" {
 		t.Errorf("AuthorizationServers[0] = %s, want https://mcp.example.com (should point to inboxfewer, not Google)", metadata.AuthorizationServers[0])
+	}
+}
+
+func TestHandler_ValidateScopes(t *testing.T) {
+	handler, _ := NewHandler(&Config{
+		Resource: "https://mcp.example.com",
+		SupportedScopes: []string{
+			"https://www.googleapis.com/auth/gmail.readonly",
+			"https://www.googleapis.com/auth/drive",
+		},
+	})
+
+	tests := []struct {
+		name        string
+		scope       string
+		wantError   bool
+		errContains string
+	}{
+		{
+			name:      "empty scope",
+			scope:     "",
+			wantError: false,
+		},
+		{
+			name:      "supported Google scope",
+			scope:     "https://www.googleapis.com/auth/gmail.readonly",
+			wantError: false,
+		},
+		{
+			name:      "multiple supported Google scopes",
+			scope:     "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive",
+			wantError: false,
+		},
+		{
+			name:        "unsupported Google scope",
+			scope:       "https://www.googleapis.com/auth/youtube",
+			wantError:   true,
+			errContains: "unsupported Google API scope",
+		},
+		{
+			name:      "MCP scopes are ignored (not rejected)",
+			scope:     "mcp:tools mcp:resources",
+			wantError: false,
+		},
+		{
+			name:      "mix of MCP scopes and supported Google scopes",
+			scope:     "mcp:tools https://www.googleapis.com/auth/gmail.readonly mcp:resources",
+			wantError: false,
+		},
+		{
+			name:        "mix of MCP scopes and unsupported Google scopes",
+			scope:       "mcp:tools https://www.googleapis.com/auth/youtube",
+			wantError:   true,
+			errContains: "unsupported Google API scope",
+		},
+		{
+			name:      "openid scope is ignored",
+			scope:     "openid profile email",
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handler.validateScopes(tt.scope)
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("validateScopes() error = nil, want error containing %q", tt.errContains)
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("validateScopes() error = %v, want error containing %q", err, tt.errContains)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("validateScopes() error = %v, want nil", err)
+				}
+			}
+		})
 	}
 }

@@ -512,7 +512,7 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 
 	// Calculate token expiry
 	expiresIn := authCode.GoogleTokenExpiry - time.Now().Unix()
-	
+
 	// If token is expired or expiring very soon (< 60 seconds), try to refresh
 	if expiresIn < 60 {
 		if h.CanRefreshTokens() && authCode.GoogleRefreshToken != "" {
@@ -723,7 +723,8 @@ func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(tokenResp)
 }
 
-// validateScopes validates that all requested scopes are supported
+// validateScopes validates that requested Google API scopes are supported
+// Non-Google scopes (e.g., mcp:tools, openid) are logged but not rejected
 func (h *Handler) validateScopes(scope string) error {
 	if scope == "" {
 		return nil // Empty scope is valid
@@ -738,7 +739,19 @@ func (h *Handler) validateScopes(scope string) error {
 			continue
 		}
 
-		// Check if scope is in the supported list
+		// Only validate Google API scopes (start with https://)
+		// Other scopes (like mcp:tools, openid) are ignored since we don't enforce them
+		isGoogleScope := len(requested) > 8 && requested[:8] == "https://"
+		if !isGoogleScope {
+			// Non-Google scope - log but don't reject
+			// MCP clients may send protocol scopes we don't enforce
+			h.logger.Debug("Ignoring non-Google scope",
+				"scope", requested,
+				"reason", "not enforced by this server")
+			continue
+		}
+
+		// Validate Google API scopes against our supported list
 		found := false
 		for _, supported := range h.config.SupportedScopes {
 			if requested == supported {
@@ -748,7 +761,7 @@ func (h *Handler) validateScopes(scope string) error {
 		}
 
 		if !found {
-			return fmt.Errorf("unsupported scope: %s", requested)
+			return fmt.Errorf("unsupported Google API scope: %s", requested)
 		}
 	}
 
