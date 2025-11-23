@@ -1,6 +1,7 @@
 package gmail_tools
 
 import (
+	"context"
 	"testing"
 )
 
@@ -40,7 +41,7 @@ func TestGetAccountFromArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getAccountFromArgs(tt.args)
+			got := getAccountFromArgs(context.Background(), tt.args)
 			if got != tt.want {
 				t.Errorf("getAccountFromArgs() = %v, want %v", got, tt.want)
 			}

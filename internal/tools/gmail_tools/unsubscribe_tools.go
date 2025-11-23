@@ -60,7 +60,7 @@ func handleGetUnsubscribeInfo(ctx context.Context, request mcp.CallToolRequest, 
 	}
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := getAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -121,7 +121,7 @@ func handleUnsubscribeViaHTTP(ctx context.Context, request mcp.CallToolRequest, 
 	}
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := getAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {

@@ -144,13 +144,26 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, tokenContextKey, googleToken)
 
 		// Save the Google token for this user so we can use it to access Google APIs
-		// Use email as the account identifier
+		// Store by BOTH email and access token for lookup flexibility
 		if err := h.store.SaveGoogleToken(userEmail, googleToken); err != nil {
 			// Log but don't fail - we can still process the request
-			h.logger.Warn("Failed to save Google token",
+			h.logger.Warn("Failed to save Google token by email",
 				"email", userEmail,
 				"error", err)
 		}
+
+		// IMPORTANT: Also store by access token so the TokenProvider can find it
+		// The mcp-go library doesn't pass HTTP context to tool handlers, so we can't
+		// rely on context.WithValue. Instead, we store the token by the access token
+		// and modify the TokenProvider to look it up using "default" -> access token mapping
+		if err := h.store.SaveGoogleToken(accessToken, googleToken); err != nil {
+			h.logger.Warn("Failed to save Google token by access token",
+				"error", err)
+		}
+
+		h.logger.Info("Authenticated user for MCP session",
+			"email", userEmail,
+			"token_prefix", accessToken[:min(10, len(accessToken))])
 
 		// Call next handler
 		next.ServeHTTP(w, r.WithContext(ctx))

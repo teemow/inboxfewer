@@ -116,7 +116,7 @@ func handleCreateFilter(ctx context.Context, request mcp.CallToolRequest, sc *se
 	args := request.GetArguments()
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := getAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -204,7 +204,7 @@ func handleListFilters(ctx context.Context, request mcp.CallToolRequest, sc *ser
 	args := request.GetArguments()
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := getAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -253,7 +253,7 @@ func handleDeleteFilter(ctx context.Context, request mcp.CallToolRequest, sc *se
 	}
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := getAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -281,7 +281,7 @@ func handleListLabels(ctx context.Context, request mcp.CallToolRequest, sc *serv
 	args := request.GetArguments()
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := getAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
