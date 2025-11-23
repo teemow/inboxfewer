@@ -215,11 +215,11 @@ func TestGetClientIP(t *testing.T) {
 			expectedIP:    "10.0.0.1",
 		},
 		{
-			name:          "X-Forwarded-For multiple IPs with trust",
+			name:          "X-Forwarded-For multiple IPs with trust (takes LAST IP from trusted proxy)",
 			remoteAddr:    "10.0.0.1:1234",
 			xForwardedFor: "203.0.113.1, 198.51.100.1, 10.0.0.1",
 			trustProxy:    true,
-			expectedIP:    "203.0.113.1",
+			expectedIP:    "10.0.0.1", // Security: Use LAST IP (from trusted proxy) to prevent spoofing
 		},
 		{
 			name:       "X-Real-IP with trust proxy",

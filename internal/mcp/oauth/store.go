@@ -159,9 +159,9 @@ func (s *Store) cleanupExpiredTokens() {
 			}
 		}
 
-		// Find expired refresh tokens
+		// Find expired refresh tokens (with clock skew grace period)
 		for refreshToken, expiresAt := range s.refreshTokenExpiries {
-			if nowUnix > expiresAt {
+			if nowUnix > (expiresAt + ClockSkewGrace) {
 				expiredRefreshTokens = append(expiredRefreshTokens, refreshToken)
 			}
 		}
@@ -197,9 +197,10 @@ func (s *Store) cleanupExpiredTokens() {
 				}
 			}
 
+			// Re-check refresh token expiration under write lock (with clock skew grace period)
 			for _, refreshToken := range expiredRefreshTokens {
 				if expiresAt, ok := s.refreshTokenExpiries[refreshToken]; ok {
-					if currentTimeUnix > expiresAt {
+					if currentTimeUnix > (expiresAt + ClockSkewGrace) {
 						email := s.refreshTokens[refreshToken]
 						delete(s.refreshTokens, refreshToken)
 						delete(s.refreshTokenExpiries, refreshToken)
@@ -235,6 +236,7 @@ func (s *Store) SaveRefreshToken(refreshToken, email string, expiresAt int64) er
 
 // GetRefreshToken retrieves the user email associated with a refresh token
 // Returns an error if the token is expired
+// Uses clock skew grace period to prevent false expiration errors due to time differences
 func (s *Store) GetRefreshToken(refreshToken string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -245,8 +247,9 @@ func (s *Store) GetRefreshToken(refreshToken string) (string, error) {
 	}
 
 	// Check if refresh token is expired
+	// Security: Add grace period for clock skew to prevent false expiration errors
 	if expiresAt, hasExpiry := s.refreshTokenExpiries[refreshToken]; hasExpiry {
-		if time.Now().Unix() > expiresAt {
+		if time.Now().Unix() > (expiresAt + ClockSkewGrace) {
 			return "", fmt.Errorf("refresh token expired")
 		}
 	}

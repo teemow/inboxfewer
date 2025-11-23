@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,23 +138,26 @@ func (h *Handler) RateLimitMiddleware(next http.Handler) http.Handler {
 
 // getClientIP extracts the client IP address from the request
 // trustProxy: if true, trust X-Forwarded-For and X-Real-IP headers (only if behind trusted proxy)
+// Security: When trustProxy=true, takes the LAST IP in X-Forwarded-For (added by trusted proxy)
+// to prevent client-side IP spoofing
 func getClientIP(r *http.Request, trustProxy bool) string {
 	// Only trust proxy headers if explicitly configured
 	if trustProxy {
 		// Check X-Forwarded-For header (set by proxies)
+		// Security: Take the LAST IP (added by trusted proxy), not the first (which can be spoofed)
+		// Format: X-Forwarded-For: client-ip, proxy1-ip, proxy2-ip, trusted-proxy-ip
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			// Take the first IP if multiple
-			for i := 0; i < len(xff); i++ {
-				if xff[i] == ',' {
-					return xff[:i]
-				}
+			// Split by comma and take the last IP (from trusted proxy)
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				// Trim whitespace and return the last IP
+				return strings.TrimSpace(ips[len(ips)-1])
 			}
-			return xff
 		}
 
 		// Check X-Real-IP header
 		if xri := r.Header.Get("X-Real-IP"); xri != "" {
-			return xri
+			return strings.TrimSpace(xri)
 		}
 	}
 

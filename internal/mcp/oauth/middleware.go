@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"golang.org/x/oauth2"
 )
@@ -60,25 +61,38 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 		if err == nil && cachedToken != nil {
 			// This is an inboxfewer token - we have the mapped Google token
 			h.logger.Debug("Found inboxfewer token mapping", "token_prefix", accessToken[:min(8, len(accessToken))]+"...")
-			googleToken = cachedToken
 
-			// Validate the Google token to get user info
-			userInfo, err = h.getUserInfoFromGoogle(r.Context(), googleToken)
-			if err != nil {
-				errorDesc := getActionableErrorMessage(err)
-				h.logger.Warn("Google token validation failed for inboxfewer token",
-					"error", err,
-					"error_description", errorDesc)
-				w.Header().Set("WWW-Authenticate", fmt.Sprintf(
-					`Bearer realm="%s", resource_metadata="/.well-known/oauth-protected-resource", error="invalid_token", error_description="%s"`,
-					h.config.Resource,
-					errorDesc,
-				))
-				h.writeUnauthorizedError(w, "invalid_token", errorDesc)
-				return
+			// Security: Check if cached token is expired and can't be refreshed
+			// If token is expired without refresh capability, fall through to direct validation
+			// (which will fail appropriately with actionable error message)
+			if !cachedToken.Expiry.IsZero() && cachedToken.Expiry.Before(time.Now()) && cachedToken.RefreshToken == "" {
+				h.logger.Warn("Cached token expired without refresh token",
+					"token_prefix", accessToken[:min(8, len(accessToken))]+"...")
+				// Fall through to direct validation (will fail appropriately)
+			} else {
+				googleToken = cachedToken
+
+				// Validate the Google token to get user info
+				userInfo, err = h.getUserInfoFromGoogle(r.Context(), googleToken)
+				if err != nil {
+					errorDesc := getActionableErrorMessage(err)
+					h.logger.Warn("Google token validation failed for inboxfewer token",
+						"error", err,
+						"error_description", errorDesc)
+					w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+						`Bearer realm="%s", resource_metadata="/.well-known/oauth-protected-resource", error="invalid_token", error_description="%s"`,
+						h.config.Resource,
+						errorDesc,
+					))
+					h.writeUnauthorizedError(w, "invalid_token", errorDesc)
+					return
+				}
+				userEmail = userInfo.Email
 			}
-			userEmail = userInfo.Email
-		} else {
+		}
+
+		// If we didn't get a valid token from cache, try direct validation
+		if googleToken == nil {
 			// Not an inboxfewer token - try to validate directly with Google
 			// This provides backward compatibility for clients that have Google tokens
 			h.logger.Debug("Validating token directly with Google")

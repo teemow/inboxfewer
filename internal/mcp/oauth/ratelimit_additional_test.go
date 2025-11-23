@@ -18,11 +18,11 @@ func TestGetClientIP_WithProxyHeaders_TrustProxy(t *testing.T) {
 		expectedIP    string
 	}{
 		{
-			name:          "trust proxy with X-Forwarded-For",
+			name:          "trust proxy with X-Forwarded-For (uses LAST IP from trusted proxy)",
 			xForwardedFor: "192.168.1.1, 10.0.0.1",
 			remoteAddr:    "127.0.0.1:1234",
 			trustProxy:    true,
-			expectedIP:    "192.168.1.1",
+			expectedIP:    "10.0.0.1", // Security: Use LAST IP (from trusted proxy) to prevent client spoofing
 		},
 		{
 			name:       "trust proxy with X-Real-IP",

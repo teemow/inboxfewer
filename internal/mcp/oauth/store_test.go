@@ -210,3 +210,103 @@ func TestStore_GetGoogleUserInfoNotFound(t *testing.T) {
 		t.Error("GetGoogleUserInfo() for non-existent user should return error")
 	}
 }
+
+func TestStore_SaveAndGetRefreshToken(t *testing.T) {
+	store := NewStore()
+
+	refreshToken := "refresh-token-123"
+	email := "user@example.com"
+	expiresAt := time.Now().Add(90 * 24 * time.Hour).Unix() // 90 days from now
+
+	// Save refresh token
+	if err := store.SaveRefreshToken(refreshToken, email, expiresAt); err != nil {
+		t.Fatalf("SaveRefreshToken() error = %v", err)
+	}
+
+	// Get refresh token
+	retrieved, err := store.GetRefreshToken(refreshToken)
+	if err != nil {
+		t.Fatalf("GetRefreshToken() error = %v", err)
+	}
+
+	if retrieved != email {
+		t.Errorf("GetRefreshToken() = %s, want %s", retrieved, email)
+	}
+}
+
+func TestStore_GetRefreshTokenExpired(t *testing.T) {
+	store := NewStore()
+
+	refreshToken := "refresh-token-123"
+	email := "user@example.com"
+	// Expired 10 seconds ago (beyond clock skew grace period of 5 seconds)
+	expiresAt := time.Now().Add(-10 * time.Second).Unix()
+
+	if err := store.SaveRefreshToken(refreshToken, email, expiresAt); err != nil {
+		t.Fatalf("SaveRefreshToken() error = %v", err)
+	}
+
+	_, err := store.GetRefreshToken(refreshToken)
+	if err == nil {
+		t.Error("GetRefreshToken() for expired token should return error")
+	}
+	if err != nil && err.Error() != "refresh token expired" {
+		t.Errorf("GetRefreshToken() error = %v, want 'refresh token expired'", err)
+	}
+}
+
+func TestStore_GetRefreshTokenClockSkewGrace(t *testing.T) {
+	store := NewStore()
+
+	refreshToken := "refresh-token-123"
+	email := "user@example.com"
+	// Expired 3 seconds ago (within clock skew grace period of 5 seconds)
+	expiresAt := time.Now().Add(-3 * time.Second).Unix()
+
+	if err := store.SaveRefreshToken(refreshToken, email, expiresAt); err != nil {
+		t.Fatalf("SaveRefreshToken() error = %v", err)
+	}
+
+	// Should still be valid due to clock skew grace period
+	retrieved, err := store.GetRefreshToken(refreshToken)
+	if err != nil {
+		t.Fatalf("GetRefreshToken() should succeed within clock skew grace period, got error: %v", err)
+	}
+
+	if retrieved != email {
+		t.Errorf("GetRefreshToken() = %s, want %s", retrieved, email)
+	}
+}
+
+func TestStore_GetRefreshTokenNotFound(t *testing.T) {
+	store := NewStore()
+
+	_, err := store.GetRefreshToken("nonexistent-token")
+	if err == nil {
+		t.Error("GetRefreshToken() for non-existent token should return error")
+	}
+	if err != nil && err.Error() != "refresh token not found" {
+		t.Errorf("GetRefreshToken() error = %v, want 'refresh token not found'", err)
+	}
+}
+
+func TestStore_DeleteRefreshToken(t *testing.T) {
+	store := NewStore()
+
+	refreshToken := "refresh-token-123"
+	email := "user@example.com"
+	expiresAt := time.Now().Add(90 * 24 * time.Hour).Unix()
+
+	if err := store.SaveRefreshToken(refreshToken, email, expiresAt); err != nil {
+		t.Fatalf("SaveRefreshToken() error = %v", err)
+	}
+
+	if err := store.DeleteRefreshToken(refreshToken); err != nil {
+		t.Fatalf("DeleteRefreshToken() error = %v", err)
+	}
+
+	_, err := store.GetRefreshToken(refreshToken)
+	if err == nil {
+		t.Error("GetRefreshToken() after DeleteRefreshToken() should return error")
+	}
+}

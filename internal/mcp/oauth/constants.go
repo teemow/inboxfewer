@@ -27,6 +27,10 @@ const (
 
 	// TokenExpiringThreshold is the minimum time before a token is considered expiring
 	TokenExpiringThreshold = 60 // seconds
+
+	// ClockSkewGrace is the grace period for clock skew when validating token expiration
+	// This prevents false expiration errors due to minor time differences between client and server
+	ClockSkewGrace = 5 // seconds
 )
 
 // OAuth client and security defaults

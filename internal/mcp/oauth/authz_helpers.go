@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"net/http"
+	"regexp"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -82,7 +83,7 @@ func (h *Handler) validatePKCE(authCode *AuthorizationCode, codeVerifier string,
 		return ErrInvalidRequest("code_verifier is required")
 	}
 
-	// Validate code_verifier entropy (RFC 7636: min 43 chars, max 128 chars)
+	// Validate code_verifier length (RFC 7636: min 43 chars, max 128 chars)
 	if len(codeVerifier) < MinCodeVerifierLength {
 		h.logger.Warn("code_verifier too short (insufficient entropy)",
 			"client_id", clientID,
@@ -94,6 +95,16 @@ func (h *Handler) validatePKCE(authCode *AuthorizationCode, codeVerifier string,
 			"client_id", clientID,
 			"length", len(codeVerifier))
 		return ErrInvalidRequest("code_verifier must be at most 128 characters (RFC 7636)")
+	}
+
+	// Validate code_verifier characters (RFC 7636: unreserved = ALPHA / DIGIT / "-" / "." / "_" / "~")
+	// Security: Prevents injection of null bytes, control characters, or Unicode that could cause issues
+	validCharsPattern := regexp.MustCompile(`^[A-Za-z0-9\-._~]+$`)
+	if !validCharsPattern.MatchString(codeVerifier) {
+		h.logger.Warn("code_verifier contains invalid characters",
+			"client_id", clientID,
+			"length", len(codeVerifier))
+		return ErrInvalidRequest("code_verifier contains invalid characters (RFC 7636: must be [A-Za-z0-9-._~])")
 	}
 
 	// Verify code_verifier against code_challenge
@@ -121,22 +132,28 @@ func (h *Handler) authenticateClient(r *http.Request, clientID string) (*Registe
 		return nil, ErrInvalidClient("Invalid client")
 	}
 
-	if client.TokenEndpointAuthMethod != "none" {
-		// Confidential client - validate client secret
-		clientSecret := r.FormValue("client_secret")
-		if clientSecret == "" {
-			// Try Basic Auth
-			username, password, ok := r.BasicAuth()
-			if !ok || username != clientID {
-				return nil, ErrInvalidClient("Client authentication required")
-			}
-			clientSecret = password
-		}
+	if client.TokenEndpointAuthMethod == "none" {
+		// Public client - no secret authentication, PKCE provides security
+		h.logger.Info("Public client authentication (PKCE required)",
+			"client_id", clientID,
+			"client_name", client.ClientName)
+		return client, nil
+	}
 
-		if err := h.clientStore.ValidateClientSecret(clientID, clientSecret); err != nil {
-			h.logger.Warn("Client authentication failed", "client_id", clientID)
-			return nil, ErrInvalidClient("Client authentication failed")
+	// Confidential client - validate client secret
+	clientSecret := r.FormValue("client_secret")
+	if clientSecret == "" {
+		// Try Basic Auth
+		username, password, ok := r.BasicAuth()
+		if !ok || username != clientID {
+			return nil, ErrInvalidClient("Client authentication required")
 		}
+		clientSecret = password
+	}
+
+	if err := h.clientStore.ValidateClientSecret(clientID, clientSecret); err != nil {
+		h.logger.Warn("Client authentication failed", "client_id", clientID)
+		return nil, ErrInvalidClient("Client authentication failed")
 	}
 
 	return client, nil
