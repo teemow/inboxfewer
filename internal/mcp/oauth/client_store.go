@@ -92,11 +92,35 @@ func (s *ClientStore) RegisterClient(req *ClientRegistrationRequest, clientIP st
 		responseTypes = DefaultResponseTypes
 	}
 
+	// Determine client type (default: confidential)
+	clientType := req.ClientType
+	if clientType == "" {
+		clientType = "confidential"
+	}
+
+	// Security: Validate client type and auth method compatibility
+	// RFC 6749: Public clients CANNOT use client_secret authentication
+	// Only public clients can use "none" auth method
+	if err := validateClientTypeAuthMethod(clientType, tokenEndpointAuthMethod); err != nil {
+		return nil, err
+	}
+
+	// For public clients, don't generate or store a client secret
+	var responseSecret string
+	var secretHashStr string
+	if clientType == "public" {
+		responseSecret = "" // No secret for public clients
+		secretHashStr = ""
+	} else {
+		responseSecret = clientSecret
+		secretHashStr = string(secretHash)
+	}
+
 	// Create registered client
 	client := &RegisteredClient{
 		ClientID:                clientID,
 		ClientSecret:            "", // Don't store plain text
-		ClientSecretHash:        string(secretHash),
+		ClientSecretHash:        secretHashStr,
 		ClientIDIssuedAt:        now,
 		ClientSecretExpiresAt:   0, // Never expires
 		RedirectURIs:            req.RedirectURIs,
@@ -105,6 +129,7 @@ func (s *ClientStore) RegisterClient(req *ClientRegistrationRequest, clientIP st
 		ResponseTypes:           responseTypes,
 		ClientName:              req.ClientName,
 		Scope:                   req.Scope,
+		ClientType:              clientType,
 	}
 
 	// Store the client
@@ -127,10 +152,11 @@ func (s *ClientStore) RegisterClient(req *ClientRegistrationRequest, clientIP st
 	// Return registration response
 	return &ClientRegistrationResponse{
 		ClientID:                clientID,
-		ClientSecret:            clientSecret, // Only returned once
+		ClientSecret:            responseSecret, // Only returned once (empty for public clients)
 		ClientIDIssuedAt:        now,
 		ClientSecretExpiresAt:   0,
 		RedirectURIs:            req.RedirectURIs,
+		ClientType:              clientType,
 		TokenEndpointAuthMethod: tokenEndpointAuthMethod,
 		GrantTypes:              grantTypes,
 		ResponseTypes:           responseTypes,
@@ -197,4 +223,37 @@ func generateSecureToken(length int) (string, error) {
 		return "", err
 	}
 	return base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(b), nil
+}
+
+// validateClientTypeAuthMethod validates that the client type and auth method are compatible
+// Security enforcement:
+//   - Public clients MUST use "none" auth method (no client secret)
+//   - Confidential clients MUST NOT use "none" auth method (requires client secret)
+func validateClientTypeAuthMethod(clientType, authMethod string) error {
+	switch clientType {
+	case "public":
+		// Public clients must use "none" authentication
+		if authMethod != "none" {
+			return fmt.Errorf("public clients must use 'none' token_endpoint_auth_method")
+		}
+	case "confidential":
+		// Confidential clients must NOT use "none" authentication
+		if authMethod == "none" {
+			return fmt.Errorf("confidential clients cannot use 'none' token_endpoint_auth_method (use 'client_secret_basic' or 'client_secret_post')")
+		}
+		// Validate that the auth method is supported
+		validMethod := false
+		for _, method := range SupportedTokenAuthMethods {
+			if authMethod == method && method != "none" {
+				validMethod = true
+				break
+			}
+		}
+		if !validMethod {
+			return fmt.Errorf("unsupported token_endpoint_auth_method for confidential client: %s", authMethod)
+		}
+	default:
+		return fmt.Errorf("invalid client_type: %s (must be 'public' or 'confidential')", clientType)
+	}
+	return nil
 }

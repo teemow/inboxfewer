@@ -28,8 +28,17 @@ const (
 	// TokenExpiringThreshold is the minimum time before a token is considered expiring
 	TokenExpiringThreshold = 60 // seconds
 
-	// ClockSkewGrace is the grace period for clock skew when validating token expiration
-	// This prevents false expiration errors due to minor time differences between client and server
+	// ClockSkewGrace is the grace period (in seconds) for clock skew when validating token expiration
+	//
+	// Security Rationale:
+	//   - Prevents false expiration errors due to minor time differences between systems
+	//   - Balances security (minimize token lifetime extension) with usability
+	//   - 5 seconds is a conservative value that handles typical NTP drift
+	//
+	// Trade-offs:
+	//   - Allows tokens to be used up to 5 seconds beyond their true expiration
+	//   - This is acceptable for most use cases and improves reliability
+	//   - For high-security scenarios, consider reducing or removing this grace period
 	ClockSkewGrace = 5 // seconds
 )
 
@@ -96,7 +105,8 @@ var (
 	DefaultResponseTypes = []string{"code"}
 
 	// SupportedCodeChallengeMethods are the PKCE methods we support
-	SupportedCodeChallengeMethods = []string{"S256", "plain"}
+	// Security: Only S256 is allowed. "plain" method is insecure and violates OAuth 2.1
+	SupportedCodeChallengeMethods = []string{"S256"}
 
 	// SupportedTokenAuthMethods are the supported token endpoint auth methods
 	SupportedTokenAuthMethods = []string{"client_secret_basic", "client_secret_post", "none"}

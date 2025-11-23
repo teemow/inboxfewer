@@ -113,6 +113,11 @@ type ClientRegistrationRequest struct {
 
 	// Scope is the space-separated list of scope values
 	Scope string `json:"scope,omitempty"`
+
+	// ClientType indicates if this is a "public" or "confidential" client
+	// Public clients (mobile, SPA) can use "none" auth method
+	// Confidential clients (server-side) must use client_secret_basic or client_secret_post
+	ClientType string `json:"client_type,omitempty"`
 }
 
 // ClientRegistrationResponse represents a dynamic client registration response
@@ -146,6 +151,9 @@ type ClientRegistrationResponse struct {
 
 	// Scope is the space-separated list of scope values
 	Scope string `json:"scope,omitempty"`
+
+	// ClientType indicates if this is a "public" or "confidential" client
+	ClientType string `json:"client_type,omitempty"`
 }
 
 // RegisteredClient represents a registered OAuth client in storage
@@ -161,6 +169,7 @@ type RegisteredClient struct {
 	ResponseTypes           []string
 	ClientName              string
 	Scope                   string
+	ClientType              string // "public" or "confidential" (default: confidential)
 }
 
 // ==================== OAuth Flow Types ====================

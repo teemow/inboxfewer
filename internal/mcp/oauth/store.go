@@ -11,6 +11,17 @@ import (
 
 // Store manages Google OAuth tokens in memory
 // This is a simplified store that only handles Google tokens for authenticated users
+//
+// Security Considerations:
+//   - Tokens are stored unencrypted in memory. If memory dumps are a concern,
+//     consider implementing encryption at rest.
+//   - Automatic cleanup runs periodically to remove expired tokens
+//   - Clock skew grace period is applied to prevent false expiration errors
+//   - Refresh tokens are protected and not deleted until explicitly expired
+//
+// Thread Safety:
+//   - All operations use RWMutex for thread-safe concurrent access
+//   - Cleanup operations use optimized locking to minimize contention
 type Store struct {
 	mu                   sync.RWMutex
 	googleTokens         map[string]*oauth2.Token   // user email or access token -> Google token
@@ -20,6 +31,8 @@ type Store struct {
 	tokenToEmailMap      map[string]string          // inboxfewer access token -> user email (for cleanup)
 	cleanupInterval      time.Duration              // How often to cleanup expired tokens
 	logger               *slog.Logger
+	stopCleanup          chan struct{} // Channel to stop cleanup goroutine
+	manualCleanup        chan struct{} // Channel to trigger manual cleanup (for testing)
 }
 
 // NewStore creates a new in-memory Google token store with default cleanup interval
@@ -37,6 +50,8 @@ func NewStoreWithInterval(cleanupInterval time.Duration) *Store {
 		tokenToEmailMap:      make(map[string]string),
 		cleanupInterval:      cleanupInterval,
 		logger:               slog.Default(),
+		stopCleanup:          make(chan struct{}),
+		manualCleanup:        make(chan struct{}, 1), // Buffered to prevent blocking
 	}
 
 	// Start background cleanup goroutine
@@ -50,6 +65,22 @@ func (s *Store) SetLogger(logger *slog.Logger) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.logger = logger
+}
+
+// Stop gracefully stops the cleanup goroutine
+// This should be called when the store is no longer needed to prevent goroutine leaks
+func (s *Store) Stop() {
+	close(s.stopCleanup)
+}
+
+// TriggerCleanup manually triggers a cleanup cycle
+// This is primarily used for testing to make tests deterministic
+func (s *Store) TriggerCleanup() {
+	select {
+	case s.manualCleanup <- struct{}{}:
+	default:
+		// Channel full, cleanup already pending
+	}
 }
 
 // SaveGoogleToken saves a Google OAuth token for a user
@@ -66,7 +97,9 @@ func (s *Store) SaveGoogleToken(key string, token *oauth2.Token) error {
 	defer s.mu.Unlock()
 
 	s.googleTokens[key] = token
-	s.logger.Debug("Saved Google token", "key", key, "expiry", token.Expiry)
+	s.logger.Debug("Saved Google token",
+		"key_hash", HashForDisplay(key),
+		"expiry", token.Expiry)
 	return nil
 }
 
@@ -81,7 +114,9 @@ func (s *Store) GetGoogleToken(email string) (*oauth2.Token, error) {
 	}
 
 	// Check if token is expired
-	if token.Expiry.Before(time.Now()) {
+	// Only return error if token is expired AND we don't have a refresh token
+	// If we have a refresh token, we return the expired token so the caller can refresh it
+	if token.Expiry.Before(time.Now()) && token.RefreshToken == "" {
 		return nil, fmt.Errorf("Google token expired for user: %s", email)
 	}
 
@@ -103,7 +138,8 @@ func (s *Store) DeleteGoogleToken(email string) error {
 		}
 	}
 
-	s.logger.Info("Deleted Google token and refresh tokens", "email", email)
+	s.logger.Info("Deleted Google token and refresh tokens",
+		"email_hash", HashForDisplay(email))
 	return nil
 }
 
@@ -139,78 +175,157 @@ func (s *Store) GetGoogleUserInfo(email string) (*GoogleUserInfo, error) {
 // cleanupExpiredTokens periodically removes expired tokens
 // Uses optimized locking strategy to minimize write lock duration
 // Re-validates expiration under write lock to prevent race conditions
+//
+// Security considerations:
+//   - Tokens with valid refresh tokens are preserved even if access token expires
+//   - Clock skew grace period applied to prevent premature deletion
+//   - Comprehensive logging for audit trail (with sanitized data)
 func (s *Store) cleanupExpiredTokens() {
 	ticker := time.NewTicker(s.cleanupInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		// Collect expired items with read lock first
-		s.mu.RLock()
+	for {
+		select {
+		case <-s.stopCleanup:
+			// Graceful shutdown
+			return
+		case <-s.manualCleanup:
+			// Manual trigger for testing
+			s.performCleanup()
+		case <-ticker.C:
+			// Periodic cleanup
+			s.performCleanup()
+		}
+	}
+}
 
-		expiredGoogleTokens := []string{}
-		expiredRefreshTokens := []string{}
-		now := time.Now()
-		nowUnix := now.Unix()
+// performCleanup executes the actual cleanup logic
+// Separated from cleanupExpiredTokens to allow manual triggering
+func (s *Store) performCleanup() {
+	expiredGoogleTokens := s.findExpiredGoogleTokens()
+	expiredRefreshTokens := s.findExpiredRefreshTokens()
 
-		// Find expired Google tokens
-		for key, token := range s.googleTokens {
-			if !token.Expiry.IsZero() && token.Expiry.Before(now) {
-				expiredGoogleTokens = append(expiredGoogleTokens, key)
-			}
+	// Only acquire write lock if there's work to do
+	if len(expiredGoogleTokens) > 0 || len(expiredRefreshTokens) > 0 {
+		s.mu.Lock()
+		s.deleteExpiredGoogleTokens(expiredGoogleTokens)
+		s.deleteExpiredRefreshTokens(expiredRefreshTokens)
+		s.mu.Unlock()
+	}
+}
+
+// findExpiredGoogleTokens finds Google tokens that are expired
+func (s *Store) findExpiredGoogleTokens() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	expired := []string{}
+	now := time.Now()
+
+	for key, token := range s.googleTokens {
+		if !token.Expiry.IsZero() && token.Expiry.Before(now) {
+			expired = append(expired, key)
+		}
+	}
+
+	return expired
+}
+
+// findExpiredRefreshTokens finds refresh tokens that are expired (with clock skew grace)
+func (s *Store) findExpiredRefreshTokens() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	expired := []string{}
+	nowUnix := time.Now().Unix()
+
+	for refreshToken, expiresAt := range s.refreshTokenExpiries {
+		if nowUnix > (expiresAt + ClockSkewGrace) {
+			expired = append(expired, refreshToken)
+		}
+	}
+
+	return expired
+}
+
+// deleteExpiredGoogleTokens deletes expired Google tokens (caller must hold write lock)
+func (s *Store) deleteExpiredGoogleTokens(expiredKeys []string) {
+	currentTime := time.Now()
+	currentTimeUnix := currentTime.Unix()
+
+	for _, key := range expiredKeys {
+		token, ok := s.googleTokens[key]
+		if !ok {
+			continue // Token was already deleted
 		}
 
-		// Find expired refresh tokens (with clock skew grace period)
-		for refreshToken, expiresAt := range s.refreshTokenExpiries {
-			if nowUnix > (expiresAt + ClockSkewGrace) {
-				expiredRefreshTokens = append(expiredRefreshTokens, refreshToken)
-			}
+		// Re-check expiration (token might have been refreshed)
+		if !token.Expiry.IsZero() && !token.Expiry.Before(currentTime) {
+			continue // No longer expired
 		}
 
-		s.mu.RUnlock()
-
-		// Delete in batch with write lock only if there's something to delete
-		if len(expiredGoogleTokens) > 0 || len(expiredRefreshTokens) > 0 {
-			s.mu.Lock()
-
-			// Re-check expiration under write lock to prevent race conditions
-			// Tokens might have been refreshed between read and write locks
-			currentTime := time.Now()
-			currentTimeUnix := currentTime.Unix()
-
-			for _, key := range expiredGoogleTokens {
-				if token, ok := s.googleTokens[key]; ok {
-					if !token.Expiry.IsZero() && token.Expiry.Before(currentTime) {
-						delete(s.googleTokens, key)
-						// Only delete user info if this is an email key (not an access token)
-						if email, hasEmail := s.tokenToEmailMap[key]; hasEmail {
-							delete(s.tokenToEmailMap, key)
-							// Check if this was the last token for this email
-							if _, stillHasToken := s.googleTokens[email]; !stillHasToken {
-								delete(s.googleUserInfo, email)
-							}
-						} else {
-							// This is an email key
-							delete(s.googleUserInfo, key)
-						}
-						s.logger.Debug("Cleaned up expired Google token", "key", key)
-					}
-				}
-			}
-
-			// Re-check refresh token expiration under write lock (with clock skew grace period)
-			for _, refreshToken := range expiredRefreshTokens {
-				if expiresAt, ok := s.refreshTokenExpiries[refreshToken]; ok {
-					if currentTimeUnix > (expiresAt + ClockSkewGrace) {
-						email := s.refreshTokens[refreshToken]
-						delete(s.refreshTokens, refreshToken)
-						delete(s.refreshTokenExpiries, refreshToken)
-						s.logger.Debug("Cleaned up expired refresh token", "email", email)
-					}
-				}
-			}
-
-			s.mu.Unlock()
+		// Don't delete if token has a valid refresh token
+		if s.hasValidRefreshToken(token, currentTimeUnix) {
+			continue
 		}
+
+		// Delete the token
+		delete(s.googleTokens, key)
+		s.deleteUserInfoIfNeeded(key)
+		s.logger.Debug("Cleaned up expired Google token",
+			"key_hash", HashForDisplay(key))
+	}
+}
+
+// hasValidRefreshToken checks if a token has a refresh token that is still valid
+func (s *Store) hasValidRefreshToken(token *oauth2.Token, nowUnix int64) bool {
+	if token.RefreshToken == "" {
+		return false
+	}
+
+	// If refresh token is tracked, check if it's expired
+	if expiry, tracked := s.refreshTokenExpiries[token.RefreshToken]; tracked {
+		return nowUnix <= (expiry + ClockSkewGrace)
+	}
+
+	// If not tracked, assume valid (safe default)
+	return true
+}
+
+// deleteUserInfoIfNeeded deletes user info if this was the last token for the user
+func (s *Store) deleteUserInfoIfNeeded(key string) {
+	if email, hasEmail := s.tokenToEmailMap[key]; hasEmail {
+		delete(s.tokenToEmailMap, key)
+		// Check if this was the last token for this email
+		if _, stillHasToken := s.googleTokens[email]; !stillHasToken {
+			delete(s.googleUserInfo, email)
+		}
+	} else {
+		// This is an email key
+		delete(s.googleUserInfo, key)
+	}
+}
+
+// deleteExpiredRefreshTokens deletes expired refresh tokens (caller must hold write lock)
+func (s *Store) deleteExpiredRefreshTokens(expiredTokens []string) {
+	currentTimeUnix := time.Now().Unix()
+
+	for _, refreshToken := range expiredTokens {
+		expiresAt, ok := s.refreshTokenExpiries[refreshToken]
+		if !ok {
+			continue // Already deleted
+		}
+
+		// Re-check expiration
+		if currentTimeUnix <= (expiresAt + ClockSkewGrace) {
+			continue // No longer expired
+		}
+
+		email := s.refreshTokens[refreshToken]
+		delete(s.refreshTokens, refreshToken)
+		delete(s.refreshTokenExpiries, refreshToken)
+		s.logger.Debug("Cleaned up expired refresh token",
+			"email_hash", HashForDisplay(email))
 	}
 }
 
@@ -229,7 +344,7 @@ func (s *Store) SaveRefreshToken(refreshToken, email string, expiresAt int64) er
 	s.refreshTokens[refreshToken] = email
 	s.refreshTokenExpiries[refreshToken] = expiresAt
 	s.logger.Debug("Saved refresh token",
-		"email", email,
+		"email_hash", HashForDisplay(email),
 		"expires_at", time.Unix(expiresAt, 0))
 	return nil
 }
@@ -292,8 +407,8 @@ func (s *Store) SaveTokenWithEmailMapping(email, accessToken string, token *oaut
 	s.tokenToEmailMap[accessToken] = email
 
 	s.logger.Debug("Saved Google token with email mapping",
-		"email", email,
-		"token_prefix", accessToken[:min(10, len(accessToken))])
+		"email_hash", HashForDisplay(email),
+		"token_hash", HashForDisplay(accessToken))
 	return nil
 }
 

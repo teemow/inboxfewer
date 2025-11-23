@@ -58,7 +58,8 @@ func NewRateLimiter(ratePerSec, burst int, trustProxy bool, cleanupInterval time
 	return rl
 }
 
-// Allow checks if a request from the given identifier (IP or user email) should be allowed
+// Allow checks if a request from the given identifier (IP or user email) should be allowed.
+// Returns true if the request is within rate limits, false if it should be rejected.
 func (rl *RateLimiter) Allow(identifier string) bool {
 	rl.mu.RLock()
 	entry, exists := rl.limiters[identifier]
@@ -80,12 +81,12 @@ func (rl *RateLimiter) Allow(identifier string) bool {
 	}
 
 	// Check if request is allowed
-	allowed := entry.limiter.Allow()
-	if !allowed {
+	isAllowed := entry.limiter.Allow()
+	if !isAllowed {
 		rl.logger.Warn("Rate limit exceeded", "identifier", identifier)
 	}
 
-	return allowed
+	return isAllowed
 }
 
 // cleanupInactiveLimiters removes limiters that haven't been used recently

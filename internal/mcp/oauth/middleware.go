@@ -339,11 +339,3 @@ func (h *Handler) CacheGoogleToken(email string, token *oauth2.Token) error {
 func (h *Handler) GetCachedGoogleToken(email string) (*oauth2.Token, error) {
 	return h.store.GetGoogleToken(email)
 }
-
-// min returns the smaller of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

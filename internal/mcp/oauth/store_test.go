@@ -9,6 +9,7 @@ import (
 
 func TestNewStore(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 	if store == nil {
 		t.Fatal("NewStore() returned nil")
 	}
@@ -24,6 +25,7 @@ func TestNewStore(t *testing.T) {
 
 func TestStore_Stats(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	token := &oauth2.Token{
 		AccessToken: "google-access-token",
@@ -54,6 +56,7 @@ func TestStore_Stats(t *testing.T) {
 
 func TestStore_SaveAndGetGoogleToken(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	token := &oauth2.Token{
 		AccessToken: "google-access-token",
@@ -79,6 +82,7 @@ func TestStore_SaveAndGetGoogleToken(t *testing.T) {
 
 func TestStore_SaveGoogleTokenEmptyEmail(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	token := &oauth2.Token{
 		AccessToken: "google-access-token",
@@ -92,6 +96,7 @@ func TestStore_SaveGoogleTokenEmptyEmail(t *testing.T) {
 
 func TestStore_SaveGoogleTokenNil(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	err := store.SaveGoogleToken("user@example.com", nil)
 	if err == nil {
@@ -101,6 +106,7 @@ func TestStore_SaveGoogleTokenNil(t *testing.T) {
 
 func TestStore_GetGoogleTokenNotFound(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	_, err := store.GetGoogleToken("nonexistent@example.com")
 	if err == nil {
@@ -110,6 +116,7 @@ func TestStore_GetGoogleTokenNotFound(t *testing.T) {
 
 func TestStore_GetGoogleTokenExpired(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	token := &oauth2.Token{
 		AccessToken: "google-access-token",
@@ -129,6 +136,7 @@ func TestStore_GetGoogleTokenExpired(t *testing.T) {
 
 func TestStore_DeleteGoogleToken(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	token := &oauth2.Token{
 		AccessToken: "google-access-token",
@@ -152,6 +160,7 @@ func TestStore_DeleteGoogleToken(t *testing.T) {
 
 func TestStore_SaveAndGetGoogleUserInfo(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	userInfo := &GoogleUserInfo{
 		Sub:           "12345",
@@ -181,6 +190,7 @@ func TestStore_SaveAndGetGoogleUserInfo(t *testing.T) {
 
 func TestStore_SaveGoogleUserInfoEmptyEmail(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	userInfo := &GoogleUserInfo{
 		Sub:   "12345",
@@ -195,6 +205,7 @@ func TestStore_SaveGoogleUserInfoEmptyEmail(t *testing.T) {
 
 func TestStore_SaveGoogleUserInfoNil(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	err := store.SaveGoogleUserInfo("user@example.com", nil)
 	if err == nil {
@@ -204,6 +215,7 @@ func TestStore_SaveGoogleUserInfoNil(t *testing.T) {
 
 func TestStore_GetGoogleUserInfoNotFound(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	_, err := store.GetGoogleUserInfo("nonexistent@example.com")
 	if err == nil {
@@ -213,6 +225,7 @@ func TestStore_GetGoogleUserInfoNotFound(t *testing.T) {
 
 func TestStore_SaveAndGetRefreshToken(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	refreshToken := "refresh-token-123"
 	email := "user@example.com"
@@ -236,6 +249,7 @@ func TestStore_SaveAndGetRefreshToken(t *testing.T) {
 
 func TestStore_GetRefreshTokenExpired(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	refreshToken := "refresh-token-123"
 	email := "user@example.com"
@@ -257,6 +271,7 @@ func TestStore_GetRefreshTokenExpired(t *testing.T) {
 
 func TestStore_GetRefreshTokenClockSkewGrace(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	refreshToken := "refresh-token-123"
 	email := "user@example.com"
@@ -280,6 +295,7 @@ func TestStore_GetRefreshTokenClockSkewGrace(t *testing.T) {
 
 func TestStore_GetRefreshTokenNotFound(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	_, err := store.GetRefreshToken("nonexistent-token")
 	if err == nil {
@@ -292,6 +308,7 @@ func TestStore_GetRefreshTokenNotFound(t *testing.T) {
 
 func TestStore_DeleteRefreshToken(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	refreshToken := "refresh-token-123"
 	email := "user@example.com"

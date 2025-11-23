@@ -1,197 +1,524 @@
 package oauth
 
 import (
-	"strings"
+	"context"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"testing"
+	"time"
+
+	"golang.org/x/oauth2"
 )
 
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
+// testLogger creates a logger for testing
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelError, // Quiet during tests
+	}))
 }
 
-// TestValidatePKCE_CharacterValidation tests RFC 7636 character validation
-func TestValidatePKCE_CharacterValidation(t *testing.T) {
-	handler, _ := NewHandler(&Config{
-		Resource: "https://mcp.example.com",
-	})
-
+func TestParseAuthCodeRequest(t *testing.T) {
 	tests := []struct {
-		name         string
-		codeVerifier string
-		wantError    bool
-		errorMsg     string
+		name        string
+		formValues  map[string]string
+		wantErr     bool
+		wantErrCode string
 	}{
 		{
-			name:         "Valid code_verifier - alphanumeric",
-			codeVerifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", // 43 chars
-			wantError:    false,
+			name: "valid request",
+			formValues: map[string]string{
+				"code":          "test-code",
+				"redirect_uri":  "https://example.com/callback",
+				"client_id":     "test-client",
+				"code_verifier": "test-verifier",
+			},
+			wantErr: false,
 		},
 		{
-			name:         "Valid code_verifier - all allowed chars",
-			codeVerifier: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~", // 66 chars
-			wantError:    false,
+			name: "missing code",
+			formValues: map[string]string{
+				"redirect_uri": "https://example.com/callback",
+			},
+			wantErr:     true,
+			wantErrCode: "invalid_request",
 		},
 		{
-			name:         "Valid code_verifier - minimum length (43 chars)",
-			codeVerifier: "0123456789012345678901234567890123456789012", // Exactly 43 chars
-			wantError:    false,
-		},
-		{
-			name:         "Valid code_verifier - maximum length (128 chars)",
-			codeVerifier: "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567", // Exactly 128 chars
-			wantError:    false,
-		},
-		{
-			name:         "Invalid - too short (42 chars)",
-			codeVerifier: "012345678901234567890123456789012345678901",
-			wantError:    true,
-			errorMsg:     "code_verifier must be at least 43 characters",
-		},
-		{
-			name:         "Invalid - too long (129 chars)",
-			codeVerifier: "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678",
-			wantError:    true,
-			errorMsg:     "code_verifier must be at most 128 characters",
-		},
-		{
-			name:         "Invalid - contains spaces",
-			codeVerifier: "dBjftJeZ4CVP mB92K27uhbUJU1p1r wW1gFWFOEjXk",
-			wantError:    true,
-			errorMsg:     "code_verifier contains invalid characters",
-		},
-		{
-			name:         "Invalid - contains null byte",
-			codeVerifier: "dBjftJeZ4CVP\x00mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-			wantError:    true,
-			errorMsg:     "code_verifier contains invalid characters",
-		},
-		{
-			name:         "Invalid - contains control characters",
-			codeVerifier: "dBjftJeZ4CVP\nmB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-			wantError:    true,
-			errorMsg:     "code_verifier contains invalid characters",
-		},
-		{
-			name:         "Invalid - contains Unicode",
-			codeVerifier: "dBjftJeZ4CVP–mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-			wantError:    true,
-			errorMsg:     "code_verifier contains invalid characters",
-		},
-		{
-			name:         "Invalid - contains special chars not in RFC 7636",
-			codeVerifier: "dBjftJeZ4CVP+mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-			wantError:    true,
-			errorMsg:     "code_verifier contains invalid characters",
-		},
-		{
-			name:         "Invalid - contains equals sign (base64 padding)",
-			codeVerifier: "dBjftJeZ4CVP=mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-			wantError:    true,
-			errorMsg:     "code_verifier contains invalid characters",
-		},
-		{
-			name:         "Invalid - contains forward slash",
-			codeVerifier: "dBjftJeZ4CVP/mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-			wantError:    true,
-			errorMsg:     "code_verifier contains invalid characters",
+			name: "optional parameters missing",
+			formValues: map[string]string{
+				"code": "test-code",
+			},
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock authorization code with plain challenge for character validation tests
-			// This allows us to test character validation without worrying about hash matching
-			authCode := &AuthorizationCode{
-				CodeChallenge:       tt.codeVerifier, // Use plain method so challenge = verifier
-				CodeChallengeMethod: "plain",
+			req := httptest.NewRequest(http.MethodPost, "/token", nil)
+			req.Form = make(map[string][]string)
+			for k, v := range tt.formValues {
+				req.Form.Set(k, v)
 			}
 
-			err := handler.validatePKCE(authCode, tt.codeVerifier, "test-client")
+			h := &Handler{}
+			params, err := h.parseAuthCodeRequest(req)
 
-			if tt.wantError {
+			if tt.wantErr {
 				if err == nil {
-					t.Errorf("Expected error containing '%s', got nil", tt.errorMsg)
-				} else {
-					// Check if the error description contains the expected message
-					errStr := err.Error()
-					if !contains(errStr, tt.errorMsg) && !contains(err.Description, tt.errorMsg) {
-						t.Errorf("Expected error containing '%s', got: %v (code: %s, description: %s)",
-							tt.errorMsg, errStr, err.Code, err.Description)
-					}
+					t.Fatal("expected error but got none")
+				}
+				if err.Code != tt.wantErrCode {
+					t.Errorf("error code = %v, want %v", err.Code, tt.wantErrCode)
 				}
 			} else {
 				if err != nil {
-					t.Errorf("Expected no error, got: %v", err)
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if params.Code != tt.formValues["code"] {
+					t.Errorf("code = %v, want %v", params.Code, tt.formValues["code"])
 				}
 			}
 		})
 	}
 }
 
-// TestValidatePKCE_VerificationSuccess tests successful PKCE verification
-func TestValidatePKCE_VerificationSuccess(t *testing.T) {
-	handler, _ := NewHandler(&Config{
-		Resource: "https://mcp.example.com",
-	})
+func TestValidateAndRetrieveAuthCode(t *testing.T) {
+	logger := testLogger()
+	flowStore := NewFlowStore(logger)
+
+	// Create a test authorization code
+	authCode := &AuthorizationCode{
+		Code:        "test-code",
+		ClientID:    "test-client",
+		RedirectURI: "https://example.com/callback",
+		Scope:       "openid",
+		ExpiresAt:   time.Now().Add(10 * time.Minute).Unix(),
+	}
+	flowStore.SaveAuthorizationCode(authCode)
+
+	h := &Handler{
+		flowStore: flowStore,
+		logger:    logger,
+	}
 
 	tests := []struct {
-		name                string
-		codeVerifier        string
-		codeChallenge       string
-		codeChallengeMethod string
-		wantError           bool
+		name        string
+		params      *authCodeRequest
+		wantErr     bool
+		wantErrCode string
 	}{
 		{
-			name:                "S256 method - correct verifier",
-			codeVerifier:        "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-			codeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-			codeChallengeMethod: "S256",
-			wantError:           false,
+			name: "valid auth code",
+			params: &authCodeRequest{
+				Code:        "test-code",
+				RedirectURI: "https://example.com/callback",
+				ClientID:    "test-client",
+			},
+			wantErr: false,
 		},
 		{
-			name:                "plain method - correct verifier",
-			codeVerifier:        "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-			codeChallenge:       "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-			codeChallengeMethod: "plain",
-			wantError:           false,
+			name: "invalid code",
+			params: &authCodeRequest{
+				Code:        "invalid-code",
+				RedirectURI: "https://example.com/callback",
+				ClientID:    "test-client",
+			},
+			wantErr:     true,
+			wantErrCode: "invalid_grant",
 		},
 		{
-			name:                "S256 method - wrong verifier",
-			codeVerifier:        "wrong-verifier-value-here-that-is-long-enough",
-			codeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-			codeChallengeMethod: "S256",
-			wantError:           true,
-		},
-		{
-			name:                "No PKCE required",
-			codeVerifier:        "",
-			codeChallenge:       "",
-			codeChallengeMethod: "",
-			wantError:           false,
-		},
-		{
-			name:                "PKCE required but verifier missing",
-			codeVerifier:        "",
-			codeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-			codeChallengeMethod: "S256",
-			wantError:           true,
+			name: "redirect uri mismatch",
+			params: &authCodeRequest{
+				Code:        "test-code-2",
+				RedirectURI: "https://wrong.com/callback",
+				ClientID:    "test-client",
+			},
+			wantErr:     true,
+			wantErrCode: "invalid_grant",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			authCode := &AuthorizationCode{
-				CodeChallenge:       tt.codeChallenge,
-				CodeChallengeMethod: tt.codeChallengeMethod,
+			// Re-save for each test since GetAuthorizationCode deletes it
+			if tt.params.Code == "test-code" {
+				authCode.Code = "test-code"
+				flowStore.SaveAuthorizationCode(authCode)
+			} else if tt.params.Code == "test-code-2" {
+				authCode2 := &AuthorizationCode{
+					Code:        "test-code-2",
+					ClientID:    "test-client",
+					RedirectURI: "https://example.com/callback",
+					Scope:       "openid",
+					ExpiresAt:   time.Now().Add(10 * time.Minute).Unix(),
+				}
+				flowStore.SaveAuthorizationCode(authCode2)
 			}
 
-			err := handler.validatePKCE(authCode, tt.codeVerifier, "test-client")
+			_, err := h.validateAndRetrieveAuthCode(tt.params)
 
-			if tt.wantError && err == nil {
-				t.Error("Expected error, got nil")
-			} else if !tt.wantError && err != nil {
-				t.Errorf("Expected no error, got: %v", err)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				if err.Code != tt.wantErrCode {
+					t.Errorf("error code = %v, want %v", err.Code, tt.wantErrCode)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidatePKCE(t *testing.T) {
+	logger := testLogger()
+	h := &Handler{logger: logger}
+
+	tests := []struct {
+		name         string
+		authCode     *AuthorizationCode
+		codeVerifier string
+		clientID     string
+		wantErr      bool
+		wantErrCode  string
+	}{
+		{
+			name: "valid S256 PKCE",
+			authCode: &AuthorizationCode{
+				CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", // SHA256 of "test-verifier"
+				CodeChallengeMethod: "S256",
+			},
+			codeVerifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", // 43 chars
+			clientID:     "test-client",
+			wantErr:      false,
+		},
+		{
+			name: "no PKCE required",
+			authCode: &AuthorizationCode{
+				CodeChallenge: "",
+			},
+			codeVerifier: "",
+			clientID:     "test-client",
+			wantErr:      false,
+		},
+		{
+			name: "missing code verifier",
+			authCode: &AuthorizationCode{
+				CodeChallenge:       "test-challenge",
+				CodeChallengeMethod: "S256",
+			},
+			codeVerifier: "",
+			clientID:     "test-client",
+			wantErr:      true,
+			wantErrCode:  "invalid_request",
+		},
+		{
+			name: "verifier too short",
+			authCode: &AuthorizationCode{
+				CodeChallenge:       "test-challenge",
+				CodeChallengeMethod: "S256",
+			},
+			codeVerifier: "short",
+			clientID:     "test-client",
+			wantErr:      true,
+			wantErrCode:  "invalid_request",
+		},
+		{
+			name: "invalid characters in verifier",
+			authCode: &AuthorizationCode{
+				CodeChallenge:       "test-challenge",
+				CodeChallengeMethod: "S256",
+			},
+			codeVerifier: "invalid!@#$%^&*()characters-that-are-super-long-enough",
+			clientID:     "test-client",
+			wantErr:      true,
+			wantErrCode:  "invalid_request",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := h.validatePKCE(tt.authCode, tt.codeVerifier, tt.clientID)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				if err.Code != tt.wantErrCode {
+					t.Errorf("error code = %v, want %v", err.Code, tt.wantErrCode)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestAuthenticateClient(t *testing.T) {
+	logger := testLogger()
+	clientStore := NewClientStore(logger)
+
+	// Register test clients
+	confidentialClient, _ := clientStore.RegisterClient(&ClientRegistrationRequest{
+		ClientName:              "Confidential Client",
+		RedirectURIs:            []string{"https://example.com/callback"},
+		TokenEndpointAuthMethod: "client_secret_basic",
+		ClientType:              "confidential",
+	}, "127.0.0.1")
+
+	publicClient, _ := clientStore.RegisterClient(&ClientRegistrationRequest{
+		ClientName:              "Public Client",
+		RedirectURIs:            []string{"https://example.com/callback"},
+		TokenEndpointAuthMethod: "none",
+		ClientType:              "public",
+	}, "127.0.0.1")
+
+	h := &Handler{
+		clientStore: clientStore,
+		logger:      logger,
+	}
+
+	tests := []struct {
+		name        string
+		req         *http.Request
+		clientID    string
+		wantErr     bool
+		wantErrCode string
+	}{
+		{
+			name: "public client - no auth required",
+			req: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/token", nil)
+				return req
+			}(),
+			clientID: publicClient.ClientID,
+			wantErr:  false,
+		},
+		{
+			name: "confidential client - valid basic auth",
+			req: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/token", nil)
+				req.SetBasicAuth(confidentialClient.ClientID, confidentialClient.ClientSecret)
+				return req
+			}(),
+			clientID: confidentialClient.ClientID,
+			wantErr:  false,
+		},
+		{
+			name: "confidential client - invalid secret",
+			req: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/token", nil)
+				req.SetBasicAuth(confidentialClient.ClientID, "wrong-secret")
+				return req
+			}(),
+			clientID:    confidentialClient.ClientID,
+			wantErr:     true,
+			wantErrCode: "invalid_client",
+		},
+		{
+			name: "invalid client id",
+			req: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/token", nil)
+				return req
+			}(),
+			clientID:    "invalid-client",
+			wantErr:     true,
+			wantErrCode: "invalid_client",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := h.authenticateClient(tt.req, tt.clientID)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				if err.Code != tt.wantErrCode {
+					t.Errorf("error code = %v, want %v", err.Code, tt.wantErrCode)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestEnsureFreshGoogleToken(t *testing.T) {
+	logger := testLogger()
+	h := &Handler{
+		logger: logger,
+	}
+
+	tests := []struct {
+		name        string
+		authCode    *AuthorizationCode
+		wantErr     bool
+		wantErrCode string
+	}{
+		{
+			name: "token not expired",
+			authCode: &AuthorizationCode{
+				GoogleAccessToken:  "valid-token",
+				GoogleRefreshToken: "refresh-token",
+				GoogleTokenExpiry:  time.Now().Add(1 * time.Hour).Unix(),
+				UserEmail:          "test@example.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "token expired without refresh",
+			authCode: &AuthorizationCode{
+				GoogleAccessToken:  "expired-token",
+				GoogleRefreshToken: "",
+				GoogleTokenExpiry:  time.Now().Add(-1 * time.Hour).Unix(),
+				UserEmail:          "test@example.com",
+			},
+			wantErr:     true,
+			wantErrCode: "invalid_grant",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			token, err := h.ensureFreshGoogleToken(context.Background(), tt.authCode)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				if err.Code != tt.wantErrCode {
+					t.Errorf("error code = %v, want %v", err.Code, tt.wantErrCode)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if token == nil {
+					t.Fatal("expected token but got nil")
+				}
+			}
+		})
+	}
+}
+
+func TestStoreTokens(t *testing.T) {
+	logger := testLogger()
+	store := NewStore()
+	store.SetLogger(logger)
+
+	h := &Handler{
+		store:  store,
+		logger: logger,
+	}
+
+	authCode := &AuthorizationCode{
+		UserEmail: "test@example.com",
+	}
+
+	googleToken := &oauth2.Token{
+		AccessToken:  "google-access-token",
+		RefreshToken: "google-refresh-token",
+		Expiry:       time.Now().Add(1 * time.Hour),
+	}
+
+	accessToken := "inboxfewer-access-token"
+
+	oauthErr := h.storeTokens(authCode, googleToken, accessToken)
+	if oauthErr != nil {
+		t.Fatalf("unexpected error: %v", oauthErr)
+	}
+
+	// Verify token was stored by email
+	storedToken, err := store.GetGoogleToken(authCode.UserEmail)
+	if err != nil {
+		t.Fatalf("failed to retrieve token by email: %v", err)
+	}
+	if storedToken.AccessToken != googleToken.AccessToken {
+		t.Errorf("stored token access token = %v, want %v", storedToken.AccessToken, googleToken.AccessToken)
+	}
+
+	// Verify token was stored by access token
+	storedToken2, err := store.GetGoogleToken(accessToken)
+	if err != nil {
+		t.Fatalf("failed to retrieve token by access token: %v", err)
+	}
+	if storedToken2.AccessToken != googleToken.AccessToken {
+		t.Errorf("stored token2 access token = %v, want %v", storedToken2.AccessToken, googleToken.AccessToken)
+	}
+}
+
+func TestIssueRefreshToken(t *testing.T) {
+	logger := testLogger()
+	store := NewStore()
+	store.SetLogger(logger)
+
+	h := &Handler{
+		store:  store,
+		logger: logger,
+		config: &Config{
+			Security: SecurityConfig{
+				RefreshTokenTTL: 90 * 24 * time.Hour,
+			},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		authCode *AuthorizationCode
+		wantNil  bool
+	}{
+		{
+			name: "with Google refresh token",
+			authCode: &AuthorizationCode{
+				GoogleRefreshToken: "google-refresh-token",
+				UserEmail:          "test@example.com",
+			},
+			wantNil: false,
+		},
+		{
+			name: "without Google refresh token",
+			authCode: &AuthorizationCode{
+				GoogleRefreshToken: "",
+				UserEmail:          "test@example.com",
+			},
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			refreshToken, err := h.issueRefreshToken(tt.authCode)
+
+			if tt.wantNil {
+				if refreshToken != "" {
+					t.Errorf("expected empty refresh token but got %v", refreshToken)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if refreshToken == "" {
+					t.Fatal("expected refresh token but got empty string")
+				}
+
+				// Verify token was stored
+				email, err := store.GetRefreshToken(refreshToken)
+				if err != nil {
+					t.Fatalf("failed to retrieve refresh token: %v", err)
+				}
+				if email != tt.authCode.UserEmail {
+					t.Errorf("stored email = %v, want %v", email, tt.authCode.UserEmail)
+				}
 			}
 		})
 	}

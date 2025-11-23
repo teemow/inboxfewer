@@ -9,6 +9,7 @@ import (
 
 func TestStore_SaveGoogleToken_EmptyEmail(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	err := store.SaveGoogleToken("", &oauth2.Token{
 		AccessToken: "test-token",
@@ -21,6 +22,7 @@ func TestStore_SaveGoogleToken_EmptyEmail(t *testing.T) {
 
 func TestStore_SaveGoogleToken_NilToken(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	err := store.SaveGoogleToken("test@example.com", nil)
 
@@ -31,6 +33,7 @@ func TestStore_SaveGoogleToken_NilToken(t *testing.T) {
 
 func TestStore_GetGoogleToken_Expired(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	// Save an expired token
 	err := store.SaveGoogleToken("test@example.com", &oauth2.Token{
@@ -50,6 +53,7 @@ func TestStore_GetGoogleToken_Expired(t *testing.T) {
 
 func TestStore_SaveGoogleUserInfo_EmptyEmail(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	err := store.SaveGoogleUserInfo("", &GoogleUserInfo{
 		Email: "test@example.com",
@@ -62,6 +66,7 @@ func TestStore_SaveGoogleUserInfo_EmptyEmail(t *testing.T) {
 
 func TestStore_SaveGoogleUserInfo_NilUserInfo(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	err := store.SaveGoogleUserInfo("test@example.com", nil)
 
@@ -72,6 +77,7 @@ func TestStore_SaveGoogleUserInfo_NilUserInfo(t *testing.T) {
 
 func TestStore_GetGoogleUserInfo_NotFound(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	_, err := store.GetGoogleUserInfo("nonexistent@example.com")
 	if err == nil {
@@ -81,6 +87,7 @@ func TestStore_GetGoogleUserInfo_NotFound(t *testing.T) {
 
 func TestStore_DeleteGoogleToken_RemovesUserInfo(t *testing.T) {
 	store := NewStore()
+	defer store.Stop()
 
 	// Add token and user info
 	email := "test@example.com"
@@ -119,8 +126,9 @@ func TestStore_DeleteGoogleToken_RemovesUserInfo(t *testing.T) {
 }
 
 func TestStore_CleanupExpiredTokens(t *testing.T) {
-	// Create store with short cleanup interval for testing
-	store := NewStoreWithInterval(100 * time.Millisecond)
+	// Create store with long cleanup interval since we'll trigger manually
+	store := NewStoreWithInterval(1 * time.Hour)
+	defer store.Stop()
 
 	// Add an expired token
 	store.SaveGoogleToken("expired@example.com", &oauth2.Token{
@@ -134,8 +142,12 @@ func TestStore_CleanupExpiredTokens(t *testing.T) {
 		Expiry:      time.Now().Add(1 * time.Hour),
 	})
 
-	// Wait for cleanup to run
-	time.Sleep(200 * time.Millisecond)
+	// Manually trigger cleanup for deterministic testing
+	store.TriggerCleanup()
+	// Minimal sleep to allow cleanup goroutine to process the trigger
+	// This is necessary because cleanup runs asynchronously in a separate goroutine
+	// 10ms is sufficient and much more deterministic than the previous approach
+	time.Sleep(10 * time.Millisecond)
 
 	// Valid token should still exist
 	_, err := store.GetGoogleToken("valid@example.com")
@@ -148,5 +160,68 @@ func TestStore_CleanupExpiredTokens(t *testing.T) {
 	stats := store.Stats()
 	if stats["google_tokens"] != 1 {
 		t.Errorf("After cleanup, google_tokens = %d, want 1", stats["google_tokens"])
+	}
+}
+
+func TestStore_CleanupLogic_WithRefreshToken(t *testing.T) {
+	// Create store with long cleanup interval since we'll trigger manually
+	store := NewStoreWithInterval(1 * time.Hour)
+	defer store.Stop()
+
+	// Token with refresh token - should NOT be cleaned up when access token expires
+	tokenWithRefresh := &oauth2.Token{
+		AccessToken:  "access-token-with-refresh",
+		RefreshToken: "valid-refresh-token",
+		TokenType:    "Bearer",
+		Expiry:       time.Now().Add(-1 * time.Hour), // Access token Expired
+	}
+
+	// Token without refresh token - SHOULD be cleaned up when access token expires
+	tokenNoRefresh := &oauth2.Token{
+		AccessToken:  "access-token-no-refresh",
+		RefreshToken: "", // No refresh token
+		TokenType:    "Bearer",
+		Expiry:       time.Now().Add(-1 * time.Hour), // Access token Expired
+	}
+
+	// Save tokens
+	if err := store.SaveGoogleToken("user-with-refresh@example.com", tokenWithRefresh); err != nil {
+		t.Fatalf("SaveGoogleToken() error = %v", err)
+	}
+	if err := store.SaveGoogleToken("user-no-refresh@example.com", tokenNoRefresh); err != nil {
+		t.Fatalf("SaveGoogleToken() error = %v", err)
+	}
+
+	// Also save refresh token expiry for the one that has it (to simulate full state)
+	// Set refresh token expiry to future (so it's valid)
+	if err := store.SaveRefreshToken("valid-refresh-token", "user-with-refresh@example.com", time.Now().Add(24*time.Hour).Unix()); err != nil {
+		t.Fatalf("SaveRefreshToken() error = %v", err)
+	}
+
+	// Manually trigger cleanup for deterministic testing
+	store.TriggerCleanup()
+	// Minimal sleep to allow cleanup goroutine to process the trigger
+	// This is necessary because cleanup runs asynchronously in a separate goroutine
+	// 10ms is sufficient and much more deterministic than the previous approach
+	time.Sleep(10 * time.Millisecond)
+
+	// Test: Token WITHOUT refresh token should be gone
+	_, err := store.GetGoogleToken("user-no-refresh@example.com")
+	if err == nil {
+		t.Error("Token without refresh token should have been cleaned up")
+	}
+
+	// Test: Token WITH refresh token should still be there (but expired)
+	// After fix, we expect NO error and the token back.
+	token, err := store.GetGoogleToken("user-with-refresh@example.com")
+	if err == nil {
+		// If no error, it means fix is applied or we got lucky (but token should be expired)
+		if token == nil {
+			t.Error("GetGoogleToken returned nil token but no error")
+		} else {
+			t.Logf("Token retrieved successfully: expiry=%v", token.Expiry)
+		}
+	} else {
+		t.Errorf("GetGoogleToken error: %v. Token with refresh token was INCORRECTLY cleaned up", err)
 	}
 }

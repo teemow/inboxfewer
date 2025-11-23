@@ -62,10 +62,13 @@ func TestHandler_ServeAuthorizationServerMetadata(t *testing.T) {
 		t.Errorf("GrantTypesSupported length = %d, want %d", len(metadata.GrantTypesSupported), len(expectedGrantTypes))
 	}
 
-	// Verify PKCE methods
-	expectedPKCE := []string{"S256", "plain"}
+	// Verify PKCE methods - only S256 supported (plain is insecure per OAuth 2.1)
+	expectedPKCE := []string{"S256"}
 	if len(metadata.CodeChallengeMethodsSupported) != len(expectedPKCE) {
 		t.Errorf("CodeChallengeMethodsSupported = %v, want %v", metadata.CodeChallengeMethodsSupported, expectedPKCE)
+	}
+	if len(metadata.CodeChallengeMethodsSupported) > 0 && metadata.CodeChallengeMethodsSupported[0] != "S256" {
+		t.Errorf("CodeChallengeMethodsSupported[0] = %s, want S256", metadata.CodeChallengeMethodsSupported[0])
 	}
 }
 

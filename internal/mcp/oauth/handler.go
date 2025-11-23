@@ -28,6 +28,8 @@ type Handler struct {
 	googleConfig    *oauth2.Config // Google OAuth config for proxying to Google
 	httpClient      *http.Client   // Custom HTTP client for OAuth requests
 	logger          *slog.Logger
+	auditLogger     *AuditLogger     // Security audit logger
+	encryption      *TokenEncryption // Token encryption for at-rest security
 }
 
 // NewHandler creates a new OAuth handler
@@ -174,6 +176,25 @@ func NewHandler(config *Config) (*Handler, error) {
 	// Create flow store for OAuth authorization flows
 	flowStore := NewFlowStore(logger)
 
+	// Initialize audit logger if enabled
+	var auditLogger *AuditLogger
+	if config.Security.EnableAuditLogging {
+		auditLogger = NewAuditLogger(logger)
+		logger.Info("Security audit logging enabled")
+	}
+
+	// Initialize token encryption if key provided
+	encryption, err := NewTokenEncryption(config.Security.EncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize encryption: %w", err)
+	}
+	if encryption.enabled {
+		logger.Info("Token encryption at rest enabled (AES-256-GCM)")
+	} else {
+		logger.Warn("⚠️  SECURITY WARNING: Token encryption is DISABLED - tokens stored in plaintext",
+			"recommendation", "Set Security.EncryptionKey to enable encryption")
+	}
+
 	// Use custom HTTP client if provided, otherwise use default
 	httpClient := config.HTTPClient
 	if httpClient == nil {
@@ -192,6 +213,8 @@ func NewHandler(config *Config) (*Handler, error) {
 		googleConfig:    googleConfig,
 		httpClient:      httpClient,
 		logger:          logger,
+		auditLogger:     auditLogger,
+		encryption:      encryption,
 	}, nil
 }
 

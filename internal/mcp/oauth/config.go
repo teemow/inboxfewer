@@ -125,4 +125,18 @@ type SecurityConfig struct {
 	// Only used if AllowCustomRedirectSchemes is true
 	// Default: ["^[a-z][a-z0-9+.-]*$"] (RFC 3986 compliant schemes)
 	AllowedCustomSchemes []string
+
+	// EncryptionKey is the AES-256 key for encrypting tokens at rest (32 bytes)
+	// If nil or empty, tokens are stored unencrypted in memory
+	// For production, provide a 32-byte key from secure storage (KMS, Vault, etc.)
+	// Use oauth.GenerateEncryptionKey() to create a new key
+	// Use oauth.EncryptionKeyFromBase64() to load from env var
+	// Default: nil (encryption disabled)
+	EncryptionKey []byte
+
+	// EnableAuditLogging enables comprehensive security audit logging
+	// Logs authentication events, token operations, and security violations
+	// All sensitive data is hashed before logging
+	// Default: true (enabled for security)
+	EnableAuditLogging bool
 }
