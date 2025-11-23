@@ -13,8 +13,9 @@ import (
 // This is a simplified store that only handles Google tokens for authenticated users
 type Store struct {
 	mu              sync.RWMutex
-	googleTokens    map[string]*oauth2.Token   // user email -> Google token
+	googleTokens    map[string]*oauth2.Token   // user email or access token -> Google token
 	googleUserInfo  map[string]*GoogleUserInfo // user email -> Google user info
+	refreshTokens   map[string]string          // refresh token -> user email
 	cleanupInterval time.Duration              // How often to cleanup expired tokens
 	logger          *slog.Logger
 }
@@ -29,6 +30,7 @@ func NewStoreWithInterval(cleanupInterval time.Duration) *Store {
 	s := &Store{
 		googleTokens:    make(map[string]*oauth2.Token),
 		googleUserInfo:  make(map[string]*GoogleUserInfo),
+		refreshTokens:   make(map[string]string),
 		cleanupInterval: cleanupInterval,
 		logger:          slog.Default(),
 	}
@@ -88,7 +90,15 @@ func (s *Store) DeleteGoogleToken(email string) error {
 
 	delete(s.googleTokens, email)
 	delete(s.googleUserInfo, email)
-	s.logger.Info("Deleted Google token", "email", email)
+
+	// Also delete any refresh tokens for this user
+	for refreshToken, userEmail := range s.refreshTokens {
+		if userEmail == email {
+			delete(s.refreshTokens, refreshToken)
+		}
+	}
+
+	s.logger.Info("Deleted Google token and refresh tokens", "email", email)
 	return nil
 }
 
@@ -164,13 +174,54 @@ func (s *Store) cleanupExpiredTokens() {
 	}
 }
 
+// SaveRefreshToken saves a refresh token mapping to user email
+func (s *Store) SaveRefreshToken(refreshToken, email string) error {
+	if refreshToken == "" {
+		return fmt.Errorf("refresh token cannot be empty")
+	}
+	if email == "" {
+		return fmt.Errorf("email cannot be empty")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.refreshTokens[refreshToken] = email
+	s.logger.Debug("Saved refresh token", "email", email)
+	return nil
+}
+
+// GetRefreshToken retrieves the user email associated with a refresh token
+func (s *Store) GetRefreshToken(refreshToken string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	email, ok := s.refreshTokens[refreshToken]
+	if !ok {
+		return "", fmt.Errorf("refresh token not found")
+	}
+
+	return email, nil
+}
+
+// DeleteRefreshToken removes a refresh token
+func (s *Store) DeleteRefreshToken(refreshToken string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.refreshTokens, refreshToken)
+	s.logger.Debug("Deleted refresh token")
+	return nil
+}
+
 // Stats returns statistics about the store
 func (s *Store) Stats() map[string]int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	return map[string]int{
-		"google_tokens": len(s.googleTokens),
-		"user_info":     len(s.googleUserInfo),
+		"google_tokens":  len(s.googleTokens),
+		"user_info":      len(s.googleUserInfo),
+		"refresh_tokens": len(s.refreshTokens),
 	}
 }

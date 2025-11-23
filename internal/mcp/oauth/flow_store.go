@@ -91,7 +91,8 @@ func (s *FlowStore) SaveAuthorizationCode(code *AuthorizationCode) error {
 	return nil
 }
 
-// GetAuthorizationCode retrieves and marks an authorization code as used
+// GetAuthorizationCode retrieves and immediately deletes an authorization code
+// This prevents replay attacks by ensuring codes can only be used once
 func (s *FlowStore) GetAuthorizationCode(code string) (*AuthorizationCode, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -101,20 +102,16 @@ func (s *FlowStore) GetAuthorizationCode(code string) (*AuthorizationCode, error
 		return nil, fmt.Errorf("authorization code not found")
 	}
 
-	// Check if already used
-	if authCode.Used {
-		return nil, fmt.Errorf("authorization code already used")
-	}
-
 	// Check if expired
 	if time.Now().Unix() > authCode.ExpiresAt {
 		return nil, fmt.Errorf("authorization code expired")
 	}
 
-	// Mark as used
-	authCode.Used = true
+	// Immediately delete the code to prevent replay attacks
+	// This eliminates the race condition window
+	delete(s.codes, code)
 
-	s.logger.Debug("Authorization code used",
+	s.logger.Info("Authorization code consumed and deleted",
 		"code_prefix", code[:8]+"...",
 		"client_id", authCode.ClientID,
 		"user_email", authCode.UserEmail,
@@ -159,9 +156,9 @@ func (s *FlowStore) cleanupExpired() {
 		}
 	}
 
-	// Clean up expired or used codes
+	// Clean up expired codes (used codes are already deleted immediately)
 	for code, authCode := range s.codes {
-		if now > authCode.ExpiresAt || authCode.Used {
+		if now > authCode.ExpiresAt {
 			delete(s.codes, code)
 			codesDeleted++
 		}

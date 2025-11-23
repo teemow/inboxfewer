@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -75,6 +76,24 @@ type Handler struct {
 func NewHandler(config *Config) (*Handler, error) {
 	if config.Resource == "" {
 		return nil, fmt.Errorf("resource is required")
+	}
+
+	// Validate Resource URL and enforce HTTPS in production
+	parsedURL, err := url.Parse(config.Resource)
+	if err != nil {
+		return nil, fmt.Errorf("invalid resource URL: %w", err)
+	}
+
+	// Allow HTTP only for localhost/loopback addresses (development)
+	// Require HTTPS for all other addresses (production)
+	if parsedURL.Scheme != "https" {
+		hostname := parsedURL.Hostname()
+		if hostname != "localhost" &&
+			hostname != "127.0.0.1" &&
+			hostname != "::1" &&
+			hostname != "[::1]" {
+			return nil, fmt.Errorf("resource must use HTTPS in production (got %s://)", parsedURL.Scheme)
+		}
 	}
 
 	// Set default scopes if none provided
@@ -214,6 +233,7 @@ func (h *Handler) ServeProtectedResourceMetadata(w http.ResponseWriter, r *http.
 		ScopesSupported: h.config.SupportedScopes,
 	}
 
+	h.setSecurityHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(metadata); err != nil {
@@ -222,9 +242,37 @@ func (h *Handler) ServeProtectedResourceMetadata(w http.ResponseWriter, r *http.
 	}
 }
 
+// setSecurityHeaders sets security headers on HTTP responses
+func (h *Handler) setSecurityHeaders(w http.ResponseWriter) {
+	// Prevent clickjacking attacks
+	w.Header().Set("X-Frame-Options", "DENY")
+
+	// Prevent MIME type sniffing
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	// Enable XSS protection in browsers
+	w.Header().Set("X-XSS-Protection", "1; mode=block")
+
+	// Content Security Policy - restrict resource loading
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+
+	// Referrer policy - don't leak referrer information
+	w.Header().Set("Referrer-Policy", "no-referrer")
+
+	// For HTTPS resources, enforce HTTPS for 1 year
+	// Only set HSTS if the current request is HTTPS
+	if h.config.Resource != "" {
+		parsedURL, err := url.Parse(h.config.Resource)
+		if err == nil && parsedURL.Scheme == "https" {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+	}
+}
+
 // writeError is a helper to write OAuth error responses
 func (h *Handler) writeError(w http.ResponseWriter, errorCode, description string, statusCode int) {
 	h.logger.Debug("OAuth error", "code", errorCode, "description", description, "status", statusCode)
+	h.setSecurityHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(ErrorResponse{
@@ -234,9 +282,37 @@ func (h *Handler) writeError(w http.ResponseWriter, errorCode, description strin
 }
 
 // RevokeToken revokes a Google OAuth token for a specific user
-// This removes the token from the store, forcing re-authentication
+// This revokes the token at Google and removes it from the store, forcing re-authentication
 func (h *Handler) RevokeToken(email string) error {
 	h.logger.Info("Revoking token", "email", email)
+
+	// Get the Google token first so we can revoke it at Google
+	token, err := h.store.GetGoogleToken(email)
+	if err == nil && token != nil && token.AccessToken != "" {
+		// Revoke at Google's revocation endpoint
+		revokeURL := "https://oauth2.googleapis.com/revoke"
+		data := url.Values{}
+		data.Set("token", token.AccessToken)
+
+		resp, revokeErr := h.httpClient.PostForm(revokeURL, data)
+		if revokeErr != nil {
+			h.logger.Warn("Failed to revoke token at Google",
+				"email", email,
+				"error", revokeErr)
+			// Continue with local deletion even if Google revocation fails
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				h.logger.Warn("Google token revocation returned non-OK status",
+					"email", email,
+					"status", resp.StatusCode)
+			} else {
+				h.logger.Info("Successfully revoked token at Google", "email", email)
+			}
+		}
+	}
+
+	// Delete from local store
 	return h.store.DeleteGoogleToken(email)
 }
 
@@ -269,6 +345,7 @@ func (h *Handler) ServeRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return success
+	h.setSecurityHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{

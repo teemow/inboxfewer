@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 )
@@ -122,14 +123,16 @@ func TestFlowStore_AuthorizationCode(t *testing.T) {
 		t.Errorf("UserEmail = %s, want user@example.com", retrieved.UserEmail)
 	}
 
-	if !retrieved.Used {
-		t.Error("Authorization code should be marked as used")
-	}
-
-	// Should return error when trying to use again
+	// Authorization codes are now immediately deleted upon use for security
+	// Should return error when trying to use again (code no longer exists)
 	_, err = store.GetAuthorizationCode("auth-code-123")
 	if err == nil {
-		t.Error("GetAuthorizationCode() should return error for already used code")
+		t.Error("GetAuthorizationCode() should return error for already used code (code should be deleted)")
+	}
+	
+	// Verify the error message indicates code not found
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("Expected 'not found' error, got: %v", err)
 	}
 }
 
@@ -196,25 +199,16 @@ func TestFlowStore_CleanupExpired(t *testing.T) {
 		Code:      "expired-code",
 		CreatedAt: now - 1000,
 		ExpiresAt: now - 100,
-		Used:      false,
 	}
 	store.SaveAuthorizationCode(expiredCode)
 
-	// Add used code
-	usedCode := &AuthorizationCode{
-		Code:      "used-code",
-		CreatedAt: now,
-		ExpiresAt: now + 600,
-		Used:      true,
-	}
-	store.SaveAuthorizationCode(usedCode)
-
 	// Add valid code
+	// Note: Used codes are immediately deleted upon use (GetAuthorizationCode),
+	// so they never exist in the store long enough to be cleaned up
 	validCode := &AuthorizationCode{
 		Code:      "valid-code",
 		CreatedAt: now,
 		ExpiresAt: now + 600,
-		Used:      false,
 	}
 	store.SaveAuthorizationCode(validCode)
 
@@ -239,15 +233,19 @@ func TestFlowStore_CleanupExpired(t *testing.T) {
 		t.Error("Expired code should be cleaned up")
 	}
 
-	// Used code should be gone
-	_, err = store.GetAuthorizationCode("used-code")
-	if err == nil {
-		t.Error("Used code should be cleaned up")
+	// Valid code should still exist
+	// Note: This will also delete it, but that's expected behavior
+	retrieved, err := store.GetAuthorizationCode("valid-code")
+	if err != nil {
+		t.Errorf("Valid code should exist before use: %v", err)
+	}
+	if retrieved.Code != "valid-code" {
+		t.Errorf("Expected code 'valid-code', got %s", retrieved.Code)
 	}
 
-	// Valid code should still exist
+	// After retrieval, code should be deleted (security feature)
 	_, err = store.GetAuthorizationCode("valid-code")
-	if err != nil {
-		t.Errorf("Valid code should not be cleaned up: %v", err)
+	if err == nil {
+		t.Error("Code should be deleted after first use")
 	}
 }
