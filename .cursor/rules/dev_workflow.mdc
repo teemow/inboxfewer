@@ -292,7 +292,7 @@ After your testing is complete and the PR is merged:
 
 ### 4.6. Security Considerations
 
-- ✅ **DO:** Keep all cluster-specific configuration in a private GitOps repository
+- ✅ **DO:** Keep all cluster-specific configuration in a private GitOps repository (the inboxfewer repo is public!)
 - ✅ **DO:** Use Kubernetes secrets for sensitive data (OAuth credentials, API keys, etc.)
 - ✅ **DO:** Encrypt secrets with tools like SOPS before committing to Git
 - ❌ **DON'T:** Commit cluster URLs, domains, or network topology to public repositories

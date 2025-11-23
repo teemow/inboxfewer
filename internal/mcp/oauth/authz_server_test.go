@@ -256,14 +256,8 @@ func TestHandler_ServeAuthorization_MissingParameters(t *testing.T) {
 			},
 			wantError: "invalid_request",
 		},
-		{
-			name: "missing state",
-			queryParams: map[string]string{
-				"client_id":    "test-client",
-				"redirect_uri": "http://localhost:8080/callback",
-			},
-			wantError: "invalid_request",
-		},
+		// Note: state is RECOMMENDED but not required (OAuth 2.1)
+		// Test removed - missing state should NOT return an error
 	}
 
 	for _, tt := range tests {

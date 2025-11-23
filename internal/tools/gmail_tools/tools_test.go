@@ -8,7 +8,7 @@ import (
 // TestToolsPackage ensures the package compiles and basic functionality works
 func TestToolsPackage(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// Test that getAccountFromArgs works correctly
 	args := map[string]interface{}{
 		"account": "test-account",

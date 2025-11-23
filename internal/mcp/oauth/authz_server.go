@@ -145,9 +145,12 @@ func (h *Handler) ServeAuthorization(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// OAuth 2.1: state is RECOMMENDED (not required) for CSRF protection
+	// Log a warning if missing, but allow the request
 	if state == "" {
-		h.writeError(w, "invalid_request", "state is required", http.StatusBadRequest)
-		return
+		h.logger.Warn("Authorization request without state parameter (CSRF protection disabled)",
+			"client_id", clientID,
+			"redirect_uri", redirectURI)
 	}
 
 	// Validate client exists
@@ -329,7 +332,10 @@ func (h *Handler) ServeGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	redirectQuery := redirectURL.Query()
 	redirectQuery.Set("code", authCode)
-	redirectQuery.Set("state", authState.State)
+	// Only include state if the client provided one (OAuth 2.1 CSRF protection)
+	if authState.State != "" {
+		redirectQuery.Set("state", authState.State)
+	}
 	redirectURL.RawQuery = redirectQuery.Encode()
 
 	h.logger.Info("Redirecting back to MCP client",
