@@ -385,11 +385,6 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if clientID == "" {
-		h.writeError(w, "invalid_request", "client_id is required", http.StatusBadRequest)
-		return
-	}
-
 	// Retrieve and validate authorization code
 	authCode, err := h.flowStore.GetAuthorizationCode(code)
 	if err != nil {
@@ -398,14 +393,22 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Validate client_id matches
-	if authCode.ClientID != clientID {
-		h.logger.Warn("Client ID mismatch",
-			"expected", authCode.ClientID,
-			"got", clientID,
-		)
-		h.writeError(w, "invalid_grant", "Client ID mismatch", http.StatusBadRequest)
-		return
+	// OAuth 2.1: For public clients using PKCE, client_id is optional
+	// If not provided, use the client_id from the authorization code
+	if clientID == "" {
+		clientID = authCode.ClientID
+		h.logger.Debug("Using client_id from authorization code",
+			"client_id", clientID)
+	} else {
+		// If client_id is provided, validate it matches
+		if authCode.ClientID != clientID {
+			h.logger.Warn("Client ID mismatch",
+				"expected", authCode.ClientID,
+				"got", clientID,
+			)
+			h.writeError(w, "invalid_grant", "Client ID mismatch", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Validate redirect_uri matches
