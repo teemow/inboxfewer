@@ -28,6 +28,13 @@ type OAuthConfig struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	DisableStreaming   bool
+
+	// Security Settings (secure by default)
+	// See internal/mcp/oauth/Config for detailed documentation
+	AllowPublicClientRegistration bool   // Default: false (requires registration token)
+	RegistrationAccessToken       string // Required if AllowPublicClientRegistration=false
+	AllowInsecureAuthWithoutState bool   // Default: false (state parameter required)
+	MaxClientsPerIP               int    // Default: 10 (prevents DoS)
 }
 
 // NewOAuthHTTPServer creates a new OAuth-enabled HTTP server for MCP
@@ -48,11 +55,15 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, confi
 			"https://www.googleapis.com/auth/meetings.space.readonly",
 			"https://www.googleapis.com/auth/tasks",
 		},
-		GoogleClientID:     config.GoogleClientID,
-		GoogleClientSecret: config.GoogleClientSecret,
-		RateLimitRate:      10,              // 10 requests per second per IP
-		RateLimitBurst:     20,              // Allow burst of 20 requests
-		CleanupInterval:    1 * time.Minute, // Cleanup expired tokens every minute
+		GoogleClientID:                config.GoogleClientID,
+		GoogleClientSecret:            config.GoogleClientSecret,
+		RateLimitRate:                 10,              // 10 requests per second per IP
+		RateLimitBurst:                20,              // Allow burst of 20 requests
+		CleanupInterval:               1 * time.Minute, // Cleanup expired tokens every minute
+		AllowPublicClientRegistration: config.AllowPublicClientRegistration,
+		RegistrationAccessToken:       config.RegistrationAccessToken,
+		AllowInsecureAuthWithoutState: config.AllowInsecureAuthWithoutState,
+		MaxClientsPerIP:               config.MaxClientsPerIP,
 	}
 
 	oauthHandler, err := oauth.NewHandler(oauthConfig)
@@ -86,11 +97,15 @@ func CreateOAuthHandler(config OAuthConfig) (*oauth.Handler, error) {
 			"https://www.googleapis.com/auth/meetings.space.readonly",
 			"https://www.googleapis.com/auth/tasks",
 		},
-		GoogleClientID:     config.GoogleClientID,
-		GoogleClientSecret: config.GoogleClientSecret,
-		RateLimitRate:      10,              // 10 requests per second per IP
-		RateLimitBurst:     20,              // Allow burst of 20 requests
-		CleanupInterval:    1 * time.Minute, // Cleanup expired tokens every minute
+		GoogleClientID:                config.GoogleClientID,
+		GoogleClientSecret:            config.GoogleClientSecret,
+		RateLimitRate:                 10,              // 10 requests per second per IP
+		RateLimitBurst:                20,              // Allow burst of 20 requests
+		CleanupInterval:               1 * time.Minute, // Cleanup expired tokens every minute
+		AllowPublicClientRegistration: config.AllowPublicClientRegistration,
+		RegistrationAccessToken:       config.RegistrationAccessToken,
+		AllowInsecureAuthWithoutState: config.AllowInsecureAuthWithoutState,
+		MaxClientsPerIP:               config.MaxClientsPerIP,
 	}
 
 	return oauth.NewHandler(oauthConfig)

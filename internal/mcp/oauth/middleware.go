@@ -106,22 +106,22 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 			userEmail = userInfo.Email
 		}
 
-	h.logger.Debug("Token validated", "email", userEmail)
+		h.logger.Debug("Token validated", "email", userEmail)
 
-	// Apply per-user rate limiting (after authentication)
-	if h.userRateLimiter != nil {
-		if !h.userRateLimiter.Allow(userEmail) {
-			h.logger.Warn("User rate limit exceeded",
-				"email", userEmail,
-				"rate_limit_type", "per_user")
-			w.Header().Set("Retry-After", "1")
-			h.writeUnauthorizedError(w, "rate_limit_exceeded",
-				fmt.Sprintf("Rate limit exceeded for user %s. Please try again later.", userEmail))
-			return
+		// Apply per-user rate limiting (after authentication)
+		if h.userRateLimiter != nil {
+			if !h.userRateLimiter.Allow(userEmail) {
+				h.logger.Warn("User rate limit exceeded",
+					"email", userEmail,
+					"rate_limit_type", "per_user")
+				w.Header().Set("Retry-After", "1")
+				h.writeUnauthorizedError(w, "rate_limit_exceeded",
+					fmt.Sprintf("Rate limit exceeded for user %s. Please try again later.", userEmail))
+				return
+			}
 		}
-	}
 
-	// Check if Google token needs refresh
+		// Check if Google token needs refresh
 		if h.CanRefreshTokens() && googleToken != nil {
 			// Check if cached token needs refresh (expires within 5 minutes)
 			if isTokenExpired(googleToken, 5*time.Minute) && googleToken.RefreshToken != "" {

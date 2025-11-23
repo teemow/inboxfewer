@@ -13,10 +13,10 @@ import (
 
 // ClientStore manages registered OAuth clients
 type ClientStore struct {
-	clients       map[string]*RegisteredClient
-	clientsPerIP  map[string]int // Track number of clients per IP for DoS protection
-	mu            sync.RWMutex
-	logger        *slog.Logger
+	clients      map[string]*RegisteredClient
+	clientsPerIP map[string]int // Track number of clients per IP for DoS protection
+	mu           sync.RWMutex
+	logger       *slog.Logger
 }
 
 // NewClientStore creates a new client store

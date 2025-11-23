@@ -152,8 +152,32 @@ google:
   # Set via environment variable or secret
   clientSecret: ""
 
+# OAuth Security Settings (secure by default)
+# Only modify these if you understand the security implications
+oauthSecurity:
+  # Allow unauthenticated dynamic client registration
+  # WARNING: Setting to true weakens security and enables DoS attacks
+  # Default: false (requires registration access token)
+  allowPublicClientRegistration: false
+  
+  # Registration access token required for client registration
+  # Only used if allowPublicClientRegistration is false
+  # Generate a secure random token (e.g., openssl rand -base64 32)
+  registrationAccessToken: ""
+  
+  # Allow authorization without state parameter
+  # WARNING: Setting to true weakens CSRF protection
+  # Default: false (state parameter required)
+  allowInsecureAuthWithoutState: false
+  
+  # Maximum number of clients that can be registered per IP address
+  # Prevents DoS attacks via mass client registration
+  # Default: 10
+  maxClientsPerIP: 10
+
 # Existing secret containing Google OAuth credentials
 # Keys should be: google-client-id, google-client-secret
+# Optionally: oauth-registration-token
 existingSecret: ""
 
 # GitHub configuration (required for cleanup command)

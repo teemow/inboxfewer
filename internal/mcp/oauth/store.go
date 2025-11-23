@@ -300,10 +300,10 @@ func (s *Store) Stats() map[string]int {
 	defer s.mu.RUnlock()
 
 	return map[string]int{
-		"google_tokens":         len(s.googleTokens),
-		"user_info":             len(s.googleUserInfo),
-		"refresh_tokens":        len(s.refreshTokens),
+		"google_tokens":          len(s.googleTokens),
+		"user_info":              len(s.googleUserInfo),
+		"refresh_tokens":         len(s.refreshTokens),
 		"refresh_token_expiries": len(s.refreshTokenExpiries),
-		"token_email_mappings":  len(s.tokenToEmailMap),
+		"token_email_mappings":   len(s.tokenToEmailMap),
 	}
 }

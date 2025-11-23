@@ -403,9 +403,9 @@ func TestHandler_ValidateScopes(t *testing.T) {
 	})
 
 	tests := []struct {
-		name      string
-		scope     string
-		wantError bool
+		name        string
+		scope       string
+		wantError   bool
 		errContains string
 	}{
 		{

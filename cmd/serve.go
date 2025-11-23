@@ -24,6 +24,14 @@ import (
 	"github.com/teemow/inboxfewer/internal/tools/tasks_tools"
 )
 
+// OAuthSecurityConfig holds OAuth security settings
+type OAuthSecurityConfig struct {
+	AllowPublicClientRegistration bool
+	RegistrationAccessToken       string
+	AllowInsecureAuthWithoutState bool
+	MaxClientsPerIP               int
+}
+
 func newServeCmd() *cobra.Command {
 	var (
 		debugMode          bool
@@ -34,6 +42,11 @@ func newServeCmd() *cobra.Command {
 		googleClientSecret string
 		disableStreaming   bool
 		baseURL            string
+		// OAuth Security Settings
+		allowPublicClientRegistration bool
+		registrationAccessToken       string
+		allowInsecureAuthWithoutState bool
+		maxClientsPerIP               int
 	)
 
 	cmd := &cobra.Command{
@@ -60,7 +73,13 @@ OAuth Configuration (HTTP only):
     OR GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars
     Without these, users will need to re-authenticate when tokens expire (~1 hour).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL)
+			securityConfig := OAuthSecurityConfig{
+				AllowPublicClientRegistration: allowPublicClientRegistration,
+				RegistrationAccessToken:       registrationAccessToken,
+				AllowInsecureAuthWithoutState: allowInsecureAuthWithoutState,
+				MaxClientsPerIP:               maxClientsPerIP,
+			}
+			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL, securityConfig)
 		},
 	}
 
@@ -73,10 +92,16 @@ OAuth Configuration (HTTP only):
 	cmd.Flags().BoolVar(&disableStreaming, "disable-streaming", false, "Disable streaming for HTTP transport (for compatibility with certain clients)")
 	cmd.Flags().StringVar(&baseURL, "base-url", "", "Public base URL for OAuth (HTTP transport only). Required for deployed instances. Can also use MCP_BASE_URL env var. Example: https://mcp.example.com")
 
+	// OAuth Security Settings (HTTP transport only)
+	cmd.Flags().BoolVar(&allowPublicClientRegistration, "oauth-allow-public-registration", false, "WARNING: Allow unauthenticated client registration (NOT recommended for production). Can also use MCP_OAUTH_ALLOW_PUBLIC_REGISTRATION env var. Default: false (secure)")
+	cmd.Flags().StringVar(&registrationAccessToken, "oauth-registration-token", "", "Registration access token required for client registration when public registration is disabled. Can also use MCP_OAUTH_REGISTRATION_TOKEN env var.")
+	cmd.Flags().BoolVar(&allowInsecureAuthWithoutState, "oauth-allow-no-state", false, "WARNING: Allow authorization without state parameter (weakens CSRF protection). Can also use MCP_OAUTH_ALLOW_NO_STATE env var. Default: false (secure)")
+	cmd.Flags().IntVar(&maxClientsPerIP, "oauth-max-clients-per-ip", 10, "Maximum number of clients that can be registered per IP address (prevents DoS). Can also use MCP_OAUTH_MAX_CLIENTS_PER_IP env var. Default: 10")
+
 	return cmd
 }
 
-func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool, baseURL string) error {
+func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig) error {
 	// Setup graceful shutdown
 	shutdownCtx, cancel := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
@@ -100,6 +125,29 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	}
 	if googleClientSecret == "" {
 		googleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
+	}
+
+	// Get OAuth security settings from environment if not provided via flags
+	if !securityConfig.AllowPublicClientRegistration && os.Getenv("MCP_OAUTH_ALLOW_PUBLIC_REGISTRATION") == "true" {
+		securityConfig.AllowPublicClientRegistration = true
+	}
+	if securityConfig.RegistrationAccessToken == "" {
+		securityConfig.RegistrationAccessToken = os.Getenv("MCP_OAUTH_REGISTRATION_TOKEN")
+	}
+	if !securityConfig.AllowInsecureAuthWithoutState && os.Getenv("MCP_OAUTH_ALLOW_NO_STATE") == "true" {
+		securityConfig.AllowInsecureAuthWithoutState = true
+	}
+	if securityConfig.MaxClientsPerIP == 0 {
+		if envMax := os.Getenv("MCP_OAUTH_MAX_CLIENTS_PER_IP"); envMax != "" {
+			var maxClients int
+			if _, err := fmt.Sscanf(envMax, "%d", &maxClients); err == nil && maxClients > 0 {
+				securityConfig.MaxClientsPerIP = maxClients
+			}
+		}
+		// If still 0, use default of 10
+		if securityConfig.MaxClientsPerIP == 0 {
+			securityConfig.MaxClientsPerIP = 10
+		}
 	}
 
 	// Create server context (will be recreated for HTTP with OAuth token provider)
@@ -175,7 +223,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		return runStdioServer(mcpSrv)
 	case "streamable-http":
 		fmt.Printf("Starting inboxfewer MCP server with %s transport...\n", transport)
-		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL)
+		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL, securityConfig)
 	default:
 		return fmt.Errorf("unsupported transport type: %s (supported: stdio, streamable-http)", transport)
 	}
@@ -197,7 +245,7 @@ func runStdioServer(mcpSrv *mcpserver.MCPServer) error {
 	return nil
 }
 
-func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string) error {
+func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig) error {
 	// Create OAuth-enabled HTTP server
 	// Base URL should be the full URL where the server is accessible
 	// For development, use http://localhost:8080
@@ -221,10 +269,14 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 
 	// Create OAuth handler first so we can inject its token provider
 	oauthConfig := server.OAuthConfig{
-		BaseURL:            baseURL,
-		GoogleClientID:     googleClientID,
-		GoogleClientSecret: googleClientSecret,
-		DisableStreaming:   disableStreaming,
+		BaseURL:                       baseURL,
+		GoogleClientID:                googleClientID,
+		GoogleClientSecret:            googleClientSecret,
+		DisableStreaming:              disableStreaming,
+		AllowPublicClientRegistration: securityConfig.AllowPublicClientRegistration,
+		RegistrationAccessToken:       securityConfig.RegistrationAccessToken,
+		AllowInsecureAuthWithoutState: securityConfig.AllowInsecureAuthWithoutState,
+		MaxClientsPerIP:               securityConfig.MaxClientsPerIP,
 	}
 
 	oauthHandler, err := server.CreateOAuthHandler(oauthConfig)

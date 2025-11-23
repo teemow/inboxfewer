@@ -56,7 +56,7 @@ spec:
           {{- if .Values.config.disableStreaming }}
           - --disable-streaming
           {{- end }}
-        {{- if or .Values.google.clientId .Values.google.clientSecret .Values.existingSecret .Values.config.baseURL }}
+        {{- if or .Values.google.clientId .Values.google.clientSecret .Values.existingSecret .Values.config.baseURL .Values.oauthSecurity.allowPublicClientRegistration .Values.oauthSecurity.registrationAccessToken .Values.oauthSecurity.allowInsecureAuthWithoutState }}
         env:
           {{- if .Values.config.baseURL }}
           - name: MCP_BASE_URL
@@ -75,6 +75,26 @@ spec:
               secretKeyRef:
                 name: {{ .Values.existingSecret | default (include "inboxfewer.fullname" .) }}
                 key: google-client-secret
+          {{- end }}
+          {{- if .Values.oauthSecurity.allowPublicClientRegistration }}
+          - name: MCP_OAUTH_ALLOW_PUBLIC_REGISTRATION
+            value: "true"
+          {{- end }}
+          {{- if .Values.oauthSecurity.registrationAccessToken }}
+          - name: MCP_OAUTH_REGISTRATION_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.existingSecret | default (include "inboxfewer.fullname" .) }}
+                key: oauth-registration-token
+                optional: true
+          {{- end }}
+          {{- if .Values.oauthSecurity.allowInsecureAuthWithoutState }}
+          - name: MCP_OAUTH_ALLOW_NO_STATE
+            value: "true"
+          {{- end }}
+          {{- if ne .Values.oauthSecurity.maxClientsPerIP 10 }}
+          - name: MCP_OAUTH_MAX_CLIENTS_PER_IP
+            value: {{ .Values.oauthSecurity.maxClientsPerIP | quote }}
           {{- end }}
         {{- end }}
         ports:
