@@ -62,12 +62,12 @@ type Config struct {
 // and an OAuth 2.1 Resource Server (validating tokens)
 type Handler struct {
 	config       *Config
-	store        *Store        // Token store for resource server functionality
-	clientStore  *ClientStore  // Client registration store for authorization server
-	flowStore    *FlowStore    // OAuth flow state management
-	rateLimiter  *RateLimiter  // Optional rate limiter for protecting endpoints
+	store        *Store         // Token store for resource server functionality
+	clientStore  *ClientStore   // Client registration store for authorization server
+	flowStore    *FlowStore     // OAuth flow state management
+	rateLimiter  *RateLimiter   // Optional rate limiter for protecting endpoints
 	googleConfig *oauth2.Config // Google OAuth config for proxying to Google
-	httpClient   *http.Client  // Custom HTTP client for OAuth requests
+	httpClient   *http.Client   // Custom HTTP client for OAuth requests
 	logger       *slog.Logger
 }
 

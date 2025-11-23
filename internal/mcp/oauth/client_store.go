@@ -170,4 +170,3 @@ func generateSecureToken(length int) (string, error) {
 	}
 	return base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(b), nil
 }
-

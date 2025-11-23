@@ -217,8 +217,8 @@ func (h *Handler) ServeAuthorization(w http.ResponseWriter, r *http.Request) {
 
 	// Build Google authorization URL
 	googleAuthURL := h.googleConfig.AuthCodeURL(googleState,
-		oauth2.AccessTypeOffline,  // Request refresh token
-		oauth2.ApprovalForce,      // Always show consent screen
+		oauth2.AccessTypeOffline, // Request refresh token
+		oauth2.ApprovalForce,     // Always show consent screen
 	)
 
 	h.logger.Info("Redirecting to Google for authorization",
@@ -355,7 +355,7 @@ func (h *Handler) ServeToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	grantType := r.FormValue("grant_type")
-	
+
 	switch grantType {
 	case "authorization_code":
 		h.handleAuthorizationCodeGrant(w, r)
@@ -568,4 +568,3 @@ func (h *Handler) fetchGoogleUserInfo(ctx context.Context, accessToken string) (
 
 	return &userInfo, nil
 }
-

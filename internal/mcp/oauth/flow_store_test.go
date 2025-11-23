@@ -251,4 +251,3 @@ func TestFlowStore_CleanupExpired(t *testing.T) {
 		t.Errorf("Valid code should not be cleaned up: %v", err)
 	}
 }
-

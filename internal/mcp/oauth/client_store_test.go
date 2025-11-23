@@ -9,9 +9,9 @@ func TestClientStore_RegisterClient(t *testing.T) {
 	store := NewClientStore(slog.Default())
 
 	req := &ClientRegistrationRequest{
-		RedirectURIs: []string{"http://localhost:8080/callback"},
-		ClientName:   "Test Client",
-		GrantTypes:   []string{"authorization_code"},
+		RedirectURIs:  []string{"http://localhost:8080/callback"},
+		ClientName:    "Test Client",
+		GrantTypes:    []string{"authorization_code"},
 		ResponseTypes: []string{"code"},
 	}
 
@@ -179,4 +179,3 @@ func TestClientStore_RegisterClient_Defaults(t *testing.T) {
 		t.Errorf("ClientSecretExpiresAt = %d, want 0 (never expires)", resp.ClientSecretExpiresAt)
 	}
 }
-

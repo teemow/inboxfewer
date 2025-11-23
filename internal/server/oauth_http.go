@@ -36,6 +36,8 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, confi
 	oauthConfig := &oauth.Config{
 		Resource: config.BaseURL,
 		SupportedScopes: []string{
+			"openid", // Required for user info endpoint
+			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/gmail.modify",
 			"https://www.googleapis.com/auth/gmail.send",
@@ -72,6 +74,8 @@ func CreateOAuthHandler(config OAuthConfig) (*oauth.Handler, error) {
 	oauthConfig := &oauth.Config{
 		Resource: config.BaseURL,
 		SupportedScopes: []string{
+			"openid", // Required for user info endpoint
+			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/gmail.modify",
 			"https://www.googleapis.com/auth/gmail.send",

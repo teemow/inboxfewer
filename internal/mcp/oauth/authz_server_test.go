@@ -394,4 +394,3 @@ func TestHandler_UpdatedProtectedResourceMetadata(t *testing.T) {
 		t.Errorf("AuthorizationServers[0] = %s, want https://mcp.example.com (should point to inboxfewer, not Google)", metadata.AuthorizationServers[0])
 	}
 }
-
