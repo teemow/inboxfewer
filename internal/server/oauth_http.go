@@ -8,6 +8,7 @@ import (
 	"time"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/mcp/oauth"
 )
 
@@ -41,29 +42,23 @@ type OAuthConfig struct {
 func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, config OAuthConfig) (*OAuthHTTPServer, error) {
 	// Create OAuth handler with Google as the authorization server
 	oauthConfig := &oauth.Config{
-		Resource: config.BaseURL,
-		SupportedScopes: []string{
-			"openid", // Required for user info endpoint
-			"https://www.googleapis.com/auth/userinfo.email",
-			"https://www.googleapis.com/auth/gmail.readonly",
-			"https://www.googleapis.com/auth/gmail.modify",
-			"https://www.googleapis.com/auth/gmail.send",
-			"https://www.googleapis.com/auth/gmail.settings.basic",
-			"https://www.googleapis.com/auth/documents.readonly",
-			"https://www.googleapis.com/auth/drive",
-			"https://www.googleapis.com/auth/calendar",
-			"https://www.googleapis.com/auth/meetings.space.readonly",
-			"https://www.googleapis.com/auth/tasks",
+		Resource:        config.BaseURL,
+		SupportedScopes: google.DefaultOAuthScopes,
+		GoogleAuth: oauth.GoogleAuthConfig{
+			ClientID:     config.GoogleClientID,
+			ClientSecret: config.GoogleClientSecret,
 		},
-		GoogleClientID:                config.GoogleClientID,
-		GoogleClientSecret:            config.GoogleClientSecret,
-		RateLimitRate:                 10,              // 10 requests per second per IP
-		RateLimitBurst:                20,              // Allow burst of 20 requests
-		CleanupInterval:               1 * time.Minute, // Cleanup expired tokens every minute
-		AllowPublicClientRegistration: config.AllowPublicClientRegistration,
-		RegistrationAccessToken:       config.RegistrationAccessToken,
-		AllowInsecureAuthWithoutState: config.AllowInsecureAuthWithoutState,
-		MaxClientsPerIP:               config.MaxClientsPerIP,
+		RateLimit: oauth.RateLimitConfig{
+			Rate:  oauth.DefaultRateLimitRate,
+			Burst: oauth.DefaultRateLimitBurst,
+		},
+		Security: oauth.SecurityConfig{
+			AllowPublicClientRegistration: config.AllowPublicClientRegistration,
+			RegistrationAccessToken:       config.RegistrationAccessToken,
+			AllowInsecureAuthWithoutState: config.AllowInsecureAuthWithoutState,
+			MaxClientsPerIP:               config.MaxClientsPerIP,
+		},
+		CleanupInterval: oauth.DefaultCleanupInterval,
 	}
 
 	oauthHandler, err := oauth.NewHandler(oauthConfig)
@@ -83,29 +78,23 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, confi
 // This allows creating the handler before the server to inject the token provider
 func CreateOAuthHandler(config OAuthConfig) (*oauth.Handler, error) {
 	oauthConfig := &oauth.Config{
-		Resource: config.BaseURL,
-		SupportedScopes: []string{
-			"openid", // Required for user info endpoint
-			"https://www.googleapis.com/auth/userinfo.email",
-			"https://www.googleapis.com/auth/gmail.readonly",
-			"https://www.googleapis.com/auth/gmail.modify",
-			"https://www.googleapis.com/auth/gmail.send",
-			"https://www.googleapis.com/auth/gmail.settings.basic",
-			"https://www.googleapis.com/auth/documents.readonly",
-			"https://www.googleapis.com/auth/drive",
-			"https://www.googleapis.com/auth/calendar",
-			"https://www.googleapis.com/auth/meetings.space.readonly",
-			"https://www.googleapis.com/auth/tasks",
+		Resource:        config.BaseURL,
+		SupportedScopes: google.DefaultOAuthScopes,
+		GoogleAuth: oauth.GoogleAuthConfig{
+			ClientID:     config.GoogleClientID,
+			ClientSecret: config.GoogleClientSecret,
 		},
-		GoogleClientID:                config.GoogleClientID,
-		GoogleClientSecret:            config.GoogleClientSecret,
-		RateLimitRate:                 10,              // 10 requests per second per IP
-		RateLimitBurst:                20,              // Allow burst of 20 requests
-		CleanupInterval:               1 * time.Minute, // Cleanup expired tokens every minute
-		AllowPublicClientRegistration: config.AllowPublicClientRegistration,
-		RegistrationAccessToken:       config.RegistrationAccessToken,
-		AllowInsecureAuthWithoutState: config.AllowInsecureAuthWithoutState,
-		MaxClientsPerIP:               config.MaxClientsPerIP,
+		RateLimit: oauth.RateLimitConfig{
+			Rate:  oauth.DefaultRateLimitRate,
+			Burst: oauth.DefaultRateLimitBurst,
+		},
+		Security: oauth.SecurityConfig{
+			AllowPublicClientRegistration: config.AllowPublicClientRegistration,
+			RegistrationAccessToken:       config.RegistrationAccessToken,
+			AllowInsecureAuthWithoutState: config.AllowInsecureAuthWithoutState,
+			MaxClientsPerIP:               config.MaxClientsPerIP,
+		},
+		CleanupInterval: oauth.DefaultCleanupInterval,
 	}
 
 	return oauth.NewHandler(oauthConfig)

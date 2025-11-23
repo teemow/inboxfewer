@@ -182,39 +182,9 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		}
 	}
 
-	// Register Gmail tools
-	if err := gmail_tools.RegisterGmailTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Gmail tools: %w", err)
-	}
-
-	// Register Docs tools (read-only by nature)
-	if err := docs_tools.RegisterDocsTools(mcpSrv, serverContext); err != nil {
-		return fmt.Errorf("failed to register Docs tools: %w", err)
-	}
-
-	// Register Drive tools
-	if err := drive_tools.RegisterDriveTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Drive tools: %w", err)
-	}
-
-	// Register Calendar tools
-	if err := calendar_tools.RegisterCalendarTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Calendar tools: %w", err)
-	}
-
-	// Register Meet tools
-	if err := meet_tools.RegisterMeetTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Meet tools: %w", err)
-	}
-
-	// Register Tasks tools
-	if err := tasks_tools.RegisterTasksTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Tasks tools: %w", err)
-	}
-
-	// Register user resources (session-specific)
-	if err := resources.RegisterUserResources(mcpSrv, serverContext); err != nil {
-		return fmt.Errorf("failed to register user resources: %w", err)
+	// Register all tools and resources
+	if err := registerAllTools(mcpSrv, serverContext, readOnly); err != nil {
+		return err
 	}
 
 	// Start the appropriate server based on transport type
@@ -242,6 +212,70 @@ func runStdioServer(mcpSrv *mcpserver.MCPServer) error {
 	if err != nil {
 		return fmt.Errorf("server stopped with error: %w", err)
 	}
+	return nil
+}
+
+// registerAllTools registers all MCP tools and resources
+// Extracted to avoid duplication in serve.go
+func registerAllTools(mcpSrv *mcpserver.MCPServer, ctx *server.ServerContext, readOnly bool) error {
+	// Define all tool registrations
+	type toolRegistration struct {
+		name     string
+		register func() error
+	}
+
+	registrations := []toolRegistration{
+		{
+			name: "Gmail",
+			register: func() error {
+				return gmail_tools.RegisterGmailTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "Docs",
+			register: func() error {
+				return docs_tools.RegisterDocsTools(mcpSrv, ctx)
+			},
+		},
+		{
+			name: "Drive",
+			register: func() error {
+				return drive_tools.RegisterDriveTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "Calendar",
+			register: func() error {
+				return calendar_tools.RegisterCalendarTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "Meet",
+			register: func() error {
+				return meet_tools.RegisterMeetTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "Tasks",
+			register: func() error {
+				return tasks_tools.RegisterTasksTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "User Resources",
+			register: func() error {
+				return resources.RegisterUserResources(mcpSrv, ctx)
+			},
+		},
+	}
+
+	// Register all tools
+	for _, reg := range registrations {
+		if err := reg.register(); err != nil {
+			return fmt.Errorf("failed to register %s: %w", reg.name, err)
+		}
+	}
+
 	return nil
 }
 
@@ -308,27 +342,8 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	}()
 
 	// Re-register all tools with the new context
-	if err := gmail_tools.RegisterGmailTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Gmail tools: %w", err)
-	}
-	if err := drive_tools.RegisterDriveTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Drive tools: %w", err)
-	}
-	if err := docs_tools.RegisterDocsTools(mcpSrv, serverContext); err != nil {
-		return fmt.Errorf("failed to register Docs tools: %w", err)
-	}
-	if err := calendar_tools.RegisterCalendarTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Calendar tools: %w", err)
-	}
-	if err := meet_tools.RegisterMeetTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Meet tools: %w", err)
-	}
-	if err := tasks_tools.RegisterTasksTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Tasks tools: %w", err)
-	}
-	// Re-register resources with the new context
-	if err := resources.RegisterUserResources(mcpSrv, serverContext); err != nil {
-		return fmt.Errorf("failed to register user resources: %w", err)
+	if err := registerAllTools(mcpSrv, serverContext, readOnly); err != nil {
+		return err
 	}
 
 	// Create OAuth server with existing handler

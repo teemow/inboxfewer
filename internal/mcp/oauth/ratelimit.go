@@ -6,37 +6,39 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
-// RateLimiter implements a token bucket rate limiter per IP address
+// RateLimiter implements a per-identifier (IP or user) rate limiter using token buckets
+// Uses the battle-tested golang.org/x/time/rate package for token bucket implementation
 type RateLimiter struct {
 	mu         sync.RWMutex
-	limiters   map[string]*bucket
+	limiters   map[string]*limiterEntry
 	rate       int           // tokens per second
 	burst      int           // max burst size
 	cleanup    time.Duration // cleanup interval for inactive limiters
-	trustProxy bool          // whether to trust proxy headers
+	trustProxy bool          // whether to trust proxy headers (only for IP-based limiting)
 	logger     *slog.Logger
 }
 
-// bucket represents a token bucket for rate limiting
-type bucket struct {
-	tokens     float64
-	lastUpdate time.Time
-	mu         sync.Mutex
+// limiterEntry tracks a rate limiter and its last access time for cleanup
+type limiterEntry struct {
+	limiter    *rate.Limiter
+	lastAccess time.Time
 }
 
 // NewRateLimiter creates a new rate limiter
 // rate: tokens per second, burst: maximum burst size, trustProxy: whether to trust proxy headers
 // cleanupInterval: how often to cleanup inactive limiters, logger: structured logger
-func NewRateLimiter(rate, burst int, trustProxy bool, cleanupInterval time.Duration, logger *slog.Logger) *RateLimiter {
+func NewRateLimiter(ratePerSec, burst int, trustProxy bool, cleanupInterval time.Duration, logger *slog.Logger) *RateLimiter {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	rl := &RateLimiter{
-		limiters:   make(map[string]*bucket),
-		rate:       rate,
+		limiters:   make(map[string]*limiterEntry),
+		rate:       ratePerSec,
 		burst:      burst,
 		cleanup:    cleanupInterval,
 		trustProxy: trustProxy,
@@ -44,7 +46,7 @@ func NewRateLimiter(rate, burst int, trustProxy bool, cleanupInterval time.Durat
 	}
 
 	logger.Info("Rate limiter initialized",
-		"rate", rate,
+		"rate", ratePerSec,
 		"burst", burst,
 		"trust_proxy", trustProxy,
 		"cleanup_interval", cleanupInterval)
@@ -55,94 +57,57 @@ func NewRateLimiter(rate, burst int, trustProxy bool, cleanupInterval time.Durat
 	return rl
 }
 
-// Allow checks if a request from the given IP should be allowed
-func (rl *RateLimiter) Allow(ip string) bool {
+// Allow checks if a request from the given identifier (IP or user email) should be allowed
+func (rl *RateLimiter) Allow(identifier string) bool {
 	rl.mu.RLock()
-	b, exists := rl.limiters[ip]
+	entry, exists := rl.limiters[identifier]
 	rl.mu.RUnlock()
 
 	if !exists {
-		// Create new bucket for this IP
-		b = &bucket{
-			tokens:     float64(rl.burst),
-			lastUpdate: time.Now(),
+		// Create new rate limiter for this identifier
+		entry = &limiterEntry{
+			limiter:    rate.NewLimiter(rate.Limit(rl.rate), rl.burst),
+			lastAccess: time.Now(),
 		}
 		rl.mu.Lock()
-		rl.limiters[ip] = b
+		rl.limiters[identifier] = entry
 		rl.mu.Unlock()
-		rl.logger.Debug("Created rate limiter for IP", "ip", ip)
+		rl.logger.Debug("Created rate limiter", "identifier", identifier)
+	} else {
+		// Update last access time
+		entry.lastAccess = time.Now()
 	}
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	now := time.Now()
-	elapsed := now.Sub(b.lastUpdate).Seconds()
-
-	// Add tokens based on elapsed time
-	b.tokens += elapsed * float64(rl.rate)
-	if b.tokens > float64(rl.burst) {
-		b.tokens = float64(rl.burst)
-	}
-	b.lastUpdate = now
-
-	// Check if we have a token available
-	if b.tokens >= 1 {
-		b.tokens--
-		return true
+	// Check if request is allowed
+	allowed := entry.limiter.Allow()
+	if !allowed {
+		rl.logger.Warn("Rate limit exceeded", "identifier", identifier)
 	}
 
-	rl.logger.Warn("Rate limit exceeded", "ip", ip, "remaining_tokens", b.tokens)
-	return false
+	return allowed
 }
 
 // cleanupInactiveLimiters removes limiters that haven't been used recently
-// Uses optimized locking strategy to prevent deadlocks:
-// 1. Collect IPs to delete under read lock (doesn't block Allow())
-// 2. Delete collected IPs under write lock (minimal lock duration)
+// Simplified to use a single lock for background cleanup (KISS principle)
 func (rl *RateLimiter) cleanupInactiveLimiters() {
 	ticker := time.NewTicker(rl.cleanup)
 	defer ticker.Stop()
 
 	for range ticker.C {
+		rl.mu.Lock()
 		now := time.Now()
+		removed := 0
 
-		// Phase 1: Identify inactive limiters under read lock
-		// This doesn't block Allow() from creating new limiters
-		rl.mu.RLock()
-		inactiveIPs := []string{}
-		for ip, b := range rl.limiters {
-			b.mu.Lock()
-			lastUpdate := b.lastUpdate
-			b.mu.Unlock()
-
-			if now.Sub(lastUpdate) > 10*time.Minute {
-				inactiveIPs = append(inactiveIPs, ip)
+		for identifier, entry := range rl.limiters {
+			if now.Sub(entry.lastAccess) > InactiveLimiterCleanupWindow {
+				delete(rl.limiters, identifier)
+				removed++
 			}
 		}
-		rl.mu.RUnlock()
+		rl.mu.Unlock()
 
-		// Phase 2: Delete inactive limiters under write lock
-		// Re-check staleness to handle race conditions
-		if len(inactiveIPs) > 0 {
-			rl.mu.Lock()
-			removed := 0
-			for _, ip := range inactiveIPs {
-				if b, exists := rl.limiters[ip]; exists {
-					b.mu.Lock()
-					// Re-check under write lock to avoid deleting recently active limiters
-					if now.Sub(b.lastUpdate) > 10*time.Minute {
-						delete(rl.limiters, ip)
-						removed++
-					}
-					b.mu.Unlock()
-				}
-			}
-			rl.mu.Unlock()
-
-			if removed > 0 {
-				rl.logger.Debug("Cleaned up inactive rate limiters", "count", removed)
-			}
+		if removed > 0 {
+			rl.logger.Debug("Cleaned up inactive rate limiters", "count", removed)
 		}
 	}
 }

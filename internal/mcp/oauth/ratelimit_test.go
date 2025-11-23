@@ -103,9 +103,11 @@ func TestRateLimiter_TokenReplenishment(t *testing.T) {
 
 func TestRateLimitMiddleware(t *testing.T) {
 	config := &Config{
-		Resource:        "https://test.example.com",
-		RateLimitRate:   2, // 2 requests per second
-		RateLimitBurst:  2, // burst of 2
+		Resource: "https://test.example.com",
+		RateLimit: RateLimitConfig{
+			Rate:  2, // 2 requests per second
+			Burst: 2, // burst of 2
+		},
 		CleanupInterval: 10 * time.Minute,
 	}
 
@@ -153,8 +155,10 @@ func TestRateLimitMiddleware(t *testing.T) {
 
 func TestRateLimitMiddleware_NoRateLimiter(t *testing.T) {
 	config := &Config{
-		Resource:        "https://test.example.com",
-		RateLimitRate:   0, // No rate limiting
+		Resource: "https://test.example.com",
+		RateLimit: RateLimitConfig{
+			Rate: 0, // No rate limiting
+		},
 		CleanupInterval: 10 * time.Minute,
 	}
 

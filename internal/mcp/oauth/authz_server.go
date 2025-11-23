@@ -2,8 +2,6 @@ package oauth
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -24,27 +22,15 @@ func (h *Handler) ServeAuthorizationServerMetadata(w http.ResponseWriter, r *htt
 	}
 
 	metadata := AuthorizationServerMetadata{
-		Issuer:                h.config.Resource,
-		AuthorizationEndpoint: h.config.Resource + "/oauth/authorize",
-		TokenEndpoint:         h.config.Resource + "/oauth/token",
-		RegistrationEndpoint:  h.config.Resource + "/oauth/register",
-		ScopesSupported:       h.config.SupportedScopes,
-		ResponseTypesSupported: []string{
-			"code", // Authorization code flow
-		},
-		GrantTypesSupported: []string{
-			"authorization_code",
-			"refresh_token",
-		},
-		TokenEndpointAuthMethodsSupported: []string{
-			"client_secret_basic",
-			"client_secret_post",
-			"none", // For public clients
-		},
-		CodeChallengeMethodsSupported: []string{
-			"S256", // SHA-256 PKCE (required by OAuth 2.1)
-			"plain",
-		},
+		Issuer:                            h.config.Resource,
+		AuthorizationEndpoint:             h.config.Resource + "/oauth/authorize",
+		TokenEndpoint:                     h.config.Resource + "/oauth/token",
+		RegistrationEndpoint:              h.config.Resource + "/oauth/register",
+		ScopesSupported:                   h.config.SupportedScopes,
+		ResponseTypesSupported:            DefaultResponseTypes,
+		GrantTypesSupported:               DefaultGrantTypes,
+		TokenEndpointAuthMethodsSupported: SupportedTokenAuthMethods,
+		CodeChallengeMethodsSupported:     SupportedCodeChallengeMethods,
 	}
 
 	h.setSecurityHeaders(w)
@@ -64,7 +50,7 @@ func (h *Handler) ServeDynamicClientRegistration(w http.ResponseWriter, r *http.
 
 	// OAuth 2.1: Require authentication for client registration (secure by default)
 	// Only allow unauthenticated registration if explicitly configured
-	if !h.config.AllowPublicClientRegistration {
+	if !h.config.Security.AllowPublicClientRegistration {
 		// Check for registration access token
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -90,7 +76,7 @@ func (h *Handler) ServeDynamicClientRegistration(w http.ResponseWriter, r *http.
 
 		// Validate registration access token
 		providedToken := parts[1]
-		if h.config.RegistrationAccessToken == "" {
+		if h.config.Security.RegistrationAccessToken == "" {
 			h.logger.Error("RegistrationAccessToken not configured but AllowPublicClientRegistration=false")
 			h.writeError(w, "server_error",
 				"Server configuration error: registration token not configured",
@@ -98,7 +84,7 @@ func (h *Handler) ServeDynamicClientRegistration(w http.ResponseWriter, r *http.
 			return
 		}
 
-		if providedToken != h.config.RegistrationAccessToken {
+		if providedToken != h.config.Security.RegistrationAccessToken {
 			h.logger.Warn("Client registration rejected: invalid registration token",
 				"client_ip", r.RemoteAddr)
 			h.writeError(w, "invalid_token", "Invalid registration access token", http.StatusUnauthorized)
@@ -126,20 +112,20 @@ func (h *Handler) ServeDynamicClientRegistration(w http.ResponseWriter, r *http.
 
 	// Validate redirect URIs with comprehensive security checks
 	for _, uri := range req.RedirectURIs {
-		if err := validateRedirectURI(uri, h.config.Resource, h.config.AllowCustomRedirectSchemes, h.config.AllowedCustomSchemes); err != nil {
+		if err := validateRedirectURI(uri, h.config.Resource, h.config.Security.AllowCustomRedirectSchemes, h.config.Security.AllowedCustomSchemes); err != nil {
 			h.writeError(w, "invalid_redirect_uri", err.Error(), http.StatusBadRequest)
 			return
 		}
 	}
 
 	// Check per-IP client registration limit for DoS protection
-	clientIP := getClientIP(r, h.config.TrustProxy)
-	if err := h.clientStore.CheckIPLimit(clientIP, h.config.MaxClientsPerIP); err != nil {
+	clientIP := getClientIP(r, h.config.RateLimit.TrustProxy)
+	if err := h.clientStore.CheckIPLimit(clientIP, h.config.Security.MaxClientsPerIP); err != nil {
 		h.logger.Warn("Client registration limit exceeded",
 			"client_ip", clientIP,
-			"limit", h.config.MaxClientsPerIP)
+			"limit", h.config.Security.MaxClientsPerIP)
 		h.writeError(w, "invalid_request",
-			fmt.Sprintf("Client registration limit exceeded for your IP address (%d max)", h.config.MaxClientsPerIP),
+			fmt.Sprintf("Client registration limit exceeded for your IP address (%d max)", h.config.Security.MaxClientsPerIP),
 			http.StatusTooManyRequests)
 		return
 	}
@@ -202,13 +188,13 @@ func (h *Handler) ServeAuthorization(w http.ResponseWriter, r *http.Request) {
 	// OAuth 2.1: state is REQUIRED for CSRF protection (secure by default)
 	// Only allow missing state if explicitly configured (NOT recommended)
 	if state == "" {
-		if !h.config.AllowInsecureAuthWithoutState {
+		if !h.config.Security.AllowInsecureAuthWithoutState {
 			h.logger.Warn("Authorization request rejected: missing state parameter",
 				"client_id", clientID,
 				"redirect_uri", redirectURI)
 			h.writeError(w, "invalid_request",
 				"state parameter is required for CSRF protection. "+
-					"Set AllowInsecureAuthWithoutState=true to disable this check (NOT recommended for production).",
+					"Set Security.AllowInsecureAuthWithoutState=true to disable this check (NOT recommended for production).",
 				http.StatusBadRequest)
 			return
 		}
@@ -264,7 +250,7 @@ func (h *Handler) ServeAuthorization(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate Google state parameter
-	googleState, err := generateSecureToken(32)
+	googleState, err := generateSecureToken(StateTokenLength)
 	if err != nil {
 		h.logger.Error("Failed to generate state", "error", err)
 		h.writeError(w, "server_error", "Failed to generate state", http.StatusInternalServerError)
@@ -282,7 +268,7 @@ func (h *Handler) ServeAuthorization(w http.ResponseWriter, r *http.Request) {
 		CodeChallengeMethod: codeChallengeMethod,
 		GoogleState:         googleState,
 		CreatedAt:           now,
-		ExpiresAt:           now + 600, // 10 minutes
+		ExpiresAt:           now + int64(DefaultAuthorizationCodeTTL.Seconds()),
 		Nonce:               nonce,
 	}
 
@@ -362,7 +348,7 @@ func (h *Handler) ServeGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	)
 
 	// Generate authorization code for the MCP client
-	authCode, err := generateSecureToken(32)
+	authCode, err := generateSecureToken(StateTokenLength)
 	if err != nil {
 		h.logger.Error("Failed to generate authorization code", "error", err)
 		http.Error(w, "Failed to generate authorization code", http.StatusInternalServerError)
@@ -383,7 +369,7 @@ func (h *Handler) ServeGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		GoogleTokenExpiry:   googleToken.Expiry.Unix(),
 		UserEmail:           userInfo.Email,
 		CreatedAt:           now,
-		ExpiresAt:           now + 600, // 10 minutes
+		ExpiresAt:           now + int64(DefaultAuthorizationCodeTTL.Seconds()),
 		Used:                false,
 	}
 
@@ -447,208 +433,75 @@ func (h *Handler) ServeToken(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAuthorizationCodeGrant handles the authorization_code grant type
+// Refactored to use helper functions for better readability and maintainability
 func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Request) {
-	code := r.FormValue("code")
-	redirectURI := r.FormValue("redirect_uri")
-	clientID := r.FormValue("client_id")
-	codeVerifier := r.FormValue("code_verifier")
-
-	// Validate required parameters
-	if code == "" {
-		h.writeError(w, "invalid_request", "code is required", http.StatusBadRequest)
+	// Parse request parameters
+	params, oauthErr := h.parseAuthCodeRequest(r)
+	if oauthErr != nil {
+		h.writeError(w, oauthErr.Code, oauthErr.Description, oauthErr.Status)
 		return
 	}
 
 	// Retrieve and validate authorization code
-	authCode, err := h.flowStore.GetAuthorizationCode(code)
-	if err != nil {
-		h.logger.Warn("Invalid authorization code", "error", err)
-		h.writeError(w, "invalid_grant", "Invalid or expired authorization code", http.StatusBadRequest)
+	authCode, oauthErr := h.validateAndRetrieveAuthCode(params)
+	if oauthErr != nil {
+		h.writeError(w, oauthErr.Code, oauthErr.Description, oauthErr.Status)
 		return
 	}
 
-	// OAuth 2.1: For public clients using PKCE, client_id is optional
-	// If not provided, use the client_id from the authorization code
+	// Determine client ID (either from params or auth code)
+	clientID := params.ClientID
 	if clientID == "" {
 		clientID = authCode.ClientID
-		h.logger.Debug("Using client_id from authorization code",
-			"client_id", clientID)
-	} else {
-		// If client_id is provided, validate it matches
-		if authCode.ClientID != clientID {
-			h.logger.Warn("Client ID mismatch",
-				"expected", authCode.ClientID,
-				"got", clientID,
-			)
-			h.writeError(w, "invalid_grant", "Client ID mismatch", http.StatusBadRequest)
-			return
-		}
 	}
 
-	// Validate redirect_uri matches
-	if authCode.RedirectURI != redirectURI {
-		h.logger.Warn("Redirect URI mismatch",
-			"expected", authCode.RedirectURI,
-			"got", redirectURI,
-		)
-		h.writeError(w, "invalid_grant", "Redirect URI mismatch", http.StatusBadRequest)
+	// Validate PKCE if required
+	if oauthErr := h.validatePKCE(authCode, params.CodeVerifier, clientID); oauthErr != nil {
+		h.writeError(w, oauthErr.Code, oauthErr.Description, oauthErr.Status)
 		return
 	}
 
-	// Validate PKCE if code_challenge was used
-	if authCode.CodeChallenge != "" {
-		if codeVerifier == "" {
-			h.writeError(w, "invalid_request", "code_verifier is required", http.StatusBadRequest)
-			return
-		}
-
-		// Validate code_verifier entropy (RFC 7636: min 43 chars, max 128 chars)
-		if len(codeVerifier) < 43 {
-			h.logger.Warn("code_verifier too short (insufficient entropy)",
-				"client_id", clientID,
-				"length", len(codeVerifier))
-			h.writeError(w, "invalid_request",
-				"code_verifier must be at least 43 characters (RFC 7636)",
-				http.StatusBadRequest)
-			return
-		}
-		if len(codeVerifier) > 128 {
-			h.logger.Warn("code_verifier too long",
-				"client_id", clientID,
-				"length", len(codeVerifier))
-			h.writeError(w, "invalid_request",
-				"code_verifier must be at most 128 characters (RFC 7636)",
-				http.StatusBadRequest)
-			return
-		}
-
-		// Verify code_verifier against code_challenge
-		var computedChallenge string
-		if authCode.CodeChallengeMethod == "S256" {
-			hash := sha256.Sum256([]byte(codeVerifier))
-			computedChallenge = base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(hash[:])
-		} else {
-			computedChallenge = codeVerifier
-		}
-
-		if computedChallenge != authCode.CodeChallenge {
-			h.logger.Warn("PKCE verification failed",
-				"client_id", clientID,
-			)
-			h.writeError(w, "invalid_grant", "Invalid code_verifier", http.StatusBadRequest)
-			return
-		}
-	}
-
-	// Authenticate client (if not public client)
-	client, err := h.clientStore.GetClient(clientID)
-	if err != nil {
-		h.logger.Error("Failed to get client", "client_id", clientID, "error", err)
-		h.writeError(w, "invalid_client", "Invalid client", http.StatusUnauthorized)
+	// Authenticate client
+	_, oauthErr = h.authenticateClient(r, clientID)
+	if oauthErr != nil {
+		h.writeError(w, oauthErr.Code, oauthErr.Description, oauthErr.Status)
 		return
 	}
 
-	if client.TokenEndpointAuthMethod != "none" {
-		// Confidential client - validate client secret
-		clientSecret := r.FormValue("client_secret")
-		if clientSecret == "" {
-			// Try Basic Auth
-			username, password, ok := r.BasicAuth()
-			if !ok || username != clientID {
-				h.writeError(w, "invalid_client", "Client authentication required", http.StatusUnauthorized)
-				return
-			}
-			clientSecret = password
-		}
-
-		if err := h.clientStore.ValidateClientSecret(clientID, clientSecret); err != nil {
-			h.logger.Warn("Client authentication failed", "client_id", clientID)
-			h.writeError(w, "invalid_client", "Client authentication failed", http.StatusUnauthorized)
-			return
-		}
+	// Ensure Google token is fresh (refresh if needed)
+	googleToken, oauthErr := h.ensureFreshGoogleToken(r.Context(), authCode)
+	if oauthErr != nil {
+		h.writeError(w, oauthErr.Code, oauthErr.Description, oauthErr.Status)
+		return
 	}
 
 	// Generate inboxfewer access token
-	accessToken, err := generateSecureToken(48)
+	accessToken, err := generateSecureToken(AccessTokenLength)
 	if err != nil {
 		h.logger.Error("Failed to generate access token", "error", err)
-		h.writeError(w, "server_error", "Failed to generate access token", http.StatusInternalServerError)
+		oauthErr := ErrServerError("Failed to generate access token")
+		h.writeError(w, oauthErr.Code, oauthErr.Description, oauthErr.Status)
 		return
 	}
 
-	// Build Google token from authorization code
-	googleToken := &oauth2.Token{
-		AccessToken:  authCode.GoogleAccessToken,
-		RefreshToken: authCode.GoogleRefreshToken,
-		Expiry:       time.Unix(authCode.GoogleTokenExpiry, 0),
-	}
-
-	// Calculate token expiry
-	expiresIn := authCode.GoogleTokenExpiry - time.Now().Unix()
-
-	// If token is expired or expiring very soon (< 60 seconds), try to refresh
-	if expiresIn < 60 {
-		if h.CanRefreshTokens() && authCode.GoogleRefreshToken != "" {
-			h.logger.Info("Google token expired or expiring soon, attempting refresh",
-				"email", authCode.UserEmail,
-				"expires_in", expiresIn)
-
-			// Attempt immediate refresh
-			newToken, refreshErr := refreshGoogleToken(r.Context(), googleToken, h.googleConfig, h.httpClient)
-			if refreshErr == nil {
-				// Successfully refreshed - use the new token
-				h.logger.Info("Google token refreshed during code exchange",
-					"email", authCode.UserEmail)
-				googleToken = newToken
-				expiresIn = newToken.Expiry.Unix() - time.Now().Unix()
-			} else {
-				// Refresh failed - authorization code is too old
-				h.logger.Warn("Failed to refresh expired token during code exchange",
-					"email", authCode.UserEmail,
-					"error", refreshErr)
-				h.writeError(w, "invalid_grant",
-					"Authorization code expired and token refresh failed. Please re-authenticate.",
-					http.StatusBadRequest)
-				return
-			}
-		} else {
-			// Can't refresh - authorization code is too old
-			h.logger.Warn("Authorization code expired and refresh not available",
-				"email", authCode.UserEmail,
-				"expires_in", expiresIn)
-			h.writeError(w, "invalid_grant",
-				"Authorization code expired. Please re-authenticate.",
-				http.StatusBadRequest)
-			return
-		}
-	}
-
-	// Store the Google token for this user so we can use it to access Google APIs
-	if err := h.store.SaveGoogleToken(authCode.UserEmail, googleToken); err != nil {
-		h.logger.Error("Failed to store Google token", "error", err)
-		h.writeError(w, "server_error", "Failed to store token", http.StatusInternalServerError)
+	// Store tokens (Google token and inboxfewer token mapping)
+	if oauthErr := h.storeTokens(authCode, googleToken, accessToken); oauthErr != nil {
+		h.writeError(w, oauthErr.Code, oauthErr.Description, oauthErr.Status)
 		return
 	}
-
-	// Map the inboxfewer access token to the user's Google token
-	// We use the access token as the key so when requests come in with the Bearer token,
-	// we can look up the associated Google token
-	if err := h.store.SaveGoogleToken(accessToken, googleToken); err != nil {
-		h.logger.Error("Failed to map access token", "error", err)
-		h.writeError(w, "server_error", "Failed to store token", http.StatusInternalServerError)
-		return
-	}
-
-	// Authorization code already deleted by GetAuthorizationCode
-	// No cleanup needed here
 
 	h.logger.Info("Issued access token",
 		"client_id", clientID,
 		"user_email", authCode.UserEmail,
-		"scope", authCode.Scope,
-	)
+		"scope", authCode.Scope)
 
-	// Return token response
+	// Calculate token expiry
+	expiresIn := googleToken.Expiry.Unix() - time.Now().Unix()
+	if expiresIn < 0 {
+		expiresIn = int64(DefaultAccessTokenTTL.Seconds())
+	}
+
+	// Build token response
 	tokenResp := TokenResponse{
 		AccessToken: accessToken,
 		TokenType:   "Bearer",
@@ -656,32 +509,12 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 		Scope:       authCode.Scope,
 	}
 
-	// Include refresh token if Google provided one
-	if authCode.GoogleRefreshToken != "" {
-		// Generate inboxfewer refresh token
-		refreshToken, err := generateSecureToken(48)
-		if err == nil {
-			// Calculate refresh token expiry
-			refreshTokenExpiresAt := time.Now().Add(h.config.RefreshTokenTTL).Unix()
-
-			// Store refresh token mapping to user email with expiry
-			if saveErr := h.store.SaveRefreshToken(refreshToken, authCode.UserEmail, refreshTokenExpiresAt); saveErr != nil {
-				h.logger.Warn("Failed to store refresh token",
-					"email", authCode.UserEmail,
-					"error", saveErr)
-				// Continue without refresh token in response
-			} else {
-				tokenResp.RefreshToken = refreshToken
-				h.logger.Info("Issued refresh token",
-					"email", authCode.UserEmail,
-					"expires_at", time.Unix(refreshTokenExpiresAt, 0),
-					"ttl", h.config.RefreshTokenTTL)
-			}
-		} else {
-			h.logger.Warn("Failed to generate refresh token", "error", err)
-		}
+	// Issue refresh token if available
+	if refreshToken, err := h.issueRefreshToken(authCode); err == nil && refreshToken != "" {
+		tokenResp.RefreshToken = refreshToken
 	}
 
+	// Return token response
 	h.setSecurityHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -758,7 +591,7 @@ func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request
 	}
 
 	// Generate new inboxfewer access token
-	accessToken, err := generateSecureToken(48)
+	accessToken, err := generateSecureToken(AccessTokenLength)
 	if err != nil {
 		h.logger.Error("Failed to generate access token", "error", err)
 		h.writeError(w, "server_error", "Failed to generate access token", http.StatusInternalServerError)
@@ -766,11 +599,11 @@ func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request
 	}
 
 	// Calculate token expiry
-	expiresIn := int64(3600) // Default 1 hour
+	expiresIn := int64(DefaultAccessTokenTTL.Seconds())
 	if !googleToken.Expiry.IsZero() {
 		expiresIn = googleToken.Expiry.Unix() - time.Now().Unix()
 		if expiresIn < 0 {
-			expiresIn = 3600
+			expiresIn = int64(DefaultAccessTokenTTL.Seconds())
 		}
 	}
 
@@ -793,12 +626,12 @@ func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request
 
 	// OAuth 2.1: Implement refresh token rotation (secure by default)
 	// Issue a new refresh token and invalidate the old one
-	if !h.config.DisableRefreshTokenRotation {
+	if !h.config.Security.DisableRefreshTokenRotation {
 		// Generate new refresh token
-		newRefreshToken, rotateErr := generateSecureToken(48)
+		newRefreshToken, rotateErr := generateSecureToken(RefreshTokenLength)
 		if rotateErr == nil {
 			// Calculate new refresh token expiry
-			refreshTokenExpiresAt := time.Now().Add(h.config.RefreshTokenTTL).Unix()
+			refreshTokenExpiresAt := time.Now().Add(h.config.Security.RefreshTokenTTL).Unix()
 
 			// Invalidate old refresh token
 			h.store.DeleteRefreshToken(refreshToken)
@@ -907,9 +740,8 @@ func validateRedirectURI(uri string, serverResource string, allowCustomSchemes b
 		}
 
 		// Validate against dangerous schemes
-		dangerousSchemes := []string{"javascript", "data", "file", "vbscript", "about"}
 		schemeLower := strings.ToLower(parsed.Scheme)
-		for _, dangerous := range dangerousSchemes {
+		for _, dangerous := range DangerousSchemes {
 			if schemeLower == dangerous {
 				return fmt.Errorf("redirect_uri scheme '%s' is not allowed for security reasons", parsed.Scheme)
 			}
@@ -972,11 +804,15 @@ func isLoopback(hostname string) bool {
 	// Normalize hostname (remove brackets for IPv6)
 	hostname = strings.Trim(hostname, "[]")
 
-	return hostname == "localhost" ||
-		hostname == "127.0.0.1" ||
-		hostname == "::1" ||
-		strings.HasPrefix(hostname, "127.") ||
-		strings.HasPrefix(hostname, "localhost:")
+	// Check against recognized loopback addresses
+	for _, loopback := range LoopbackAddresses {
+		if hostname == loopback {
+			return true
+		}
+	}
+
+	// Also check for 127.x.x.x range and localhost with port
+	return strings.HasPrefix(hostname, "127.") || strings.HasPrefix(hostname, "localhost:")
 }
 
 // fetchGoogleUserInfo fetches user info from Google

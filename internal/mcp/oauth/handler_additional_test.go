@@ -14,9 +14,11 @@ import (
 
 func TestNewHandler_WithGoogleCredentials(t *testing.T) {
 	config := &Config{
-		Resource:           "https://mcp.example.com",
-		GoogleClientID:     "test-client-id",
-		GoogleClientSecret: "test-client-secret",
+		Resource: "https://mcp.example.com",
+		GoogleAuth: GoogleAuthConfig{
+			ClientID:     "test-client-id",
+			ClientSecret: "test-client-secret",
+		},
 		SupportedScopes: []string{
 			"https://www.googleapis.com/auth/gmail.readonly",
 		},
@@ -49,14 +51,18 @@ func TestNewHandler_WithoutGoogleCredentials(t *testing.T) {
 
 func TestNewHandler_WithRateLimiting(t *testing.T) {
 	config := &Config{
-		Resource:                 "https://mcp.example.com",
-		RateLimitRate:            10,
-		RateLimitBurst:           20,
-		RateLimitCleanupInterval: 5 * time.Minute,
-		CleanupInterval:          1 * time.Minute,
-		TrustProxy:               false,
-		GoogleClientID:           "test-id",
-		GoogleClientSecret:       "test-secret",
+		Resource: "https://mcp.example.com",
+		RateLimit: RateLimitConfig{
+			Rate:            10,
+			Burst:           20,
+			CleanupInterval: 5 * time.Minute,
+			TrustProxy:      false,
+		},
+		GoogleAuth: GoogleAuthConfig{
+			ClientID:     "test-id",
+			ClientSecret: "test-secret",
+		},
+		CleanupInterval: 1 * time.Minute,
 	}
 
 	handler, err := NewHandler(config)
@@ -230,9 +236,11 @@ func TestHandler_ServeRevoke(t *testing.T) {
 func TestHandler_CanRefreshTokens(t *testing.T) {
 	t.Run("with credentials", func(t *testing.T) {
 		handler, _ := NewHandler(&Config{
-			Resource:           "https://mcp.example.com",
-			GoogleClientID:     "test-id",
-			GoogleClientSecret: "test-secret",
+			Resource: "https://mcp.example.com",
+			GoogleAuth: GoogleAuthConfig{
+				ClientID:     "test-id",
+				ClientSecret: "test-secret",
+			},
 		})
 
 		if !handler.CanRefreshTokens() {
@@ -252,9 +260,11 @@ func TestHandler_CanRefreshTokens(t *testing.T) {
 
 	t.Run("with partial credentials", func(t *testing.T) {
 		handler, _ := NewHandler(&Config{
-			Resource:       "https://mcp.example.com",
-			GoogleClientID: "test-id",
-			// Missing GoogleClientSecret
+			Resource: "https://mcp.example.com",
+			GoogleAuth: GoogleAuthConfig{
+				ClientID: "test-id",
+				// Missing ClientSecret
+			},
 		})
 
 		if handler.CanRefreshTokens() {

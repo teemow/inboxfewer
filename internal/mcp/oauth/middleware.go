@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"golang.org/x/oauth2"
 )
@@ -123,8 +122,8 @@ func (h *Handler) ValidateGoogleToken(next http.Handler) http.Handler {
 
 		// Check if Google token needs refresh
 		if h.CanRefreshTokens() && googleToken != nil {
-			// Check if cached token needs refresh (expires within 5 minutes)
-			if isTokenExpired(googleToken, 5*time.Minute) && googleToken.RefreshToken != "" {
+			// Check if cached token needs refresh (expires within TokenRefreshThreshold)
+			if isTokenExpired(googleToken, TokenRefreshThreshold) && googleToken.RefreshToken != "" {
 				h.logger.Info("Token expiring soon, attempting refresh", "email", userEmail)
 				// Attempt to refresh the token
 				newToken, refreshErr := refreshGoogleToken(r.Context(), googleToken, h.googleConfig, h.httpClient)

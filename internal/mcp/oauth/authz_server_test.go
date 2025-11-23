@@ -86,8 +86,10 @@ func TestHandler_ServeAuthorizationServerMetadata_MethodNotAllowed(t *testing.T)
 
 func TestHandler_ServeDynamicClientRegistration(t *testing.T) {
 	handler, err := NewHandler(&Config{
-		Resource:                      "https://mcp.example.com",
-		AllowPublicClientRegistration: true, // For testing only
+		Resource: "https://mcp.example.com",
+		Security: SecurityConfig{
+			AllowPublicClientRegistration: true, // For testing only
+		},
 	})
 	if err != nil {
 		t.Fatalf("NewHandler() error = %v", err)
@@ -144,8 +146,10 @@ func TestHandler_ServeDynamicClientRegistration(t *testing.T) {
 
 func TestHandler_ServeDynamicClientRegistration_NoRedirectURIs(t *testing.T) {
 	handler, _ := NewHandler(&Config{
-		Resource:                      "https://mcp.example.com",
-		AllowPublicClientRegistration: true, // For testing only
+		Resource: "https://mcp.example.com",
+		Security: SecurityConfig{
+			AllowPublicClientRegistration: true, // For testing only
+		},
 	})
 
 	regReq := &ClientRegistrationRequest{
@@ -175,8 +179,10 @@ func TestHandler_ServeDynamicClientRegistration_NoRedirectURIs(t *testing.T) {
 
 func TestHandler_ServeDynamicClientRegistration_InvalidRedirectURI(t *testing.T) {
 	handler, _ := NewHandler(&Config{
-		Resource:                      "https://mcp.example.com",
-		AllowPublicClientRegistration: true, // For testing only
+		Resource: "https://mcp.example.com",
+		Security: SecurityConfig{
+			AllowPublicClientRegistration: true, // For testing only
+		},
 	})
 
 	tests := []struct {
@@ -238,9 +244,11 @@ func TestHandler_ServeDynamicClientRegistration_MethodNotAllowed(t *testing.T) {
 
 func TestHandler_ServeAuthorization_MissingParameters(t *testing.T) {
 	handler, _ := NewHandler(&Config{
-		Resource:           "https://mcp.example.com",
-		GoogleClientID:     "test-client-id",
-		GoogleClientSecret: "test-client-secret",
+		Resource: "https://mcp.example.com",
+		GoogleAuth: GoogleAuthConfig{
+			ClientID:     "test-client-id",
+			ClientSecret: "test-client-secret",
+		},
 	})
 
 	tests := []struct {
@@ -294,9 +302,11 @@ func TestHandler_ServeAuthorization_MissingParameters(t *testing.T) {
 
 func TestHandler_ServeAuthorization_InvalidClient(t *testing.T) {
 	handler, _ := NewHandler(&Config{
-		Resource:           "https://mcp.example.com",
-		GoogleClientID:     "test-client-id",
-		GoogleClientSecret: "test-client-secret",
+		Resource: "https://mcp.example.com",
+		GoogleAuth: GoogleAuthConfig{
+			ClientID:     "test-client-id",
+			ClientSecret: "test-client-secret",
+		},
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?client_id=nonexistent&redirect_uri=http://localhost:8080/callback&state=test-state", nil)

@@ -57,13 +57,13 @@ func (s *ClientStore) RegisterClient(req *ClientRegistrationRequest, clientIP st
 	defer s.mu.Unlock()
 
 	// Generate client ID
-	clientID, err := generateSecureToken(32)
+	clientID, err := generateSecureToken(ClientIDTokenLength)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate client ID: %w", err)
 	}
 
 	// Generate client secret
-	clientSecret, err := generateSecureToken(48)
+	clientSecret, err := generateSecureToken(ClientSecretTokenLength)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate client secret: %w", err)
 	}
@@ -79,17 +79,17 @@ func (s *ClientStore) RegisterClient(req *ClientRegistrationRequest, clientIP st
 	// Set defaults for missing fields
 	tokenEndpointAuthMethod := req.TokenEndpointAuthMethod
 	if tokenEndpointAuthMethod == "" {
-		tokenEndpointAuthMethod = "client_secret_basic"
+		tokenEndpointAuthMethod = DefaultTokenEndpointAuthMethod
 	}
 
 	grantTypes := req.GrantTypes
 	if len(grantTypes) == 0 {
-		grantTypes = []string{"authorization_code", "refresh_token"}
+		grantTypes = DefaultGrantTypes
 	}
 
 	responseTypes := req.ResponseTypes
 	if len(responseTypes) == 0 {
-		responseTypes = []string{"code"}
+		responseTypes = DefaultResponseTypes
 	}
 
 	// Create registered client

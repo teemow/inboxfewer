@@ -8,111 +8,12 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/teemow/inboxfewer/internal/google"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
+	oauth2google "golang.org/x/oauth2/google"
 )
 
-// Config holds the OAuth handler configuration
-type Config struct {
-	// Resource is the MCP server resource identifier for RFC 8707
-	// This should be the base URL of the MCP server
-	Resource string
-
-	// SupportedScopes are all available scopes
-	SupportedScopes []string
-
-	// Google OAuth credentials for proxying OAuth flow
-	// REQUIRED for OAuth proxy mode - these credentials are used to authenticate
-	// with Google on behalf of MCP clients
-	GoogleClientID     string
-	GoogleClientSecret string
-
-	// GoogleRedirectURL is the callback URL for Google OAuth flow
-	// This is where Google redirects after user authentication
-	// Default: {Resource}/oauth/google/callback
-	GoogleRedirectURL string
-
-	// RateLimitRate is the number of requests per second allowed per IP (0 = no limit)
-	RateLimitRate int
-
-	// RateLimitBurst is the maximum burst size allowed per IP
-	RateLimitBurst int
-
-	// RateLimitCleanupInterval is how often to cleanup inactive rate limiters (default: 5 minutes)
-	RateLimitCleanupInterval time.Duration
-
-	// UserRateLimitRate is the number of requests per second allowed per authenticated user (0 = no limit)
-	// This is in addition to IP-based rate limiting
-	UserRateLimitRate int
-
-	// UserRateLimitBurst is the maximum burst size allowed per authenticated user
-	UserRateLimitBurst int
-
-	// CleanupInterval is how often to cleanup expired tokens (default: 1 minute)
-	CleanupInterval time.Duration
-
-	// TrustProxy indicates whether to trust X-Forwarded-For and X-Real-IP headers
-	// Only set to true if the server is behind a trusted proxy
-	// Default: false (secure by default)
-	TrustProxy bool
-
-	// Logger for structured logging (optional, uses default if not provided)
-	Logger *slog.Logger
-
-	// HTTPClient is a custom HTTP client for OAuth requests
-	// If not provided, uses the default HTTP client
-	// Can be used to add timeouts, logging, metrics, etc.
-	HTTPClient *http.Client
-
-	// ============================================================
-	// Security Configuration (Secure by Default)
-	// ============================================================
-
-	// AllowInsecureAuthWithoutState allows authorization requests without state parameter
-	// WARNING: Disabling this weakens CSRF protection and is NOT recommended
-	// Only enable if you have clients that don't support state parameter
-	// Default: false (state is REQUIRED for security)
-	AllowInsecureAuthWithoutState bool
-
-	// DisableRefreshTokenRotation disables automatic refresh token rotation
-	// WARNING: Disabling this violates OAuth 2.1 security best practices
-	// Stolen refresh tokens can be used indefinitely without rotation
-	// Default: false (rotation is ENABLED for security)
-	DisableRefreshTokenRotation bool
-
-	// AllowPublicClientRegistration allows unauthenticated dynamic client registration
-	// WARNING: This can lead to DoS attacks via unlimited client registration
-	// When false, client registration requires a registration access token
-	// Default: false (authentication REQUIRED for security)
-	AllowPublicClientRegistration bool
-
-	// RegistrationAccessToken is the token required for client registration
-	// Only checked if AllowPublicClientRegistration is false
-	// Generate a secure random token and share it only with trusted client developers
-	RegistrationAccessToken string
-
-	// RefreshTokenTTL is the time-to-live for refresh tokens (0 = never expire)
-	// Recommended: 30-90 days for security vs usability balance
-	// Default: 90 days
-	RefreshTokenTTL time.Duration
-
-	// MaxClientsPerIP limits the number of clients that can be registered per IP
-	// Prevents DoS attacks via mass client registration
-	// 0 = no limit (not recommended)
-	// Default: 10
-	MaxClientsPerIP int
-
-	// AllowCustomRedirectSchemes allows non-http/https redirect URIs (e.g., myapp://)
-	// When false, only http/https schemes are allowed
-	// When true, custom schemes are validated against AllowedCustomSchemes pattern
-	// Default: true (for native app support)
-	AllowCustomRedirectSchemes bool
-
-	// AllowedCustomSchemes is a list of allowed custom scheme patterns (regex)
-	// Only used if AllowCustomRedirectSchemes is true
-	// Default: ["^[a-z][a-z0-9+.-]*$"] (RFC 3986 compliant schemes)
-	AllowedCustomSchemes []string
-}
+// Note: Config is now defined in config.go
 
 // Handler implements OAuth 2.1 endpoints for the MCP server
 // It acts as both an OAuth 2.1 Authorization Server (proxying to Google)
@@ -155,22 +56,12 @@ func NewHandler(config *Config) (*Handler, error) {
 
 	// Set default scopes if none provided
 	if len(config.SupportedScopes) == 0 {
-		config.SupportedScopes = []string{
-			"https://www.googleapis.com/auth/gmail.readonly",
-			"https://www.googleapis.com/auth/gmail.modify",
-			"https://www.googleapis.com/auth/gmail.send",
-			"https://www.googleapis.com/auth/gmail.settings.basic",
-			"https://www.googleapis.com/auth/documents.readonly",
-			"https://www.googleapis.com/auth/drive",
-			"https://www.googleapis.com/auth/calendar",
-			"https://www.googleapis.com/auth/meetings.space.readonly",
-			"https://www.googleapis.com/auth/tasks",
-		}
+		config.SupportedScopes = google.DefaultOAuthScopes
 	}
 
 	// Set default cleanup interval if not specified
 	if config.CleanupInterval == 0 {
-		config.CleanupInterval = 1 * time.Minute
+		config.CleanupInterval = DefaultCleanupInterval
 	}
 
 	// Set default logger if not provided
@@ -184,89 +75,87 @@ func NewHandler(config *Config) (*Handler, error) {
 	// ============================================================
 
 	// Refresh token TTL defaults to 90 days (security vs usability balance)
-	if config.RefreshTokenTTL == 0 {
-		config.RefreshTokenTTL = 90 * 24 * time.Hour
+	if config.Security.RefreshTokenTTL == 0 {
+		config.Security.RefreshTokenTTL = DefaultRefreshTokenTTL
 	}
 
 	// Max clients per IP defaults to 10 to prevent DoS
-	if config.MaxClientsPerIP == 0 {
-		config.MaxClientsPerIP = 10
+	if config.Security.MaxClientsPerIP == 0 {
+		config.Security.MaxClientsPerIP = DefaultMaxClientsPerIP
 	}
 
 	// AllowCustomRedirectSchemes defaults to true for native app support
 	// Note: Go bool zero value is false, so we need explicit check
 	// If not explicitly set to false in a previous version, we allow custom schemes
 	// This is safe because AllowedCustomSchemes provides validation
-	if config.AllowedCustomSchemes == nil {
-		config.AllowCustomRedirectSchemes = true // Explicit default for clarity
-		config.AllowedCustomSchemes = []string{
-			"^[a-z][a-z0-9+.-]*$", // RFC 3986: scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
-		}
+	if config.Security.AllowedCustomSchemes == nil {
+		config.Security.AllowCustomRedirectSchemes = true // Explicit default for clarity
+		config.Security.AllowedCustomSchemes = DefaultRFC3986SchemePattern
 	}
 
 	// Log security configuration warnings
-	if config.AllowInsecureAuthWithoutState {
+	if config.Security.AllowInsecureAuthWithoutState {
 		logger.Warn("⚠️  SECURITY WARNING: State parameter is OPTIONAL (CSRF protection weakened)",
-			"recommendation", "Set AllowInsecureAuthWithoutState=false for production")
+			"recommendation", "Set Security.AllowInsecureAuthWithoutState=false for production")
 	}
-	if config.DisableRefreshTokenRotation {
+	if config.Security.DisableRefreshTokenRotation {
 		logger.Warn("⚠️  SECURITY WARNING: Refresh token rotation is DISABLED",
-			"recommendation", "Set DisableRefreshTokenRotation=false for production")
+			"recommendation", "Set Security.DisableRefreshTokenRotation=false for production")
 	}
-	if config.AllowPublicClientRegistration {
+	if config.Security.AllowPublicClientRegistration {
 		logger.Warn("⚠️  SECURITY WARNING: Public client registration is ENABLED (DoS risk)",
-			"recommendation", "Set AllowPublicClientRegistration=false and use RegistrationAccessToken")
+			"recommendation", "Set Security.AllowPublicClientRegistration=false and use RegistrationAccessToken")
 	}
 
 	// Create IP-based rate limiter if configured
 	var rateLimiter *RateLimiter
-	if config.RateLimitRate > 0 {
-		burst := config.RateLimitBurst
+	if config.RateLimit.Rate > 0 {
+		burst := config.RateLimit.Burst
 		if burst == 0 {
-			burst = config.RateLimitRate * 2 // Default burst is 2x rate
+			burst = config.RateLimit.Rate * 2 // Default burst is 2x rate
 		}
-		cleanupInterval := config.RateLimitCleanupInterval
+		cleanupInterval := config.RateLimit.CleanupInterval
 		if cleanupInterval == 0 {
-			cleanupInterval = 5 * time.Minute
+			cleanupInterval = DefaultRateLimitCleanupInterval
 		}
-		rateLimiter = NewRateLimiter(config.RateLimitRate, burst, config.TrustProxy, cleanupInterval, logger)
+		rateLimiter = NewRateLimiter(config.RateLimit.Rate, burst, config.RateLimit.TrustProxy, cleanupInterval, logger)
 		logger.Info("IP-based rate limiting enabled",
-			"rate", config.RateLimitRate,
+			"rate", config.RateLimit.Rate,
 			"burst", burst)
 	}
 
 	// Create user-based rate limiter if configured
 	var userRateLimiter *RateLimiter
-	if config.UserRateLimitRate > 0 {
-		burst := config.UserRateLimitBurst
+	if config.RateLimit.UserRate > 0 {
+		burst := config.RateLimit.UserBurst
 		if burst == 0 {
-			burst = config.UserRateLimitRate * 2 // Default burst is 2x rate
+			burst = config.RateLimit.UserRate * 2 // Default burst is 2x rate
 		}
-		cleanupInterval := config.RateLimitCleanupInterval
+		cleanupInterval := config.RateLimit.CleanupInterval
 		if cleanupInterval == 0 {
-			cleanupInterval = 5 * time.Minute
+			cleanupInterval = DefaultRateLimitCleanupInterval
 		}
 		// User rate limiter doesn't need TrustProxy since it uses email addresses
-		userRateLimiter = NewRateLimiter(config.UserRateLimitRate, burst, false, cleanupInterval, logger)
+		userRateLimiter = NewRateLimiter(config.RateLimit.UserRate, burst, false, cleanupInterval, logger)
 		logger.Info("User-based rate limiting enabled",
-			"rate", config.UserRateLimitRate,
+			"rate", config.RateLimit.UserRate,
 			"burst", burst)
 	}
 
 	// Create Google OAuth config for OAuth proxy
 	// This is REQUIRED for OAuth proxy mode
 	var googleConfig *oauth2.Config
-	if config.GoogleClientID != "" && config.GoogleClientSecret != "" {
+	if config.GoogleAuth.ClientID != "" && config.GoogleAuth.ClientSecret != "" {
 		// Set default redirect URL if not specified
-		redirectURL := config.GoogleRedirectURL
+		redirectURL := config.GoogleAuth.RedirectURL
 		if redirectURL == "" {
 			redirectURL = config.Resource + "/oauth/google/callback"
 		}
 
 		googleConfig = &oauth2.Config{
-			ClientID:     config.GoogleClientID,
-			ClientSecret: config.GoogleClientSecret,
-			Endpoint:     google.Endpoint,
+			ClientID:     config.GoogleAuth.ClientID,
+			ClientSecret: config.GoogleAuth.ClientSecret,
+			Endpoint:     oauth2google.Endpoint,
 			Scopes:       config.SupportedScopes,
 			RedirectURL:  redirectURL,
 		}
