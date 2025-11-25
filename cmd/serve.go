@@ -13,7 +13,7 @@ import (
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
-	"github.com/teemow/inboxfewer/internal/mcp/oauth"
+	"github.com/teemow/inboxfewer/internal/mcp/oauth_library"
 	"github.com/teemow/inboxfewer/internal/resources"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/calendar_tools"
@@ -301,7 +301,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		log.Printf("Using configured base URL: %s", baseURL)
 	}
 
-	// Create OAuth handler first so we can inject its token provider
+	// Create OAuth handler using the mcp-oauth library
 	oauthConfig := server.OAuthConfig{
 		BaseURL:                       baseURL,
 		GoogleClientID:                googleClientID,
@@ -313,13 +313,14 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		MaxClientsPerIP:               securityConfig.MaxClientsPerIP,
 	}
 
-	oauthHandler, err := server.CreateOAuthHandler(oauthConfig)
+	oauthHandler, err := server.CreateOAuthHandlerLibrary(oauthConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create OAuth handler: %w", err)
 	}
+	defer oauthHandler.Stop() // Ensure cleanup
 
-	// Create token provider from OAuth store
-	tokenProvider := oauth.NewTokenProvider(oauthHandler.GetStore())
+	// Create token provider from OAuth library store
+	tokenProvider := oauth_library.NewTokenProvider(oauthHandler.GetStore())
 
 	// Recreate server context with OAuth token provider
 	// This ensures Google API clients use tokens from OAuth authentication
@@ -346,8 +347,8 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		return err
 	}
 
-	// Create OAuth server with existing handler
-	oauthServer, err := server.NewOAuthHTTPServerWithHandler(mcpSrv, "streamable-http", oauthHandler, disableStreaming)
+	// Create OAuth server with existing handler using the library
+	oauthServer, err := server.NewOAuthHTTPServerLibraryWithHandler(mcpSrv, "streamable-http", oauthHandler, disableStreaming)
 	if err != nil {
 		return fmt.Errorf("failed to create OAuth HTTP server: %w", err)
 	}
@@ -355,11 +356,12 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	fmt.Printf("Streamable HTTP server with Google OAuth authentication starting on %s\n", addr)
 	fmt.Printf("  HTTP endpoint: /mcp\n")
 	fmt.Printf("  OAuth metadata: /.well-known/oauth-protected-resource\n")
-	fmt.Printf("  Authorization Server: https://accounts.google.com\n")
+	fmt.Printf("  Authorization Server: %s (via mcp-oauth library)\n", baseURL)
 
-	if oauthHandler.CanRefreshTokens() {
+	if googleClientID != "" && googleClientSecret != "" {
 		fmt.Println("\n✓ Automatic token refresh: ENABLED")
 		fmt.Println("  Tokens will be refreshed automatically before expiration")
+		fmt.Println("  Enhanced security features: proactive refresh, atomic operations, token families")
 	} else {
 		fmt.Println("\n⚠ Automatic token refresh: DISABLED")
 		fmt.Println("  Users will need to re-authenticate when tokens expire (~1 hour)")
