@@ -4,12 +4,28 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/teemow/inboxfewer/internal/mcp/oauth_library"
 )
+
+// OAuthConfig holds configuration for OAuth server creation
+type OAuthConfig struct {
+	BaseURL            string
+	GoogleClientID     string
+	GoogleClientSecret string
+	DisableStreaming   bool
+
+	// Security Settings (secure by default)
+	// See oauth_library.Config for detailed documentation
+	AllowPublicClientRegistration bool   // Default: false (requires registration token)
+	RegistrationAccessToken       string // Required if AllowPublicClientRegistration=false
+	AllowInsecureAuthWithoutState bool   // Default: false (state parameter required)
+	MaxClientsPerIP               int    // Default: 10 (prevents DoS)
+}
 
 // OAuthHTTPServerLibrary wraps an MCP server with OAuth 2.1 authentication using the mcp-oauth library
 type OAuthHTTPServerLibrary struct {
@@ -20,10 +36,10 @@ type OAuthHTTPServerLibrary struct {
 	disableStreaming bool
 }
 
-// NewOAuthHTTPServerLibrary creates a new OAuth-enabled HTTP server using the mcp-oauth library
-func NewOAuthHTTPServerLibrary(mcpServer *mcpserver.MCPServer, serverType string, config OAuthConfig) (*OAuthHTTPServerLibrary, error) {
-	// Create OAuth handler using the library
-	libraryConfig := &oauth_library.Config{
+// buildOAuthLibraryConfig converts OAuthConfig to oauth_library.Config
+// This eliminates code duplication between NewOAuthHTTPServerLibrary and CreateOAuthHandlerLibrary
+func buildOAuthLibraryConfig(config OAuthConfig) *oauth_library.Config {
+	return &oauth_library.Config{
 		BaseURL:            config.BaseURL,
 		GoogleClientID:     config.GoogleClientID,
 		GoogleClientSecret: config.GoogleClientSecret,
@@ -41,8 +57,11 @@ func NewOAuthHTTPServerLibrary(mcpServer *mcpserver.MCPServer, serverType string
 			UserBurst: 200, // Allow burst of 200
 		},
 	}
+}
 
-	oauthHandler, err := oauth_library.NewHandler(libraryConfig)
+// NewOAuthHTTPServerLibrary creates a new OAuth-enabled HTTP server using the mcp-oauth library
+func NewOAuthHTTPServerLibrary(mcpServer *mcpserver.MCPServer, serverType string, config OAuthConfig) (*OAuthHTTPServerLibrary, error) {
+	oauthHandler, err := oauth_library.NewHandler(buildOAuthLibraryConfig(config))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OAuth handler: %w", err)
 	}
@@ -58,26 +77,7 @@ func NewOAuthHTTPServerLibrary(mcpServer *mcpserver.MCPServer, serverType string
 // CreateOAuthHandlerLibrary creates an OAuth handler using the library for use with HTTP transport
 // This allows creating the handler before the server to inject the token provider
 func CreateOAuthHandlerLibrary(config OAuthConfig) (*oauth_library.Handler, error) {
-	libraryConfig := &oauth_library.Config{
-		BaseURL:            config.BaseURL,
-		GoogleClientID:     config.GoogleClientID,
-		GoogleClientSecret: config.GoogleClientSecret,
-		Security: oauth_library.SecurityConfig{
-			AllowPublicClientRegistration: config.AllowPublicClientRegistration,
-			RegistrationAccessToken:       config.RegistrationAccessToken,
-			AllowInsecureAuthWithoutState: config.AllowInsecureAuthWithoutState,
-			MaxClientsPerIP:               config.MaxClientsPerIP,
-			EnableAuditLogging:            true, // Always enable audit logging
-		},
-		RateLimit: oauth_library.RateLimitConfig{
-			Rate:      10,  // 10 req/sec per IP
-			Burst:     20,  // Allow burst of 20
-			UserRate:  100, // 100 req/sec per authenticated user
-			UserBurst: 200, // Allow burst of 200
-		},
-	}
-
-	return oauth_library.NewHandler(libraryConfig)
+	return oauth_library.NewHandler(buildOAuthLibraryConfig(config))
 }
 
 // NewOAuthHTTPServerLibraryWithHandler creates a new OAuth-enabled HTTP server with an existing handler
@@ -187,4 +187,30 @@ func (s *OAuthHTTPServerLibrary) Shutdown(ctx context.Context) error {
 // GetOAuthHandler returns the OAuth handler for testing or direct access
 func (s *OAuthHTTPServerLibrary) GetOAuthHandler() *oauth_library.Handler {
 	return s.oauthHandler
+}
+
+// validateHTTPSRequirement ensures OAuth 2.1 HTTPS compliance
+// Allows HTTP only for loopback addresses (localhost, 127.0.0.1, ::1)
+func validateHTTPSRequirement(baseURL string) error {
+	if baseURL == "" {
+		return fmt.Errorf("base URL cannot be empty")
+	}
+
+	// Parse URL to properly validate scheme and host
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+
+	// Allow HTTP only for loopback addresses
+	if u.Scheme == "http" {
+		host := u.Hostname()
+		if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+			return fmt.Errorf("OAuth 2.1 requires HTTPS for production (got: %s). Use HTTPS or localhost for development", baseURL)
+		}
+	} else if u.Scheme != "https" {
+		return fmt.Errorf("invalid URL scheme: %s. Must be http (localhost only) or https", u.Scheme)
+	}
+
+	return nil
 }

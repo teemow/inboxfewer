@@ -7,7 +7,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
-	"github.com/teemow/inboxfewer/internal/mcp/oauth"
+	"github.com/teemow/inboxfewer/internal/mcp/oauth_library"
 	"github.com/teemow/inboxfewer/internal/server"
 )
 
@@ -45,7 +45,7 @@ func RegisterUserResources(s *mcpserver.MCPServer, sc *server.ServerContext) err
 // Falls back to "default" for STDIO transport or if no OAuth context is available
 func extractAccountFromContext(ctx context.Context) string {
 	// Try to get user info from OAuth context (HTTP/SSE transport)
-	if userInfo, ok := oauth.GetUserFromContext(ctx); ok {
+	if userInfo, ok := oauth_library.GetUserFromContext(ctx); ok {
 		return userInfo.Email
 	}
 	// Fallback to default for STDIO transport

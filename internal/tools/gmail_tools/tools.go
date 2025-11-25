@@ -10,7 +10,7 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/google"
-	"github.com/teemow/inboxfewer/internal/mcp/oauth"
+	"github.com/teemow/inboxfewer/internal/mcp/oauth_library"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
 )
@@ -21,7 +21,7 @@ import (
 func getAccountFromArgs(ctx context.Context, args map[string]interface{}) string {
 	// First, check if there's an authenticated user in the OAuth context
 	// This is set by the OAuth middleware after validating the Bearer token
-	if userInfo, ok := oauth.GetUserFromContext(ctx); ok && userInfo != nil && userInfo.Email != "" {
+	if userInfo, ok := oauth_library.GetUserFromContext(ctx); ok && userInfo != nil && userInfo.Email != "" {
 		// Use the authenticated user's email as the account
 		return userInfo.Email
 	}

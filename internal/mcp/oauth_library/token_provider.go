@@ -2,9 +2,12 @@ package oauth_library
 
 import (
 	"context"
+	"time"
 
 	"golang.org/x/oauth2"
 
+	oauth "github.com/giantswarm/mcp-oauth"
+	"github.com/giantswarm/mcp-oauth/providers"
 	"github.com/giantswarm/mcp-oauth/storage"
 )
 
@@ -36,7 +39,8 @@ func (p *TokenProvider) GetTokenForAccount(ctx context.Context, account string) 
 // HasTokenForAccount checks if a token exists for the specified account.
 // This implements the google.TokenProvider interface.
 func (p *TokenProvider) HasTokenForAccount(account string) bool {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	_, err := p.store.GetToken(ctx, account)
 	return err == nil
 }
@@ -45,4 +49,15 @@ func (p *TokenProvider) HasTokenForAccount(account string) bool {
 // This is used when tokens are refreshed or initially acquired.
 func (p *TokenProvider) SaveToken(ctx context.Context, userID string, token *oauth2.Token) error {
 	return p.store.SaveToken(ctx, userID, token)
+}
+
+// UserInfo represents Google user information.
+// This is a convenience wrapper around the library's providers.UserInfo type.
+type UserInfo = providers.UserInfo
+
+// GetUserFromContext retrieves the authenticated user info from the request context.
+// This is set by the OAuth middleware after validating the Bearer token.
+// Returns the user info and true if present, or nil and false if not authenticated.
+func GetUserFromContext(ctx context.Context) (*UserInfo, bool) {
+	return oauth.UserInfoFromContext(ctx)
 }
