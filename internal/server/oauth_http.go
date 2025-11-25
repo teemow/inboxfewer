@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -25,6 +27,7 @@ type OAuthConfig struct {
 	RegistrationAccessToken       string // Required if AllowPublicClientRegistration=false
 	AllowInsecureAuthWithoutState bool   // Default: false (state parameter required)
 	MaxClientsPerIP               int    // Default: 10 (prevents DoS)
+	EncryptionKey                 []byte // AES-256 key for token encryption (32 bytes)
 }
 
 // OAuthHTTPServer wraps an MCP server with OAuth 2.1 authentication
@@ -48,6 +51,7 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 			RegistrationAccessToken:       config.RegistrationAccessToken,
 			AllowInsecureAuthWithoutState: config.AllowInsecureAuthWithoutState,
 			MaxClientsPerIP:               config.MaxClientsPerIP,
+			EncryptionKey:                 config.EncryptionKey,
 			EnableAuditLogging:            true, // Always enable audit logging
 		},
 		RateLimit: oauth.RateLimitConfig{
@@ -88,6 +92,71 @@ func NewOAuthHTTPServerWithHandler(mcpServer *mcpserver.MCPServer, serverType st
 		serverType:       serverType,
 		disableStreaming: disableStreaming,
 	}, nil
+}
+
+// securityHeadersMiddleware adds security headers to all HTTP responses
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prevent MIME sniffing
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
+		// Prevent clickjacking
+		w.Header().Set("X-Frame-Options", "DENY")
+
+		// Force HTTPS (only if using HTTPS)
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+
+		// Prevent XSS
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+
+		// Restrict referrer information
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+
+		// Content Security Policy
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// corsMiddleware adds CORS headers for OAuth endpoints
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Get allowed origins from environment (comma-separated)
+		allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+		var allowedOrigins []string
+		if allowedOriginsEnv != "" {
+			allowedOrigins = strings.Split(allowedOriginsEnv, ",")
+		}
+
+		origin := r.Header.Get("Origin")
+
+		// If allowed origins is configured, check if origin is allowed
+		if len(allowedOrigins) > 0 && origin != "" {
+			for _, allowed := range allowedOrigins {
+				if origin == strings.TrimSpace(allowed) {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Vary", "Origin")
+					break
+				}
+			}
+		}
+
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		w.Header().Set("Access-Control-Max-Age", "3600")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Start starts the OAuth-enabled HTTP server
@@ -157,12 +226,14 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 		return fmt.Errorf("unsupported server type: %s", s.serverType)
 	}
 
-	// Create HTTP server
+	// Create HTTP server with security and CORS middleware
+	handler := securityHeadersMiddleware(corsMiddleware(mux))
+
 	s.httpServer = &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		WriteTimeout:      120 * time.Second, // Increased for long-running MCP operations
 		IdleTimeout:       120 * time.Second,
 	}
 

@@ -165,6 +165,12 @@ oauthSecurity:
   # Generate a secure random token (e.g., openssl rand -base64 32)
   registrationAccessToken: ""
   
+  # AES-256 encryption key for token storage at rest (32 bytes, base64 encoded)
+  # REQUIRED for production deployments
+  # Generate with: openssl rand -base64 32
+  # If not set, tokens are stored unencrypted in memory (development only)
+  encryptionKey: ""
+  
   # Allow authorization without state parameter
   # WARNING: Setting to true weakens CSRF protection
   # Default: false (state parameter required)
@@ -177,7 +183,7 @@ oauthSecurity:
 
 # Existing secret containing Google OAuth credentials
 # Keys should be: google-client-id, google-client-secret
-# Optionally: oauth-registration-token
+# Optionally: oauth-registration-token, oauth-encryption-key
 existingSecret: ""
 
 # GitHub configuration (required for cleanup command)

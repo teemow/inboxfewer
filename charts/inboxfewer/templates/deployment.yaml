@@ -86,7 +86,19 @@ spec:
               secretKeyRef:
                 name: {{ .Values.existingSecret | default (include "inboxfewer.fullname" .) }}
                 key: oauth-registration-token
+                {{- if .Values.oauthSecurity.allowPublicClientRegistration }}
                 optional: true
+                {{- else }}
+                optional: false
+                {{- end }}
+          {{- end }}
+          {{- if .Values.oauthSecurity.encryptionKey }}
+          - name: MCP_OAUTH_ENCRYPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.existingSecret | default (include "inboxfewer.fullname" .) }}
+                key: oauth-encryption-key
+                optional: false
           {{- end }}
           {{- if .Values.oauthSecurity.allowInsecureAuthWithoutState }}
           - name: MCP_OAUTH_ALLOW_NO_STATE

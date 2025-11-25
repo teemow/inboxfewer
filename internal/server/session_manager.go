@@ -6,23 +6,46 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// sessionInfo tracks session metadata for cleanup
+type sessionInfo struct {
+	account    string
+	lastAccess time.Time
+}
 
 // SessionIDManager implements session management for multi-account support
 // It ensures that each Google account gets its own session, allowing
 // multiple users or accounts to use the same MCP server instance
 type SessionIDManager struct {
-	sessions map[string]string // Maps session ID to account email
-	mu       sync.RWMutex
+	sessions       map[string]*sessionInfo // Maps session ID to session info
+	mu             sync.RWMutex
+	cleanupTicker  *time.Ticker
+	cleanupDone    chan bool
+	sessionTimeout time.Duration
 }
 
 // NewSessionIDManager creates a new session ID manager
 func NewSessionIDManager() *SessionIDManager {
-	return &SessionIDManager{
-		sessions: make(map[string]string),
+	return NewSessionIDManagerWithTimeout(24 * time.Hour)
+}
+
+// NewSessionIDManagerWithTimeout creates a new session ID manager with custom timeout
+func NewSessionIDManagerWithTimeout(timeout time.Duration) *SessionIDManager {
+	m := &SessionIDManager{
+		sessions:       make(map[string]*sessionInfo),
+		cleanupTicker:  time.NewTicker(10 * time.Minute),
+		cleanupDone:    make(chan bool),
+		sessionTimeout: timeout,
 	}
+
+	// Start cleanup goroutine
+	go m.cleanupExpiredSessions()
+
+	return m
 }
 
 // ResolveSessionID resolves the session ID from an HTTP request
@@ -52,11 +75,13 @@ func (m *SessionIDManager) ResolveSessionIDFromRequest(request *mcp.JSONRPCReque
 
 // GetAccountForSession returns the account email associated with a session ID
 func (m *SessionIDManager) GetAccountForSession(sessionID string) string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	if account, ok := m.sessions[sessionID]; ok {
-		return account
+	if info, ok := m.sessions[sessionID]; ok {
+		// Update last access time
+		info.lastAccess = time.Now()
+		return info.account
 	}
 	return "default"
 }
@@ -65,7 +90,10 @@ func (m *SessionIDManager) GetAccountForSession(sessionID string) string {
 func (m *SessionIDManager) SetAccountForSession(sessionID, account string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.sessions[sessionID] = account
+	m.sessions[sessionID] = &sessionInfo{
+		account:    account,
+		lastAccess: time.Now(),
+	}
 }
 
 // generateSessionID creates a stable session ID from the auth token
@@ -91,4 +119,39 @@ func (m *SessionIDManager) ListSessions() []string {
 		sessions = append(sessions, sessionID)
 	}
 	return sessions
+}
+
+// cleanupExpiredSessions periodically removes expired sessions
+func (m *SessionIDManager) cleanupExpiredSessions() {
+	for {
+		select {
+		case <-m.cleanupTicker.C:
+			m.mu.Lock()
+			now := time.Now()
+			expiredCount := 0
+			for sessionID, info := range m.sessions {
+				if now.Sub(info.lastAccess) > m.sessionTimeout {
+					delete(m.sessions, sessionID)
+					expiredCount++
+				}
+			}
+			m.mu.Unlock()
+			if expiredCount > 0 {
+				// Log cleanup without PII
+				fmt.Printf("Cleaned up %d expired sessions\n", expiredCount)
+			}
+		case <-m.cleanupDone:
+			return
+		}
+	}
+}
+
+// Stop stops the session cleanup goroutine
+func (m *SessionIDManager) Stop() {
+	if m.cleanupTicker != nil {
+		m.cleanupTicker.Stop()
+	}
+	if m.cleanupDone != nil {
+		close(m.cleanupDone)
+	}
 }

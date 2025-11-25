@@ -2,6 +2,8 @@ package google
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +21,13 @@ import (
 	meet "google.golang.org/api/meet/v2"
 	tasks "google.golang.org/api/tasks/v1"
 )
+
+// hashEmail creates a hash of an email for logging purposes
+// This prevents PII leakage in logs while maintaining traceability
+func hashEmail(email string) string {
+	hash := sha256.Sum256([]byte(email))
+	return hex.EncodeToString(hash[:8]) // First 8 bytes (16 hex chars) for brevity
+}
 
 const defaultAccount = "default"
 
@@ -39,6 +48,10 @@ func MigrateDefaultToken() error {
 			if err := os.Rename(oldTokenFile, newTokenFile); err != nil {
 				return fmt.Errorf("failed to migrate token file: %w", err)
 			}
+			// Fix permissions on migrated file
+			if err := os.Chmod(newTokenFile, 0600); err != nil {
+				log.Printf("Warning: Failed to set permissions on migrated token file: %v", err)
+			}
 			log.Printf("Migrated google.token to google-default.token")
 		}
 	}
@@ -56,6 +69,13 @@ func getTokenFilePath(account string) string {
 func validateAccountName(account string) error {
 	if account == "" {
 		return fmt.Errorf("account name cannot be empty")
+	}
+	if len(account) > 255 {
+		return fmt.Errorf("account name too long (max 255 characters)")
+	}
+	// Additional path traversal protection
+	if strings.Contains(account, "..") || strings.Contains(account, "/") || strings.Contains(account, "\\") {
+		return fmt.Errorf("account name contains invalid path characters")
 	}
 	if !accountNameRegex.MatchString(account) {
 		return fmt.Errorf("account name must contain only alphanumeric characters, hyphens, and underscores")
@@ -108,12 +128,39 @@ func SaveTokenForAccount(ctx context.Context, account string, token *oauth2.Toke
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
+	// Verify directory permissions for security
+	dirInfo, err := os.Stat(cacheDir)
+	if err != nil {
+		return fmt.Errorf("failed to stat cache directory: %w", err)
+	}
+	if dirInfo.Mode().Perm() != 0700 {
+		// Attempt to fix permissions
+		if err := os.Chmod(cacheDir, 0700); err != nil {
+			return fmt.Errorf("insecure cache directory permissions %o and failed to fix: %w", dirInfo.Mode().Perm(), err)
+		}
+		log.Printf("Fixed insecure cache directory permissions from %o to 0700", dirInfo.Mode().Perm())
+	}
+
 	tokenData := token.AccessToken + " " + token.RefreshToken
 	if err := os.WriteFile(tokenFile, []byte(tokenData), 0600); err != nil {
 		return fmt.Errorf("failed to write token file for account %s: %w", account, err)
 	}
 
-	log.Printf("Saved OAuth token for account: %s", account)
+	// Verify file permissions after write
+	fileInfo, err := os.Stat(tokenFile)
+	if err != nil {
+		return fmt.Errorf("failed to stat token file: %w", err)
+	}
+	if fileInfo.Mode().Perm() != 0600 {
+		// Attempt to fix permissions
+		if err := os.Chmod(tokenFile, 0600); err != nil {
+			return fmt.Errorf("insecure token file permissions %o and failed to fix: %w", fileInfo.Mode().Perm(), err)
+		}
+		log.Printf("Fixed insecure token file permissions from %o to 0600", fileInfo.Mode().Perm())
+	}
+
+	// Log with hashed email to prevent PII leakage
+	log.Printf("Saved OAuth token for account hash: %s", hashEmail(account))
 	return nil
 }
 
@@ -156,6 +203,20 @@ func GetTokenSourceForAccount(ctx context.Context, account string) (oauth2.Token
 	conf := getOAuthConfig()
 	tokenFile := getTokenFilePath(account)
 
+	// Verify file permissions before reading
+	fileInfo, err := os.Stat(tokenFile)
+	if err != nil {
+		return nil, fmt.Errorf("no valid Google OAuth token found for account %s", account)
+	}
+	if fileInfo.Mode().Perm() != 0600 {
+		log.Printf("Warning: Token file has insecure permissions %o (expected 0600) for account hash %s", fileInfo.Mode().Perm(), hashEmail(account))
+		// Attempt to fix permissions
+		if err := os.Chmod(tokenFile, 0600); err != nil {
+			return nil, fmt.Errorf("token file has insecure permissions %o and cannot be fixed: %w", fileInfo.Mode().Perm(), err)
+		}
+		log.Printf("Fixed token file permissions to 0600 for account hash %s", hashEmail(account))
+	}
+
 	slurp, err := os.ReadFile(tokenFile)
 	if err != nil {
 		return nil, fmt.Errorf("no valid Google OAuth token found for account %s", account)
@@ -175,7 +236,7 @@ func GetTokenSourceForAccount(ctx context.Context, account string) (oauth2.Token
 
 	// Validate the token
 	if _, err := ts.Token(); err != nil {
-		log.Printf("Cached token invalid for account %s: %v", account, err)
+		log.Printf("Cached token invalid for account hash %s: %v", hashEmail(account), err)
 		return nil, fmt.Errorf("cached token is invalid for account %s: %w", account, err)
 	}
 

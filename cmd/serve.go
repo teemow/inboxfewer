@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
@@ -30,6 +31,7 @@ type OAuthSecurityConfig struct {
 	RegistrationAccessToken       string
 	AllowInsecureAuthWithoutState bool
 	MaxClientsPerIP               int
+	EncryptionKey                 []byte
 }
 
 func newServeCmd() *cobra.Command {
@@ -47,6 +49,7 @@ func newServeCmd() *cobra.Command {
 		registrationAccessToken       string
 		allowInsecureAuthWithoutState bool
 		maxClientsPerIP               int
+		encryptionKey                 string
 	)
 
 	cmd := &cobra.Command{
@@ -73,11 +76,25 @@ OAuth Configuration (HTTP only):
     OR GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars
     Without these, users will need to re-authenticate when tokens expire (~1 hour).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Parse encryption key from base64 if provided
+			var encKeyBytes []byte
+			if encryptionKey != "" {
+				decoded, err := base64.StdEncoding.DecodeString(encryptionKey)
+				if err != nil {
+					return fmt.Errorf("invalid encryption key (must be base64 encoded): %w", err)
+				}
+				if len(decoded) != 32 {
+					return fmt.Errorf("encryption key must be exactly 32 bytes (got %d bytes)", len(decoded))
+				}
+				encKeyBytes = decoded
+			}
+
 			securityConfig := OAuthSecurityConfig{
 				AllowPublicClientRegistration: allowPublicClientRegistration,
 				RegistrationAccessToken:       registrationAccessToken,
 				AllowInsecureAuthWithoutState: allowInsecureAuthWithoutState,
 				MaxClientsPerIP:               maxClientsPerIP,
+				EncryptionKey:                 encKeyBytes,
 			}
 			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL, securityConfig)
 		},
@@ -95,6 +112,7 @@ OAuth Configuration (HTTP only):
 	// OAuth Security Settings (HTTP transport only)
 	cmd.Flags().BoolVar(&allowPublicClientRegistration, "oauth-allow-public-registration", false, "WARNING: Allow unauthenticated client registration (NOT recommended for production). Can also use MCP_OAUTH_ALLOW_PUBLIC_REGISTRATION env var. Default: false (secure)")
 	cmd.Flags().StringVar(&registrationAccessToken, "oauth-registration-token", "", "Registration access token required for client registration when public registration is disabled. Can also use MCP_OAUTH_REGISTRATION_TOKEN env var.")
+	cmd.Flags().StringVar(&encryptionKey, "oauth-encryption-key", "", "AES-256 encryption key for token storage at rest (32 bytes, base64 encoded). REQUIRED for production. Can also use MCP_OAUTH_ENCRYPTION_KEY env var. Generate with: openssl rand -base64 32")
 	cmd.Flags().BoolVar(&allowInsecureAuthWithoutState, "oauth-allow-no-state", false, "WARNING: Allow authorization without state parameter (weakens CSRF protection). Can also use MCP_OAUTH_ALLOW_NO_STATE env var. Default: false (secure)")
 	cmd.Flags().IntVar(&maxClientsPerIP, "oauth-max-clients-per-ip", 10, "Maximum number of clients that can be registered per IP address (prevents DoS). Can also use MCP_OAUTH_MAX_CLIENTS_PER_IP env var. Default: 10")
 
@@ -133,6 +151,18 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	}
 	if securityConfig.RegistrationAccessToken == "" {
 		securityConfig.RegistrationAccessToken = os.Getenv("MCP_OAUTH_REGISTRATION_TOKEN")
+	}
+	if len(securityConfig.EncryptionKey) == 0 {
+		if encKeyStr := os.Getenv("MCP_OAUTH_ENCRYPTION_KEY"); encKeyStr != "" {
+			decoded, err := base64.StdEncoding.DecodeString(encKeyStr)
+			if err != nil {
+				log.Printf("Warning: Invalid encryption key in MCP_OAUTH_ENCRYPTION_KEY (must be base64): %v", err)
+			} else if len(decoded) != 32 {
+				log.Printf("Warning: Invalid encryption key length in MCP_OAUTH_ENCRYPTION_KEY (must be 32 bytes, got %d)", len(decoded))
+			} else {
+				securityConfig.EncryptionKey = decoded
+			}
+		}
 	}
 	if !securityConfig.AllowInsecureAuthWithoutState && os.Getenv("MCP_OAUTH_ALLOW_NO_STATE") == "true" {
 		securityConfig.AllowInsecureAuthWithoutState = true
@@ -311,6 +341,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		RegistrationAccessToken:       securityConfig.RegistrationAccessToken,
 		AllowInsecureAuthWithoutState: securityConfig.AllowInsecureAuthWithoutState,
 		MaxClientsPerIP:               securityConfig.MaxClientsPerIP,
+		EncryptionKey:                 securityConfig.EncryptionKey,
 	}
 
 	oauthHandler, err := server.CreateOAuthHandler(oauthConfig)
