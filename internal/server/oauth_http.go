@@ -27,8 +27,8 @@ type OAuthConfig struct {
 	MaxClientsPerIP               int    // Default: 10 (prevents DoS)
 }
 
-// OAuthHTTPServerLibrary wraps an MCP server with OAuth 2.1 authentication using the mcp-oauth library
-type OAuthHTTPServerLibrary struct {
+// OAuthHTTPServer wraps an MCP server with OAuth 2.1 authentication
+type OAuthHTTPServer struct {
 	mcpServer        *mcpserver.MCPServer
 	oauthHandler     *oauth.Handler
 	httpServer       *http.Server
@@ -36,9 +36,9 @@ type OAuthHTTPServerLibrary struct {
 	disableStreaming bool
 }
 
-// buildOAuthLibraryConfig converts OAuthConfig to oauth.Config
-// This eliminates code duplication between NewOAuthHTTPServerLibrary and CreateOAuthHandlerLibrary
-func buildOAuthLibraryConfig(config OAuthConfig) *oauth.Config {
+// buildOAuthConfig converts OAuthConfig to oauth.Config
+// This eliminates code duplication between NewOAuthHTTPServer and CreateOAuthHandler
+func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 	return &oauth.Config{
 		BaseURL:            config.BaseURL,
 		GoogleClientID:     config.GoogleClientID,
@@ -59,14 +59,14 @@ func buildOAuthLibraryConfig(config OAuthConfig) *oauth.Config {
 	}
 }
 
-// NewOAuthHTTPServerLibrary creates a new OAuth-enabled HTTP server using the mcp-oauth library
-func NewOAuthHTTPServerLibrary(mcpServer *mcpserver.MCPServer, serverType string, config OAuthConfig) (*OAuthHTTPServerLibrary, error) {
-	oauthHandler, err := oauth.NewHandler(buildOAuthLibraryConfig(config))
+// NewOAuthHTTPServer creates a new OAuth-enabled HTTP server
+func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, config OAuthConfig) (*OAuthHTTPServer, error) {
+	oauthHandler, err := oauth.NewHandler(buildOAuthConfig(config))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OAuth handler: %w", err)
 	}
 
-	return &OAuthHTTPServerLibrary{
+	return &OAuthHTTPServer{
 		mcpServer:        mcpServer,
 		oauthHandler:     oauthHandler,
 		serverType:       serverType,
@@ -74,15 +74,15 @@ func NewOAuthHTTPServerLibrary(mcpServer *mcpserver.MCPServer, serverType string
 	}, nil
 }
 
-// CreateOAuthHandlerLibrary creates an OAuth handler using the library for use with HTTP transport
+// CreateOAuthHandler creates an OAuth handler for use with HTTP transport
 // This allows creating the handler before the server to inject the token provider
-func CreateOAuthHandlerLibrary(config OAuthConfig) (*oauth.Handler, error) {
-	return oauth.NewHandler(buildOAuthLibraryConfig(config))
+func CreateOAuthHandler(config OAuthConfig) (*oauth.Handler, error) {
+	return oauth.NewHandler(buildOAuthConfig(config))
 }
 
-// NewOAuthHTTPServerLibraryWithHandler creates a new OAuth-enabled HTTP server with an existing handler
-func NewOAuthHTTPServerLibraryWithHandler(mcpServer *mcpserver.MCPServer, serverType string, oauthHandler *oauth.Handler, disableStreaming bool) (*OAuthHTTPServerLibrary, error) {
-	return &OAuthHTTPServerLibrary{
+// NewOAuthHTTPServerWithHandler creates a new OAuth-enabled HTTP server with an existing handler
+func NewOAuthHTTPServerWithHandler(mcpServer *mcpserver.MCPServer, serverType string, oauthHandler *oauth.Handler, disableStreaming bool) (*OAuthHTTPServer, error) {
+	return &OAuthHTTPServer{
 		mcpServer:        mcpServer,
 		oauthHandler:     oauthHandler,
 		serverType:       serverType,
@@ -91,7 +91,7 @@ func NewOAuthHTTPServerLibraryWithHandler(mcpServer *mcpserver.MCPServer, server
 }
 
 // Start starts the OAuth-enabled HTTP server
-func (s *OAuthHTTPServerLibrary) Start(addr string) error {
+func (s *OAuthHTTPServer) Start(addr string) error {
 	// Validate HTTPS requirement for OAuth 2.1
 	baseURL := s.oauthHandler.GetServer().Config.Issuer
 	if err := validateHTTPSRequirement(baseURL); err != nil {
@@ -100,7 +100,7 @@ func (s *OAuthHTTPServerLibrary) Start(addr string) error {
 
 	mux := http.NewServeMux()
 
-	// Get the library's HTTP handler
+	// Get the OAuth HTTP handler
 	libHandler := s.oauthHandler.GetHandler()
 
 	// ========== OAuth 2.1 Endpoints ==========
@@ -126,7 +126,7 @@ func (s *OAuthHTTPServerLibrary) Start(addr string) error {
 	// Token Revocation endpoint (RFC 7009)
 	mux.HandleFunc("/oauth/revoke", libHandler.ServeTokenRevocation)
 
-	// Token Introspection endpoint (RFC 7662) - new feature from library
+	// Token Introspection endpoint (RFC 7662)
 	mux.HandleFunc("/oauth/introspect", libHandler.ServeTokenIntrospection)
 
 	// ========== MCP Endpoints ==========
@@ -171,7 +171,7 @@ func (s *OAuthHTTPServerLibrary) Start(addr string) error {
 }
 
 // Shutdown gracefully shuts down the server
-func (s *OAuthHTTPServerLibrary) Shutdown(ctx context.Context) error {
+func (s *OAuthHTTPServer) Shutdown(ctx context.Context) error {
 	// Stop the OAuth handler's background services
 	if s.oauthHandler != nil {
 		s.oauthHandler.Stop()
@@ -185,7 +185,7 @@ func (s *OAuthHTTPServerLibrary) Shutdown(ctx context.Context) error {
 }
 
 // GetOAuthHandler returns the OAuth handler for testing or direct access
-func (s *OAuthHTTPServerLibrary) GetOAuthHandler() *oauth.Handler {
+func (s *OAuthHTTPServer) GetOAuthHandler() *oauth.Handler {
 	return s.oauthHandler
 }
 
