@@ -13,7 +13,7 @@ import (
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
-	"github.com/teemow/inboxfewer/internal/mcp/oauth_library"
+	"github.com/teemow/inboxfewer/internal/mcp/oauth"
 	"github.com/teemow/inboxfewer/internal/resources"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/calendar_tools"
@@ -320,7 +320,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	defer oauthHandler.Stop() // Ensure cleanup
 
 	// Create token provider from OAuth library store
-	tokenProvider := oauth_library.NewTokenProvider(oauthHandler.GetStore())
+	tokenProvider := oauth.NewTokenProvider(oauthHandler.GetStore())
 
 	// Recreate server context with OAuth token provider
 	// This ensures Google API clients use tokens from OAuth authentication

@@ -1,4 +1,4 @@
-package oauth_library
+package oauth
 
 import (
 	"context"

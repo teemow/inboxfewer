@@ -9,7 +9,7 @@ import (
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
-	"github.com/teemow/inboxfewer/internal/mcp/oauth_library"
+	"github.com/teemow/inboxfewer/internal/mcp/oauth"
 )
 
 // OAuthConfig holds configuration for OAuth server creation
@@ -20,7 +20,7 @@ type OAuthConfig struct {
 	DisableStreaming   bool
 
 	// Security Settings (secure by default)
-	// See oauth_library.Config for detailed documentation
+	// See oauth.Config for detailed documentation
 	AllowPublicClientRegistration bool   // Default: false (requires registration token)
 	RegistrationAccessToken       string // Required if AllowPublicClientRegistration=false
 	AllowInsecureAuthWithoutState bool   // Default: false (state parameter required)
@@ -30,27 +30,27 @@ type OAuthConfig struct {
 // OAuthHTTPServerLibrary wraps an MCP server with OAuth 2.1 authentication using the mcp-oauth library
 type OAuthHTTPServerLibrary struct {
 	mcpServer        *mcpserver.MCPServer
-	oauthHandler     *oauth_library.Handler
+	oauthHandler     *oauth.Handler
 	httpServer       *http.Server
 	serverType       string // "streamable-http"
 	disableStreaming bool
 }
 
-// buildOAuthLibraryConfig converts OAuthConfig to oauth_library.Config
+// buildOAuthLibraryConfig converts OAuthConfig to oauth.Config
 // This eliminates code duplication between NewOAuthHTTPServerLibrary and CreateOAuthHandlerLibrary
-func buildOAuthLibraryConfig(config OAuthConfig) *oauth_library.Config {
-	return &oauth_library.Config{
+func buildOAuthLibraryConfig(config OAuthConfig) *oauth.Config {
+	return &oauth.Config{
 		BaseURL:            config.BaseURL,
 		GoogleClientID:     config.GoogleClientID,
 		GoogleClientSecret: config.GoogleClientSecret,
-		Security: oauth_library.SecurityConfig{
+		Security: oauth.SecurityConfig{
 			AllowPublicClientRegistration: config.AllowPublicClientRegistration,
 			RegistrationAccessToken:       config.RegistrationAccessToken,
 			AllowInsecureAuthWithoutState: config.AllowInsecureAuthWithoutState,
 			MaxClientsPerIP:               config.MaxClientsPerIP,
 			EnableAuditLogging:            true, // Always enable audit logging
 		},
-		RateLimit: oauth_library.RateLimitConfig{
+		RateLimit: oauth.RateLimitConfig{
 			Rate:      10,  // 10 req/sec per IP
 			Burst:     20,  // Allow burst of 20
 			UserRate:  100, // 100 req/sec per authenticated user
@@ -61,7 +61,7 @@ func buildOAuthLibraryConfig(config OAuthConfig) *oauth_library.Config {
 
 // NewOAuthHTTPServerLibrary creates a new OAuth-enabled HTTP server using the mcp-oauth library
 func NewOAuthHTTPServerLibrary(mcpServer *mcpserver.MCPServer, serverType string, config OAuthConfig) (*OAuthHTTPServerLibrary, error) {
-	oauthHandler, err := oauth_library.NewHandler(buildOAuthLibraryConfig(config))
+	oauthHandler, err := oauth.NewHandler(buildOAuthLibraryConfig(config))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OAuth handler: %w", err)
 	}
@@ -76,12 +76,12 @@ func NewOAuthHTTPServerLibrary(mcpServer *mcpserver.MCPServer, serverType string
 
 // CreateOAuthHandlerLibrary creates an OAuth handler using the library for use with HTTP transport
 // This allows creating the handler before the server to inject the token provider
-func CreateOAuthHandlerLibrary(config OAuthConfig) (*oauth_library.Handler, error) {
-	return oauth_library.NewHandler(buildOAuthLibraryConfig(config))
+func CreateOAuthHandlerLibrary(config OAuthConfig) (*oauth.Handler, error) {
+	return oauth.NewHandler(buildOAuthLibraryConfig(config))
 }
 
 // NewOAuthHTTPServerLibraryWithHandler creates a new OAuth-enabled HTTP server with an existing handler
-func NewOAuthHTTPServerLibraryWithHandler(mcpServer *mcpserver.MCPServer, serverType string, oauthHandler *oauth_library.Handler, disableStreaming bool) (*OAuthHTTPServerLibrary, error) {
+func NewOAuthHTTPServerLibraryWithHandler(mcpServer *mcpserver.MCPServer, serverType string, oauthHandler *oauth.Handler, disableStreaming bool) (*OAuthHTTPServerLibrary, error) {
 	return &OAuthHTTPServerLibrary{
 		mcpServer:        mcpServer,
 		oauthHandler:     oauthHandler,
@@ -185,7 +185,7 @@ func (s *OAuthHTTPServerLibrary) Shutdown(ctx context.Context) error {
 }
 
 // GetOAuthHandler returns the OAuth handler for testing or direct access
-func (s *OAuthHTTPServerLibrary) GetOAuthHandler() *oauth_library.Handler {
+func (s *OAuthHTTPServerLibrary) GetOAuthHandler() *oauth.Handler {
 	return s.oauthHandler
 }
 
