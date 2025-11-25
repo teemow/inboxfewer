@@ -13,6 +13,12 @@ import (
 	inboxgoogle "github.com/teemow/inboxfewer/internal/google"
 )
 
+const (
+	// defaultBurstMultiplier is the default multiplier for burst size relative to rate
+	// Burst = Rate * defaultBurstMultiplier
+	defaultBurstMultiplier = 2
+)
+
 // Config holds the OAuth library handler configuration
 // This maps our existing configuration to the mcp-oauth library configuration
 type Config struct {
@@ -188,7 +194,7 @@ func NewHandler(config *Config) (*Handler, error) {
 	if config.RateLimit.Rate > 0 {
 		burst := config.RateLimit.Burst
 		if burst == 0 {
-			burst = config.RateLimit.Rate * 2 // Default burst is 2x rate
+			burst = config.RateLimit.Rate * defaultBurstMultiplier
 		}
 		ipRateLimiter = security.NewRateLimiter(config.RateLimit.Rate, burst, logger)
 		server.SetRateLimiter(ipRateLimiter)
@@ -202,7 +208,7 @@ func NewHandler(config *Config) (*Handler, error) {
 	if config.RateLimit.UserRate > 0 {
 		burst := config.RateLimit.UserBurst
 		if burst == 0 {
-			burst = config.RateLimit.UserRate * 2 // Default burst is 2x rate
+			burst = config.RateLimit.UserRate * defaultBurstMultiplier
 		}
 		userRateLimiter = security.NewRateLimiter(config.RateLimit.UserRate, burst, logger)
 		server.SetUserRateLimiter(userRateLimiter)
