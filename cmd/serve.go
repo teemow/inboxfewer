@@ -344,6 +344,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		GoogleClientID:                googleClientID,
 		GoogleClientSecret:            googleClientSecret,
 		DisableStreaming:              disableStreaming,
+		DebugMode:                     debugMode,
 		AllowPublicClientRegistration: securityConfig.AllowPublicClientRegistration,
 		RegistrationAccessToken:       securityConfig.RegistrationAccessToken,
 		AllowInsecureAuthWithoutState: securityConfig.AllowInsecureAuthWithoutState,

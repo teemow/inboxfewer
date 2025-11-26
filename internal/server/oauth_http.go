@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +21,7 @@ type OAuthConfig struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	DisableStreaming   bool
+	DebugMode          bool // Enable debug logging
 
 	// Security Settings (secure by default)
 	// See oauth.Config for detailed documentation
@@ -42,10 +44,24 @@ type OAuthHTTPServer struct {
 // buildOAuthConfig converts OAuthConfig to oauth.Config
 // This eliminates code duplication between NewOAuthHTTPServer and CreateOAuthHandler
 func buildOAuthConfig(config OAuthConfig) *oauth.Config {
+	// Create logger with appropriate level
+	var logger *slog.Logger
+	if config.DebugMode {
+		// Debug level logging
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}))
+		logger.Debug("Debug logging enabled for OAuth handler")
+	} else {
+		// Info level logging (default)
+		logger = slog.Default()
+	}
+
 	return &oauth.Config{
 		BaseURL:            config.BaseURL,
 		GoogleClientID:     config.GoogleClientID,
 		GoogleClientSecret: config.GoogleClientSecret,
+		Logger:             logger,
 		Security: oauth.SecurityConfig{
 			AllowPublicClientRegistration: config.AllowPublicClientRegistration,
 			RegistrationAccessToken:       config.RegistrationAccessToken,
