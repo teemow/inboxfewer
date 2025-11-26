@@ -5,8 +5,8 @@
 // providing token provider integration and configuration mapping.
 //
 // Dependency Security Note:
-// This package depends on github.com/giantswarm/mcp-oauth v0.1.26 for OAuth 2.1 implementation.
+// This package depends on github.com/giantswarm/mcp-oauth v0.1.27 for OAuth 2.1 implementation.
 // The library provides: PKCE enforcement, refresh token rotation, rate limiting, and audit logging.
 // Security posture: Actively maintained, implements OAuth 2.1 specification.
-// Action required: Monitor https://github.com/giantswarm/mcp-oauth for security updates.
+// Recent updates: v0.1.27 adds registration_endpoint to authorization server metadata (RFC 8414).
 package oauth
