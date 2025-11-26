@@ -3,6 +3,7 @@ package tasks_tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -32,7 +33,7 @@ func getTasksClient(ctx context.Context, account string, sc *server.ServerContex
 		// Check if token exists before trying to create client
 		if !tasks.HasTokenForAccount(account) {
 			errorMsg := google.GetAuthenticationErrorMessage(account)
-			return nil, fmt.Errorf("%s", errorMsg)
+			return nil, errors.New(errorMsg)
 		}
 
 		var err error

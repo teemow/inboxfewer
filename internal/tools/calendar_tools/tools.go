@@ -2,6 +2,7 @@ package calendar_tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -27,7 +28,7 @@ func getCalendarClient(ctx context.Context, account string, sc *server.ServerCon
 		// Check if token exists before trying to create client
 		if !calendar.HasTokenForAccount(account) {
 			errorMsg := google.GetAuthenticationErrorMessage(account)
-			return nil, fmt.Errorf("%s", errorMsg)
+			return nil, errors.New(errorMsg)
 		}
 
 		var err error

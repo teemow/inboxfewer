@@ -16,10 +16,6 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	calendar "google.golang.org/api/calendar/v3"
-	gmail "google.golang.org/api/gmail/v1"
-	meet "google.golang.org/api/meet/v2"
-	tasks "google.golang.org/api/tasks/v1"
 )
 
 // hashEmail creates a hash of an email for logging purposes
@@ -187,19 +183,7 @@ func getOAuthConfig() *oauth2.Config {
 		ClientSecret: clientSecret,
 		Endpoint:     google.Endpoint,
 		RedirectURL:  OOB,
-		Scopes: []string{
-			gmail.MailGoogleComScope,                                  // Gmail access (includes send)
-			gmail.GmailSettingsBasicScope,                             // Gmail settings (filters, labels, etc.)
-			"https://www.googleapis.com/auth/documents.readonly",      // Google Docs access
-			"https://www.googleapis.com/auth/drive",                   // Google Drive access (read/write)
-			"https://www.googleapis.com/auth/contacts.readonly",       // Google Contacts access
-			"https://www.googleapis.com/auth/contacts.other.readonly", // Other contacts (interaction history)
-			"https://www.googleapis.com/auth/directory.readonly",      // Directory contacts (Workspace)
-			calendar.CalendarScope,                                    // Google Calendar access (read/write)
-			meet.MeetingsSpaceReadonlyScope,                           // Google Meet access (read-only artifacts)
-			"https://www.googleapis.com/auth/meetings.space.settings", // Google Meet settings (configure spaces)
-			tasks.TasksScope,                                          // Google Tasks access (read/write)
-		},
+		Scopes:       DefaultOAuthScopes,
 	}
 }
 
@@ -277,13 +261,7 @@ func GetHTTPClientForAccount(ctx context.Context, account string) (*http.Client,
 	}
 
 	client := oauth2.NewClient(ctx, ts)
-
-	// Force HTTP/1.1 by disabling HTTP/2
-	transport := client.Transport.(*oauth2.Transport)
-	baseTransport := &http.Transport{
-		ForceAttemptHTTP2: false,
-	}
-	transport.Base = baseTransport
+	ForceHTTP11(client)
 
 	return client, nil
 }
@@ -317,4 +295,18 @@ func homeDir() string {
 		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 	}
 	return os.Getenv("HOME")
+}
+
+// ForceHTTP11 configures an HTTP client to use HTTP/1.1 instead of HTTP/2.
+// This is needed because some Google APIs have issues with HTTP/2.
+// If the client's transport is not an *oauth2.Transport, this is a no-op.
+func ForceHTTP11(client *http.Client) {
+	if client == nil || client.Transport == nil {
+		return
+	}
+	if transport, ok := client.Transport.(*oauth2.Transport); ok {
+		transport.Base = &http.Transport{
+			ForceAttemptHTTP2: false,
+		}
+	}
 }

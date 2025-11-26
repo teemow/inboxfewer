@@ -3,7 +3,8 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"errors"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -26,20 +27,31 @@ type SessionIDManager struct {
 	cleanupTicker  *time.Ticker
 	cleanupDone    chan bool
 	sessionTimeout time.Duration
+	logger         *slog.Logger
 }
 
-// NewSessionIDManager creates a new session ID manager
+// NewSessionIDManager creates a new session ID manager with default logger
 func NewSessionIDManager() *SessionIDManager {
-	return NewSessionIDManagerWithTimeout(24 * time.Hour)
+	return NewSessionIDManagerWithLogger(24*time.Hour, slog.Default())
 }
 
 // NewSessionIDManagerWithTimeout creates a new session ID manager with custom timeout
 func NewSessionIDManagerWithTimeout(timeout time.Duration) *SessionIDManager {
+	return NewSessionIDManagerWithLogger(timeout, slog.Default())
+}
+
+// NewSessionIDManagerWithLogger creates a new session ID manager with custom timeout and logger
+func NewSessionIDManagerWithLogger(timeout time.Duration, logger *slog.Logger) *SessionIDManager {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	m := &SessionIDManager{
 		sessions:       make(map[string]*sessionInfo),
 		cleanupTicker:  time.NewTicker(10 * time.Minute),
 		cleanupDone:    make(chan bool),
 		sessionTimeout: timeout,
+		logger:         logger,
 	}
 
 	// Start cleanup goroutine
@@ -48,6 +60,9 @@ func NewSessionIDManagerWithTimeout(timeout time.Duration) *SessionIDManager {
 	return m
 }
 
+// ErrNoAuthorizationHeader is returned when no Authorization header is provided
+var ErrNoAuthorizationHeader = errors.New("no authorization header provided")
+
 // ResolveSessionID resolves the session ID from an HTTP request
 // This implementation uses the Authorization header (Bearer token) to determine
 // which session (account) the request belongs to
@@ -55,7 +70,7 @@ func (m *SessionIDManager) ResolveSessionID(r *http.Request) (string, error) {
 	// Extract the Bearer token from the Authorization header
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		return "", fmt.Errorf("no authorization header provided")
+		return "", ErrNoAuthorizationHeader
 	}
 
 	// The token uniquely identifies the user/account
@@ -137,8 +152,7 @@ func (m *SessionIDManager) cleanupExpiredSessions() {
 			}
 			m.mu.Unlock()
 			if expiredCount > 0 {
-				// Log cleanup without PII
-				fmt.Printf("Cleaned up %d expired sessions\n", expiredCount)
+				m.logger.Info("Cleaned up expired sessions", "count", expiredCount)
 			}
 		case <-m.cleanupDone:
 			return

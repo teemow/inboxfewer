@@ -3,6 +3,7 @@ package oauth
 import (
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	oauth "github.com/giantswarm/mcp-oauth"
@@ -106,7 +107,7 @@ type Handler struct {
 	ipRateLimiter   *security.RateLimiter
 	userRateLimiter *security.RateLimiter
 	clientRegRL     *security.ClientRegistrationRateLimiter
-	stopped         bool // Track whether Stop has been called
+	stopOnce        sync.Once // Ensures Stop() is truly idempotent even under concurrent calls
 }
 
 // NewHandler creates a new OAuth handler using the mcp-oauth library
@@ -257,23 +258,20 @@ func (h *Handler) CanRefreshTokens() bool {
 }
 
 // Stop gracefully stops all background services (rate limiters, storage cleanup, etc.)
-// This method is idempotent and can be safely called multiple times.
+// This method is idempotent and safe to call concurrently from multiple goroutines.
 func (h *Handler) Stop() {
-	if h.stopped {
-		return // Already stopped
-	}
-	h.stopped = true
-
-	if h.store != nil {
-		h.store.Stop()
-	}
-	if h.ipRateLimiter != nil {
-		h.ipRateLimiter.Stop()
-	}
-	if h.userRateLimiter != nil {
-		h.userRateLimiter.Stop()
-	}
-	if h.clientRegRL != nil {
-		h.clientRegRL.Stop()
-	}
+	h.stopOnce.Do(func() {
+		if h.store != nil {
+			h.store.Stop()
+		}
+		if h.ipRateLimiter != nil {
+			h.ipRateLimiter.Stop()
+		}
+		if h.userRateLimiter != nil {
+			h.userRateLimiter.Stop()
+		}
+		if h.clientRegRL != nil {
+			h.clientRegRL.Stop()
+		}
+	})
 }

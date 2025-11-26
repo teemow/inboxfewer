@@ -2,6 +2,7 @@ package meet_tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -29,7 +30,7 @@ func getMeetClient(ctx context.Context, account string, sc *server.ServerContext
 		// Check if token exists before trying to create client
 		if !meet.HasTokenForAccount(account) {
 			errorMsg := google.GetAuthenticationErrorMessage(account)
-			return nil, fmt.Errorf("%s", errorMsg)
+			return nil, errors.New(errorMsg)
 		}
 
 		var err error

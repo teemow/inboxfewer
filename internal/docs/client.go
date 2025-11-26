@@ -3,7 +3,6 @@ package docs
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"golang.org/x/oauth2"
 	docs "google.golang.org/api/docs/v1"
@@ -64,13 +63,7 @@ func NewClientForAccountWithProvider(ctx context.Context, account string, tokenP
 
 	// Create HTTP client with the token
 	client := oauth2.NewClient(ctx, tokenSource)
-
-	// Force HTTP/1.1 by disabling HTTP/2
-	transport := client.Transport.(*oauth2.Transport)
-	baseTransport := &http.Transport{
-		ForceAttemptHTTP2: false,
-	}
-	transport.Base = baseTransport
+	google.ForceHTTP11(client)
 
 	// Create Docs service
 	docsService, err := docs.NewService(ctx, option.WithHTTPClient(client))

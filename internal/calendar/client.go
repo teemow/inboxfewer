@@ -3,7 +3,6 @@ package calendar
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -66,13 +65,7 @@ func NewClientForAccountWithProvider(ctx context.Context, account string, tokenP
 
 	// Create HTTP client with the token
 	client := oauth2.NewClient(ctx, tokenSource)
-
-	// Force HTTP/1.1 by disabling HTTP/2
-	transport := client.Transport.(*oauth2.Transport)
-	baseTransport := &http.Transport{
-		ForceAttemptHTTP2: false,
-	}
-	transport.Base = baseTransport
+	google.ForceHTTP11(client)
 
 	svc, err := calendar.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
