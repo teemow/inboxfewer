@@ -3,7 +3,7 @@ module github.com/teemow/inboxfewer
 go 1.25.4
 
 require (
-	github.com/giantswarm/mcp-oauth v0.1.33
+	github.com/giantswarm/mcp-oauth v0.1.37
 	github.com/mark3labs/mcp-go v0.43.0
 	github.com/spf13/cobra v1.10.1
 	github.com/stretchr/testify v1.11.1
@@ -59,6 +59,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
