@@ -165,11 +165,26 @@ func SaveTokenForAccount(ctx context.Context, account string, token *oauth2.Toke
 }
 
 // getOAuthConfig returns the OAuth2 configuration for all Google services (internal use)
+// Credentials are read from environment variables for security
 func getOAuthConfig() *oauth2.Config {
 	const OOB = "urn:ietf:wg:oauth:2.0:oob"
+
+	// Get credentials from environment variables
+	// These are required for STDIO transport token refresh
+	clientID := os.Getenv("GOOGLE_STDIO_CLIENT_ID")
+	clientSecret := os.Getenv("GOOGLE_STDIO_CLIENT_SECRET")
+
+	// Fall back to GOOGLE_CLIENT_ID/SECRET if STDIO-specific vars not set
+	if clientID == "" {
+		clientID = os.Getenv("GOOGLE_CLIENT_ID")
+	}
+	if clientSecret == "" {
+		clientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
+	}
+
 	return &oauth2.Config{
-		ClientID:     "615260903473-ctldo9bte5phiu092s8ovfbe7c8aao1o.apps.googleusercontent.com",
-		ClientSecret: "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",
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
 		Endpoint:     google.Endpoint,
 		RedirectURL:  OOB,
 		Scopes: []string{
@@ -201,6 +216,10 @@ func GetTokenSourceForAccount(ctx context.Context, account string) (oauth2.Token
 	}
 
 	conf := getOAuthConfig()
+	if conf.ClientID == "" || conf.ClientSecret == "" {
+		return nil, fmt.Errorf("Google OAuth credentials not configured. Set GOOGLE_STDIO_CLIENT_ID and GOOGLE_STDIO_CLIENT_SECRET (or GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) environment variables")
+	}
+
 	tokenFile := getTokenFilePath(account)
 
 	// Verify file permissions before reading

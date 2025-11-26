@@ -66,15 +66,22 @@ Safety Mode:
   By default, the server operates in read-only mode, providing only safe operations.
   Use --yolo to enable write operations (email sending, file deletion, etc.)
 
-OAuth Configuration (HTTP only):
-  Base URL (required for deployed instances):
-    --base-url https://your-domain.com OR MCP_BASE_URL env var
-    Auto-detected for localhost (development only)
-  
-  Token Refresh (optional):
-    --google-client-id and --google-client-secret flags
-    OR GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars
-    Without these, users will need to re-authenticate when tokens expire (~1 hour).`,
+OAuth Configuration:
+  HTTP Transport:
+    Base URL (required for deployed instances):
+      --base-url https://your-domain.com OR MCP_BASE_URL env var
+      Auto-detected for localhost (development only)
+    
+    Token Refresh (required):
+      --google-client-id and --google-client-secret flags
+      OR GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars
+      Required for OAuth proxy mode and automatic token refresh
+
+  STDIO Transport:
+    Token Refresh (optional):
+      GOOGLE_STDIO_CLIENT_ID and GOOGLE_STDIO_CLIENT_SECRET env vars
+      OR GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars (fallback)
+      Without these, token refresh will fail when tokens expire (~1 hour).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Parse encryption key from base64 if provided
 			var encKeyBytes []byte
