@@ -154,6 +154,7 @@ func NewHandler(config *Config) (*Handler, error) {
 		AllowPKCEPlain:                false, // Only S256, not plain
 		AllowPublicClientRegistration: config.Security.AllowPublicClientRegistration,
 		RegistrationAccessToken:       config.Security.RegistrationAccessToken,
+		AllowNoStateParameter:         config.Security.AllowInsecureAuthWithoutState,
 		MaxClientsPerIP:               maxClientsPerIP,
 		TrustProxy:                    config.RateLimit.TrustProxy,
 		TokenRefreshThreshold:         300, // 5 minutes proactive refresh
