@@ -109,6 +109,14 @@ spec:
             value: {{ .Values.oauthSecurity.maxClientsPerIP | quote }}
           {{- end }}
           {{- if .Values.interstitial }}
+          {{- if .Values.interstitial.logoURL }}
+          - name: MCP_INTERSTITIAL_LOGO_URL
+            value: {{ .Values.interstitial.logoURL | quote }}
+          {{- end }}
+          {{- if .Values.interstitial.logoAlt }}
+          - name: MCP_INTERSTITIAL_LOGO_ALT
+            value: {{ .Values.interstitial.logoAlt | quote }}
+          {{- end }}
           {{- if .Values.interstitial.title }}
           - name: MCP_INTERSTITIAL_TITLE
             value: {{ .Values.interstitial.title | quote }}

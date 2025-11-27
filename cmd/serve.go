@@ -34,6 +34,8 @@ type OAuthSecurityConfig struct {
 	EncryptionKey                 []byte
 
 	// Interstitial page branding
+	InterstitialLogoURL            string
+	InterstitialLogoAlt            string
 	InterstitialTitle              string
 	InterstitialMessage            string
 	InterstitialButtonText         string
@@ -195,6 +197,12 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	}
 
 	// Parse interstitial page branding from environment variables
+	if logoURL := os.Getenv("MCP_INTERSTITIAL_LOGO_URL"); logoURL != "" {
+		securityConfig.InterstitialLogoURL = logoURL
+	}
+	if logoAlt := os.Getenv("MCP_INTERSTITIAL_LOGO_ALT"); logoAlt != "" {
+		securityConfig.InterstitialLogoAlt = logoAlt
+	}
 	if title := os.Getenv("MCP_INTERSTITIAL_TITLE"); title != "" {
 		securityConfig.InterstitialTitle = title
 	}
@@ -377,12 +385,16 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	}
 
 	// Configure interstitial page branding if any env vars are set
-	if securityConfig.InterstitialTitle != "" ||
+	if securityConfig.InterstitialLogoURL != "" ||
+		securityConfig.InterstitialLogoAlt != "" ||
+		securityConfig.InterstitialTitle != "" ||
 		securityConfig.InterstitialMessage != "" ||
 		securityConfig.InterstitialButtonText != "" ||
 		securityConfig.InterstitialPrimaryColor != "" ||
 		securityConfig.InterstitialBackgroundGradient != "" {
 		oauthConfig.Interstitial = &oauth.InterstitialConfig{
+			LogoURL:            securityConfig.InterstitialLogoURL,
+			LogoAlt:            securityConfig.InterstitialLogoAlt,
 			Title:              securityConfig.InterstitialTitle,
 			Message:            securityConfig.InterstitialMessage,
 			ButtonText:         securityConfig.InterstitialButtonText,

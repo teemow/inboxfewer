@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="inboxfewer.png" alt="inboxfewer logo" width="256">
+</p>
+
 # NAME
 
 inboxfewer - Archive Gmail threads for closed GitHub issues and provide MCP server for AI assistants

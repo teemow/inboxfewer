@@ -185,6 +185,12 @@ oauthSecurity:
 # Customize the success page shown after OAuth authentication for custom URL schemes
 # (cursor://, vscode://, etc.). If not set, uses the mcp-oauth default styling.
 interstitial:
+  # Logo URL displayed on the success page (must be HTTPS)
+  # Example: "https://raw.githubusercontent.com/teemow/inboxfewer/main/assets/logo/inboxfewer-512.png"
+  logoURL: ""
+  # Alt text for the logo image (for accessibility)
+  # Example: "inboxfewer logo"
+  logoAlt: ""
   # Title displayed on the success page
   # Example: "Connected to Inboxfewer"
   title: ""
