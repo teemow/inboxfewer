@@ -108,6 +108,28 @@ spec:
           - name: MCP_OAUTH_MAX_CLIENTS_PER_IP
             value: {{ .Values.oauthSecurity.maxClientsPerIP | quote }}
           {{- end }}
+          {{- if .Values.interstitial }}
+          {{- if .Values.interstitial.title }}
+          - name: MCP_INTERSTITIAL_TITLE
+            value: {{ .Values.interstitial.title | quote }}
+          {{- end }}
+          {{- if .Values.interstitial.message }}
+          - name: MCP_INTERSTITIAL_MESSAGE
+            value: {{ .Values.interstitial.message | quote }}
+          {{- end }}
+          {{- if .Values.interstitial.buttonText }}
+          - name: MCP_INTERSTITIAL_BUTTON_TEXT
+            value: {{ .Values.interstitial.buttonText | quote }}
+          {{- end }}
+          {{- if .Values.interstitial.primaryColor }}
+          - name: MCP_INTERSTITIAL_PRIMARY_COLOR
+            value: {{ .Values.interstitial.primaryColor | quote }}
+          {{- end }}
+          {{- if .Values.interstitial.backgroundGradient }}
+          - name: MCP_INTERSTITIAL_BACKGROUND_GRADIENT
+            value: {{ .Values.interstitial.backgroundGradient | quote }}
+          {{- end }}
+          {{- end }}
         {{- end }}
         ports:
           - name: http

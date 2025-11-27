@@ -181,6 +181,28 @@ oauthSecurity:
   # Default: 10
   maxClientsPerIP: 10
 
+# OAuth Interstitial Page Branding
+# Customize the success page shown after OAuth authentication for custom URL schemes
+# (cursor://, vscode://, etc.). If not set, uses the mcp-oauth default styling.
+interstitial:
+  # Title displayed on the success page
+  # Example: "Connected to Inboxfewer"
+  title: ""
+  # Message shown below the title
+  # Use {{.AppName}} placeholder for the app name
+  # Example: "You have been authenticated with {{.AppName}}. You can now close this window."
+  message: ""
+  # Button text for manual redirect
+  # Use {{.AppName}} placeholder for the app name
+  # Example: "Return to {{.AppName}}"
+  buttonText: ""
+  # Primary/accent color for buttons (CSS color value)
+  # Example: "#667eea"
+  primaryColor: ""
+  # Background gradient CSS value
+  # Example: "linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)"
+  backgroundGradient: ""
+
 # Existing secret containing Google OAuth credentials
 # Keys should be: google-client-id, google-client-secret
 # Optionally: oauth-registration-token, oauth-encryption-key
