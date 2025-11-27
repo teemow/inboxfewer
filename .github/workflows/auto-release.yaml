@@ -75,16 +75,9 @@ jobs:
       - name: Create Tag
         run: |
           NEXT_VERSION="${{ steps.version.outputs.next_version }}"
-          # Check if tag already exists (locally or remotely)
-          if git rev-parse "$NEXT_VERSION" >/dev/null 2>&1; then
-            echo "Tag $NEXT_VERSION already exists locally, skipping tag creation"
-          elif git ls-remote --tags origin | grep -q "refs/tags/$NEXT_VERSION$"; then
-            echo "Tag $NEXT_VERSION already exists on remote, skipping tag creation"
-          else
-            git tag "$NEXT_VERSION"
-            git push origin "$NEXT_VERSION"
-            echo "Created and pushed tag $NEXT_VERSION"
-          fi
+          git tag "$NEXT_VERSION"
+          git push origin "$NEXT_VERSION"
+          echo "Created and pushed tag $NEXT_VERSION"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

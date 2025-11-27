@@ -1,12 +1,6 @@
 name: Build and Push Docker Image (Release)
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag to build (e.g., v0.0.26). Leave empty to use latest tag.'
-        required: false
-        type: string
   workflow_run:
     workflows: ["Auto Release"]
     types:
@@ -21,7 +15,7 @@ env:
 jobs:
   build-and-push-release:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       packages: write
@@ -36,14 +30,8 @@ jobs:
       - name: Get latest release tag
         id: get_tag
         run: |
-          # Use input tag if provided (for manual workflow_dispatch), otherwise get latest
-          if [ -n "${{ inputs.tag }}" ]; then
-            LATEST_TAG="${{ inputs.tag }}"
-            echo "Using manually specified tag: $LATEST_TAG"
-          else
-            LATEST_TAG=$(git describe --tags --abbrev=0)
-            echo "Latest release tag: $LATEST_TAG"
-          fi
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "Latest release tag: $LATEST_TAG"
           echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${LATEST_TAG#v}" >> "$GITHUB_OUTPUT"
 
