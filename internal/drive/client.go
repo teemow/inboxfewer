@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"golang.org/x/oauth2"
 	drive "google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -20,8 +21,9 @@ const (
 
 // Client wraps the Google Drive API service
 type Client struct {
-	service *drive.Service
-	account string // The account this client is associated with
+	service       *drive.Service
+	account       string // The account this client is associated with
+	tokenProvider google.TokenProvider
 }
 
 // Account returns the account name this client is associated with
@@ -29,43 +31,45 @@ func (c *Client) Account() string {
 	return c.account
 }
 
+// HasTokenForAccountWithProvider checks if a valid OAuth token exists for the specified account
+func HasTokenForAccountWithProvider(account string, provider google.TokenProvider) bool {
+	if provider == nil {
+		return false
+	}
+	return provider.HasTokenForAccount(account)
+}
+
 // HasTokenForAccount checks if a valid OAuth token exists for the specified account
 func HasTokenForAccount(account string) bool {
-	return google.HasTokenForAccount(account)
+	provider := google.NewFileTokenProvider()
+	return HasTokenForAccountWithProvider(account, provider)
 }
 
 // HasToken checks if a valid OAuth token exists for the default account
 func HasToken() bool {
-	return google.HasToken()
+	return HasTokenForAccount("default")
 }
 
-// GetAuthURLForAccount returns the OAuth URL for user authorization for a specific account
-func GetAuthURLForAccount(account string) string {
-	return google.GetAuthURLForAccount(account)
-}
-
-// GetAuthURL returns the OAuth URL for user authorization for the default account
-func GetAuthURL() string {
-	return google.GetAuthURL()
-}
-
-// SaveTokenForAccount exchanges an authorization code for tokens and saves them for a specific account
-func SaveTokenForAccount(ctx context.Context, account string, authCode string) error {
-	return google.SaveTokenForAccount(ctx, account, authCode)
-}
-
-// SaveToken exchanges an authorization code for tokens and saves them for the default account
-func SaveToken(ctx context.Context, authCode string) error {
-	return google.SaveToken(ctx, authCode)
-}
-
-// NewClientForAccount creates a new Google Drive client with OAuth2 authentication for a specific account
-// Returns an error if no valid token exists - use HasTokenForAccount() to check first
-func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
-	client, err := google.GetHTTPClientForAccount(ctx, account)
-	if err != nil {
-		return nil, fmt.Errorf("no valid Google OAuth token found for account %s. Please authorize access first: %w", account, err)
+// NewClientForAccountWithProvider creates a new Google Drive client with OAuth2 authentication for a specific account
+// The OAuth token is retrieved from the provided token provider
+func NewClientForAccountWithProvider(ctx context.Context, account string, tokenProvider google.TokenProvider) (*Client, error) {
+	if tokenProvider == nil {
+		return nil, fmt.Errorf("token provider cannot be nil")
 	}
+
+	// Get token from the provided provider
+	token, err := tokenProvider.GetTokenForAccount(ctx, account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Google OAuth token for account %s: %w", account, err)
+	}
+
+	// Create OAuth2 config and token source
+	conf := google.GetOAuthConfig()
+	tokenSource := conf.TokenSource(ctx, token)
+
+	// Create HTTP client with the token
+	client := oauth2.NewClient(ctx, tokenSource)
+	google.ForceHTTP11(client)
 
 	// Create Drive service
 	driveService, err := drive.NewService(ctx, option.WithHTTPClient(client))
@@ -74,9 +78,23 @@ func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
 	}
 
 	return &Client{
-		service: driveService,
-		account: account,
+		service:       driveService,
+		account:       account,
+		tokenProvider: tokenProvider,
 	}, nil
+}
+
+// NewClientForAccount creates a new Google Drive client with OAuth2 authentication for a specific account
+// Uses the default file-based token provider for backward compatibility
+func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
+	provider := google.NewFileTokenProvider()
+	return NewClientForAccountWithProvider(ctx, account, provider)
+}
+
+// NewClientWithProvider creates a new Google Drive client with OAuth2 authentication for the default account
+// using the provided token provider
+func NewClientWithProvider(ctx context.Context, provider google.TokenProvider) (*Client, error) {
+	return NewClientForAccountWithProvider(ctx, "default", provider)
 }
 
 // NewClient creates a new Google Drive client with OAuth2 authentication for the default account

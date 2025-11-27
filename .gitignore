@@ -19,6 +19,9 @@ coverage.html
 *~
 .cursor/mcp.json
 
+# Local/private rules (may contain sensitive deployment information)
+.cursor/rules/local_*.mdc
+
 # OS
 .DS_Store
 Thumbs.db

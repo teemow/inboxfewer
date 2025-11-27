@@ -3,69 +3,131 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/teemow/inboxfewer/internal/calendar"
 	"github.com/teemow/inboxfewer/internal/docs"
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/gmail"
+	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/meet"
 	"github.com/teemow/inboxfewer/internal/tasks"
 )
 
-// ServerContext holds the context for the MCP server
-type ServerContext struct {
-	ctx             context.Context
-	cancel          context.CancelFunc
-	gmailClients    map[string]*gmail.Client    // Maps account name to Gmail client
-	docsClients     map[string]*docs.Client     // Maps account name to Docs client
-	driveClients    map[string]*drive.Client    // Maps account name to Drive client
-	calendarClients map[string]*calendar.Client // Maps account name to Calendar client
-	meetClients     map[string]*meet.Client     // Maps account name to Meet client
-	tasksClients    map[string]*tasks.Client    // Maps account name to Tasks client
-	githubUser      string
-	githubToken     string
-	mu              sync.RWMutex
-	shutdown        bool
+// clientFactory is a function that creates a new Google API client for a given account
+type clientFactory[T any] func(ctx context.Context, account string, provider google.TokenProvider) (T, error)
+
+// clientCache manages lazy-initialized, cached Google API clients per account
+type clientCache[T any] struct {
+	clients map[string]T
+	factory clientFactory[T]
+	name    string // Service name for logging (e.g., "Gmail", "Docs")
 }
 
-// NewServerContext creates a new server context
+// newClientCache creates a new client cache with the given factory
+func newClientCache[T any](factory clientFactory[T], name string) *clientCache[T] {
+	return &clientCache[T]{
+		clients: make(map[string]T),
+		factory: factory,
+		name:    name,
+	}
+}
+
+// get retrieves or creates a client for the given account
+// Returns the zero value of T if the account has no token or client creation fails
+func (c *clientCache[T]) get(ctx context.Context, account string, provider google.TokenProvider, logger *slog.Logger, mu *sync.RWMutex) T {
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Check if client already exists
+	if client, ok := c.clients[account]; ok {
+		return client
+	}
+
+	// Try to create client if token exists
+	if provider == nil || !provider.HasTokenForAccount(account) {
+		var zero T
+		return zero
+	}
+
+	client, err := c.factory(ctx, account, provider)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("Failed to create %s client", c.name), "account", account, "error", err)
+		var zero T
+		return zero
+	}
+
+	c.clients[account] = client
+	return client
+}
+
+// set stores a client for the given account
+func (c *clientCache[T]) set(account string, client T, mu *sync.RWMutex) {
+	mu.Lock()
+	defer mu.Unlock()
+	c.clients[account] = client
+}
+
+// ServerContext holds the context for the MCP server
+type ServerContext struct {
+	ctx           context.Context
+	cancel        context.CancelFunc
+	gmailCache    *clientCache[*gmail.Client]
+	docsCache     *clientCache[*docs.Client]
+	driveCache    *clientCache[*drive.Client]
+	calendarCache *clientCache[*calendar.Client]
+	meetCache     *clientCache[*meet.Client]
+	tasksCache    *clientCache[*tasks.Client]
+	githubUser    string
+	githubToken   string
+	tokenProvider google.TokenProvider // Token provider for Google API authentication
+	logger        *slog.Logger
+	mu            sync.RWMutex
+	shutdown      bool
+}
+
+// NewServerContext creates a new server context with file-based token provider (for STDIO transport)
 func NewServerContext(ctx context.Context, githubUser, githubToken string) (*ServerContext, error) {
+	return NewServerContextWithProvider(ctx, githubUser, githubToken, google.NewFileTokenProvider())
+}
+
+// NewServerContextWithProvider creates a new server context with a custom token provider (for HTTP/SSE transport)
+func NewServerContextWithProvider(ctx context.Context, githubUser, githubToken string, tokenProvider google.TokenProvider) (*ServerContext, error) {
 	shutdownCtx, cancel := context.WithCancel(ctx)
 
-	// Initialize client maps
-	gmailClients := make(map[string]*gmail.Client)
-	docsClients := make(map[string]*docs.Client)
-	driveClients := make(map[string]*drive.Client)
-	calendarClients := make(map[string]*calendar.Client)
-	meetClients := make(map[string]*meet.Client)
-	tasksClients := make(map[string]*tasks.Client)
+	logger := slog.Default()
 
-	// Try to create default Gmail client, but don't fail if token is missing
-	// Clients will be lazily initialized when first needed
-	if gmail.HasToken() {
-		gmailClient, err := gmail.NewClient(shutdownCtx)
+	// Initialize client caches with their respective factories
+	sc := &ServerContext{
+		ctx:           shutdownCtx,
+		cancel:        cancel,
+		gmailCache:    newClientCache(gmail.NewClientForAccountWithProvider, "Gmail"),
+		docsCache:     newClientCache(docs.NewClientForAccountWithProvider, "Docs"),
+		driveCache:    newClientCache(drive.NewClientForAccountWithProvider, "Drive"),
+		calendarCache: newClientCache(calendar.NewClientForAccountWithProvider, "Calendar"),
+		meetCache:     newClientCache(meet.NewClientForAccountWithProvider, "Meet"),
+		tasksCache:    newClientCache(tasks.NewClientForAccountWithProvider, "Tasks"),
+		githubUser:    githubUser,
+		githubToken:   githubToken,
+		tokenProvider: tokenProvider,
+		logger:        logger,
+		shutdown:      false,
+	}
+
+	// Try to eagerly create default Gmail client if token provider has a token
+	// but don't fail if token is missing - clients will be lazily initialized when needed
+	if tokenProvider != nil && tokenProvider.HasTokenForAccount("default") {
+		gmailClient, err := gmail.NewClientWithProvider(shutdownCtx, tokenProvider)
 		if err != nil {
 			// Log but don't fail - will be re-attempted on first use
-			fmt.Printf("Warning: failed to create Gmail client for default account: %v\n", err)
+			logger.Warn("Failed to create Gmail client for default account", "error", err)
 		} else {
-			gmailClients["default"] = gmailClient
+			sc.gmailCache.set("default", gmailClient, &sc.mu)
 		}
 	}
 
-	return &ServerContext{
-		ctx:             shutdownCtx,
-		cancel:          cancel,
-		gmailClients:    gmailClients,
-		docsClients:     docsClients,
-		driveClients:    driveClients,
-		calendarClients: calendarClients,
-		meetClients:     meetClients,
-		tasksClients:    tasksClients,
-		githubUser:      githubUser,
-		githubToken:     githubToken,
-		shutdown:        false,
-	}, nil
+	return sc, nil
 }
 
 // Context returns the server context
@@ -77,27 +139,7 @@ func (sc *ServerContext) Context() context.Context {
 // Creates and caches the client if it doesn't exist yet
 // Returns nil if the account has no token
 func (sc *ServerContext) GmailClientForAccount(account string) *gmail.Client {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	// Check if client already exists
-	if client, ok := sc.gmailClients[account]; ok {
-		return client
-	}
-
-	// Try to create client if token exists
-	if !gmail.HasTokenForAccount(account) {
-		return nil
-	}
-
-	client, err := gmail.NewClientForAccount(sc.ctx, account)
-	if err != nil {
-		fmt.Printf("Warning: failed to create Gmail client for account %s: %v\n", account, err)
-		return nil
-	}
-
-	sc.gmailClients[account] = client
-	return client
+	return sc.gmailCache.get(sc.ctx, account, sc.tokenProvider, sc.logger, &sc.mu)
 }
 
 // GmailClient returns the Gmail client for the default account
@@ -107,9 +149,7 @@ func (sc *ServerContext) GmailClient() *gmail.Client {
 
 // SetGmailClientForAccount sets the Gmail client for a specific account
 func (sc *ServerContext) SetGmailClientForAccount(account string, client *gmail.Client) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	sc.gmailClients[account] = client
+	sc.gmailCache.set(account, client, &sc.mu)
 }
 
 // SetGmailClient sets the Gmail client for the default account
@@ -121,27 +161,7 @@ func (sc *ServerContext) SetGmailClient(client *gmail.Client) {
 // Creates and caches the client if it doesn't exist yet
 // Returns nil if the account has no token
 func (sc *ServerContext) DocsClientForAccount(account string) *docs.Client {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	// Check if client already exists
-	if client, ok := sc.docsClients[account]; ok {
-		return client
-	}
-
-	// Try to create client if token exists
-	if !docs.HasTokenForAccount(account) {
-		return nil
-	}
-
-	client, err := docs.NewClientForAccount(sc.ctx, account)
-	if err != nil {
-		fmt.Printf("Warning: failed to create Docs client for account %s: %v\n", account, err)
-		return nil
-	}
-
-	sc.docsClients[account] = client
-	return client
+	return sc.docsCache.get(sc.ctx, account, sc.tokenProvider, sc.logger, &sc.mu)
 }
 
 // DocsClient returns the Docs client for the default account
@@ -151,9 +171,7 @@ func (sc *ServerContext) DocsClient() *docs.Client {
 
 // SetDocsClientForAccount sets the Docs client for a specific account
 func (sc *ServerContext) SetDocsClientForAccount(account string, client *docs.Client) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	sc.docsClients[account] = client
+	sc.docsCache.set(account, client, &sc.mu)
 }
 
 // SetDocsClient sets the Docs client for the default account
@@ -165,27 +183,7 @@ func (sc *ServerContext) SetDocsClient(client *docs.Client) {
 // Creates and caches the client if it doesn't exist yet
 // Returns nil if the account has no token
 func (sc *ServerContext) CalendarClientForAccount(account string) *calendar.Client {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	// Check if client already exists
-	if client, ok := sc.calendarClients[account]; ok {
-		return client
-	}
-
-	// Try to create client if token exists
-	if !calendar.HasTokenForAccount(account) {
-		return nil
-	}
-
-	client, err := calendar.NewClientForAccount(sc.ctx, account)
-	if err != nil {
-		fmt.Printf("Warning: failed to create Calendar client for account %s: %v\n", account, err)
-		return nil
-	}
-
-	sc.calendarClients[account] = client
-	return client
+	return sc.calendarCache.get(sc.ctx, account, sc.tokenProvider, sc.logger, &sc.mu)
 }
 
 // CalendarClient returns the Calendar client for the default account
@@ -195,9 +193,7 @@ func (sc *ServerContext) CalendarClient() *calendar.Client {
 
 // SetCalendarClientForAccount sets the Calendar client for a specific account
 func (sc *ServerContext) SetCalendarClientForAccount(account string, client *calendar.Client) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	sc.calendarClients[account] = client
+	sc.calendarCache.set(account, client, &sc.mu)
 }
 
 // SetCalendarClient sets the Calendar client for the default account
@@ -209,27 +205,7 @@ func (sc *ServerContext) SetCalendarClient(client *calendar.Client) {
 // Creates and caches the client if it doesn't exist yet
 // Returns nil if the account has no token
 func (sc *ServerContext) MeetClientForAccount(account string) *meet.Client {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	// Check if client already exists
-	if client, ok := sc.meetClients[account]; ok {
-		return client
-	}
-
-	// Try to create client if token exists
-	if !meet.HasTokenForAccount(account) {
-		return nil
-	}
-
-	client, err := meet.NewClientForAccount(sc.ctx, account)
-	if err != nil {
-		fmt.Printf("Warning: failed to create Meet client for account %s: %v\n", account, err)
-		return nil
-	}
-
-	sc.meetClients[account] = client
-	return client
+	return sc.meetCache.get(sc.ctx, account, sc.tokenProvider, sc.logger, &sc.mu)
 }
 
 // MeetClient returns the Meet client for the default account
@@ -239,9 +215,7 @@ func (sc *ServerContext) MeetClient() *meet.Client {
 
 // SetMeetClientForAccount sets the Meet client for a specific account
 func (sc *ServerContext) SetMeetClientForAccount(account string, client *meet.Client) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	sc.meetClients[account] = client
+	sc.meetCache.set(account, client, &sc.mu)
 }
 
 // SetMeetClient sets the Meet client for the default account
@@ -253,27 +227,7 @@ func (sc *ServerContext) SetMeetClient(client *meet.Client) {
 // Creates and caches the client if it doesn't exist yet
 // Returns nil if the account has no token
 func (sc *ServerContext) TasksClientForAccount(account string) *tasks.Client {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	// Check if client already exists
-	if client, ok := sc.tasksClients[account]; ok {
-		return client
-	}
-
-	// Try to create client if token exists
-	if !tasks.HasTokenForAccount(account) {
-		return nil
-	}
-
-	client, err := tasks.NewClientForAccount(sc.ctx, account)
-	if err != nil {
-		fmt.Printf("Warning: failed to create Tasks client for account %s: %v\n", account, err)
-		return nil
-	}
-
-	sc.tasksClients[account] = client
-	return client
+	return sc.tasksCache.get(sc.ctx, account, sc.tokenProvider, sc.logger, &sc.mu)
 }
 
 // TasksClient returns the Tasks client for the default account
@@ -283,9 +237,7 @@ func (sc *ServerContext) TasksClient() *tasks.Client {
 
 // SetTasksClientForAccount sets the Tasks client for a specific account
 func (sc *ServerContext) SetTasksClientForAccount(account string, client *tasks.Client) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	sc.tasksClients[account] = client
+	sc.tasksCache.set(account, client, &sc.mu)
 }
 
 // SetTasksClient sets the Tasks client for the default account
@@ -297,27 +249,7 @@ func (sc *ServerContext) SetTasksClient(client *tasks.Client) {
 // Creates and caches the client if it doesn't exist yet
 // Returns nil if the account has no token
 func (sc *ServerContext) DriveClientForAccount(account string) *drive.Client {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	// Check if client already exists
-	if client, ok := sc.driveClients[account]; ok {
-		return client
-	}
-
-	// Try to create client if token exists
-	if !drive.HasTokenForAccount(account) {
-		return nil
-	}
-
-	client, err := drive.NewClientForAccount(sc.ctx, account)
-	if err != nil {
-		fmt.Printf("Warning: failed to create Drive client for account %s: %v\n", account, err)
-		return nil
-	}
-
-	sc.driveClients[account] = client
-	return client
+	return sc.driveCache.get(sc.ctx, account, sc.tokenProvider, sc.logger, &sc.mu)
 }
 
 // DriveClient returns the Drive client for the default account
@@ -327,9 +259,7 @@ func (sc *ServerContext) DriveClient() *drive.Client {
 
 // SetDriveClientForAccount sets the Drive client for a specific account
 func (sc *ServerContext) SetDriveClientForAccount(account string, client *drive.Client) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	sc.driveClients[account] = client
+	sc.driveCache.set(account, client, &sc.mu)
 }
 
 // SetDriveClient sets the Drive client for the default account

@@ -132,6 +132,10 @@ config:
   transport: "streamable-http"
   # HTTP server address
   httpAddr: ":8080"
+  # Public base URL for OAuth (required for deployed instances)
+  # Example: "https://inboxfewer.example.com"
+  # If not set, auto-detected as http://localhost:8080 (development only)
+  baseURL: ""
   # Enable write operations (default: false for read-only mode)
   yolo: false
   # Enable debug logging
@@ -148,8 +152,66 @@ google:
   # Set via environment variable or secret
   clientSecret: ""
 
+# OAuth Security Settings (secure by default)
+# Only modify these if you understand the security implications
+oauthSecurity:
+  # Allow unauthenticated dynamic client registration
+  # WARNING: Setting to true weakens security and enables DoS attacks
+  # Default: false (requires registration access token)
+  allowPublicClientRegistration: false
+  
+  # Registration access token required for client registration
+  # Only used if allowPublicClientRegistration is false
+  # Generate a secure random token (e.g., openssl rand -base64 32)
+  registrationAccessToken: ""
+  
+  # AES-256 encryption key for token storage at rest (32 bytes, base64 encoded)
+  # REQUIRED for production deployments
+  # Generate with: openssl rand -base64 32
+  # If not set, tokens are stored unencrypted in memory (development only)
+  encryptionKey: ""
+  
+  # Allow authorization without state parameter
+  # WARNING: Setting to true weakens CSRF protection
+  # Default: false (state parameter required)
+  allowInsecureAuthWithoutState: false
+  
+  # Maximum number of clients that can be registered per IP address
+  # Prevents DoS attacks via mass client registration
+  # Default: 10
+  maxClientsPerIP: 10
+
+# OAuth Interstitial Page Branding
+# Customize the success page shown after OAuth authentication for custom URL schemes
+# (cursor://, vscode://, etc.). If not set, uses the mcp-oauth default styling.
+interstitial:
+  # Logo URL displayed on the success page (must be HTTPS)
+  # Example: "https://raw.githubusercontent.com/teemow/inboxfewer/main/assets/logo/logo-512.png"
+  logoURL: ""
+  # Alt text for the logo image (for accessibility)
+  # Example: "inboxfewer logo"
+  logoAlt: ""
+  # Title displayed on the success page
+  # Example: "Connected to Inboxfewer"
+  title: ""
+  # Message shown below the title
+  # Use {{.AppName}} placeholder for the app name
+  # Example: "You have been authenticated with {{.AppName}}. You can now close this window."
+  message: ""
+  # Button text for manual redirect
+  # Use {{.AppName}} placeholder for the app name
+  # Example: "Return to {{.AppName}}"
+  buttonText: ""
+  # Primary/accent color for buttons (CSS color value)
+  # Example: "#667eea"
+  primaryColor: ""
+  # Background gradient CSS value
+  # Example: "linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)"
+  backgroundGradient: ""
+
 # Existing secret containing Google OAuth credentials
 # Keys should be: google-client-id, google-client-secret
+# Optionally: oauth-registration-token, oauth-encryption-key
 existingSecret: ""
 
 # GitHub configuration (required for cleanup command)

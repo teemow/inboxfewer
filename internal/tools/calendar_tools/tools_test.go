@@ -1,62 +1,35 @@
 package calendar_tools
 
 import (
+	"context"
 	"testing"
+
+	"github.com/teemow/inboxfewer/internal/mcp/oauth"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
-func TestGetAccountFromArgs(t *testing.T) {
-	tests := []struct {
-		name     string
-		args     map[string]interface{}
-		expected string
-	}{
-		{
-			name:     "no account provided",
-			args:     map[string]interface{}{},
-			expected: "default",
-		},
-		{
-			name: "account provided",
-			args: map[string]interface{}{
-				"account": "test-account",
-			},
-			expected: "test-account",
-		},
-		{
-			name: "empty account string",
-			args: map[string]interface{}{
-				"account": "",
-			},
-			expected: "default",
-		},
-		{
-			name: "account with other args",
-			args: map[string]interface{}{
-				"account":    "work-account",
-				"calendarId": "primary",
-			},
-			expected: "work-account",
-		},
-	}
+// TestCommonGetAccountFromArgs verifies that the calendar_tools package
+// correctly uses the shared common.GetAccountFromArgs function.
+// Comprehensive tests for GetAccountFromArgs are in internal/tools/common/account_test.go
+func TestCommonGetAccountFromArgs(t *testing.T) {
+	ctx := context.Background()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getAccountFromArgs(tt.args)
-			if result != tt.expected {
-				t.Errorf("getAccountFromArgs() = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestGetAccountFromArgs_NonStringType(t *testing.T) {
-	// Test with non-string account value
+	// Test basic functionality
 	args := map[string]interface{}{
-		"account": 123, // wrong type
+		"account": "test-account",
+	}
+	result := common.GetAccountFromArgs(ctx, args)
+	if result != "test-account" {
+		t.Errorf("GetAccountFromArgs() = %v, expected test-account", result)
 	}
 
-	result := getAccountFromArgs(args)
-	if result != "default" {
-		t.Errorf("Expected 'default' for non-string account, got %s", result)
+	// Test OAuth integration
+	userInfo := &oauth.UserInfo{
+		Email: "oauth-user@example.com",
+	}
+	ctxWithUser := oauth.ContextWithUserInfo(context.Background(), userInfo)
+	result = common.GetAccountFromArgs(ctxWithUser, args)
+	if result != "oauth-user@example.com" {
+		t.Errorf("GetAccountFromArgs() with OAuth = %v, expected oauth-user@example.com", result)
 	}
 }

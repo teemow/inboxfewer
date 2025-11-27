@@ -13,6 +13,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/calendar"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // RegisterEventTools registers event-related tools with the MCP server
@@ -242,7 +243,7 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 
 func handleListEvents(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	calendarID := "primary"
 	if calIDVal, ok := args["calendarId"].(string); ok && calIDVal != "" {
@@ -305,7 +306,7 @@ func handleListEvents(ctx context.Context, request mcp.CallToolRequest, sc *serv
 
 func handleGetEvents(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	calendarID := "primary"
 	if calIDVal, ok := args["calendarId"].(string); ok && calIDVal != "" {
@@ -361,7 +362,7 @@ func handleGetEvents(ctx context.Context, request mcp.CallToolRequest, sc *serve
 
 func handleCreateEvent(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	calendarID := "primary"
 	if calIDVal, ok := args["calendarId"].(string); ok && calIDVal != "" {
@@ -460,7 +461,7 @@ func handleCreateEvent(ctx context.Context, request mcp.CallToolRequest, sc *ser
 
 func handleUpdateEvent(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	calendarID := "primary"
 	if calIDVal, ok := args["calendarId"].(string); ok && calIDVal != "" {
@@ -546,7 +547,7 @@ func handleUpdateEvent(ctx context.Context, request mcp.CallToolRequest, sc *ser
 
 func handleDeleteEvents(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	calendarID := "primary"
 	if calIDVal, ok := args["calendarId"].(string); ok && calIDVal != "" {
@@ -575,7 +576,7 @@ func handleDeleteEvents(ctx context.Context, request mcp.CallToolRequest, sc *se
 
 func handleExtractDocsLinks(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	calendarID := "primary"
 	if calIDVal, ok := args["calendarId"].(string); ok && calIDVal != "" {
@@ -611,7 +612,7 @@ func handleExtractDocsLinks(ctx context.Context, request mcp.CallToolRequest, sc
 
 func handleGetMeetLinks(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	calendarID := "primary"
 	if calIDVal, ok := args["calendarId"].(string); ok && calIDVal != "" {

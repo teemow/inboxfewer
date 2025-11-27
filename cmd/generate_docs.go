@@ -17,7 +17,6 @@ import (
 	"github.com/teemow/inboxfewer/internal/tools/docs_tools"
 	"github.com/teemow/inboxfewer/internal/tools/drive_tools"
 	"github.com/teemow/inboxfewer/internal/tools/gmail_tools"
-	"github.com/teemow/inboxfewer/internal/tools/google_tools"
 	"github.com/teemow/inboxfewer/internal/tools/meet_tools"
 	"github.com/teemow/inboxfewer/internal/tools/tasks_tools"
 )
@@ -56,6 +55,7 @@ func runGenerateDocs(outputFile string) error {
 	}()
 
 	// Create MCP server
+	// Note: mcp.Implementation has Title field but WithTitle() ServerOption not available in v0.43.0
 	mcpSrv := mcpserver.NewMCPServer("inboxfewer", version,
 		mcpserver.WithToolCapabilities(true),
 	)
@@ -64,10 +64,6 @@ func runGenerateDocs(outputFile string) error {
 	readOnly := false // Get all tools including write operations
 
 	// Register all tool groups
-	if err := google_tools.RegisterGoogleTools(mcpSrv, serverContext); err != nil {
-		return fmt.Errorf("failed to register Google OAuth tools: %w", err)
-	}
-
 	if err := gmail_tools.RegisterGmailTools(mcpSrv, serverContext, readOnly); err != nil {
 		return fmt.Errorf("failed to register Gmail tools: %w", err)
 	}
@@ -186,8 +182,6 @@ func getCategoryFromToolName(name string) string {
 
 	prefix := parts[0]
 	switch prefix {
-	case "google":
-		return "OAuth Authentication"
 	case "gmail":
 		return "Gmail Tools"
 	case "docs":

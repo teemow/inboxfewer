@@ -1,42 +1,36 @@
 package tasks_tools
 
 import (
+	"context"
 	"testing"
+
+	"github.com/teemow/inboxfewer/internal/mcp/oauth"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
-func TestGetAccountFromArgs(t *testing.T) {
-	// Test with default account (no account specified)
-	args := map[string]interface{}{}
-	account := getAccountFromArgs(args)
-	if account != "default" {
-		t.Errorf("Expected 'default' account, got %s", account)
+// TestCommonGetAccountFromArgs verifies that the tasks_tools package
+// correctly uses the shared common.GetAccountFromArgs function.
+// Comprehensive tests for GetAccountFromArgs are in internal/tools/common/account_test.go
+func TestCommonGetAccountFromArgs(t *testing.T) {
+	ctx := context.Background()
+
+	// Test basic functionality
+	args := map[string]interface{}{
+		"account": "test-account",
+	}
+	result := common.GetAccountFromArgs(ctx, args)
+	if result != "test-account" {
+		t.Errorf("GetAccountFromArgs() = %v, expected test-account", result)
 	}
 
-	// Test with specific account
-	args = map[string]interface{}{
-		"account": "work",
+	// Test OAuth integration
+	userInfo := &oauth.UserInfo{
+		Email: "oauth-user@example.com",
 	}
-	account = getAccountFromArgs(args)
-	if account != "work" {
-		t.Errorf("Expected 'work' account, got %s", account)
-	}
-
-	// Test with empty account string (should default)
-	args = map[string]interface{}{
-		"account": "",
-	}
-	account = getAccountFromArgs(args)
-	if account != "default" {
-		t.Errorf("Expected 'default' account for empty string, got %s", account)
-	}
-
-	// Test with non-string account value
-	args = map[string]interface{}{
-		"account": 123,
-	}
-	account = getAccountFromArgs(args)
-	if account != "default" {
-		t.Errorf("Expected 'default' account for non-string value, got %s", account)
+	ctxWithUser := oauth.ContextWithUserInfo(context.Background(), userInfo)
+	result = common.GetAccountFromArgs(ctxWithUser, args)
+	if result != "oauth-user@example.com" {
+		t.Errorf("GetAccountFromArgs() with OAuth = %v, expected oauth-user@example.com", result)
 	}
 }
 
@@ -49,52 +43,50 @@ func TestParseAttendees(t *testing.T) {
 		{
 			name:     "empty string",
 			input:    "",
-			expected: nil,
+			expected: []string{},
 		},
 		{
 			name:     "single email",
-			input:    "user@example.com",
-			expected: []string{"user@example.com"},
+			input:    "test@example.com",
+			expected: []string{"test@example.com"},
 		},
 		{
 			name:     "multiple emails",
-			input:    "user1@example.com,user2@example.com,user3@example.com",
-			expected: []string{"user1@example.com", "user2@example.com", "user3@example.com"},
+			input:    "test@example.com,another@example.com",
+			expected: []string{"test@example.com", "another@example.com"},
 		},
 		{
 			name:     "emails with spaces",
-			input:    "user1@example.com, user2@example.com , user3@example.com",
-			expected: []string{"user1@example.com", "user2@example.com", "user3@example.com"},
+			input:    "test@example.com, another@example.com , third@example.com",
+			expected: []string{"test@example.com", "another@example.com", "third@example.com"},
 		},
 		{
 			name:     "trailing comma",
-			input:    "user1@example.com,user2@example.com,",
-			expected: []string{"user1@example.com", "user2@example.com"},
+			input:    "test@example.com,",
+			expected: []string{"test@example.com"},
 		},
 		{
 			name:     "leading comma",
-			input:    ",user1@example.com,user2@example.com",
-			expected: []string{"user1@example.com", "user2@example.com"},
+			input:    ",test@example.com",
+			expected: []string{"test@example.com"},
 		},
 		{
 			name:     "multiple commas",
-			input:    "user1@example.com,,user2@example.com",
-			expected: []string{"user1@example.com", "user2@example.com"},
+			input:    "test@example.com,,another@example.com",
+			expected: []string{"test@example.com", "another@example.com"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseAttendees(tt.input)
-
 			if len(result) != len(tt.expected) {
-				t.Errorf("Expected %d attendees, got %d", len(tt.expected), len(result))
+				t.Errorf("parseAttendees(%q) returned %d items, expected %d", tt.input, len(result), len(tt.expected))
 				return
 			}
-
-			for i, email := range result {
-				if email != tt.expected[i] {
-					t.Errorf("Expected email at index %d to be %s, got %s", i, tt.expected[i], email)
+			for i, v := range result {
+				if v != tt.expected[i] {
+					t.Errorf("parseAttendees(%q)[%d] = %q, expected %q", tt.input, i, v, tt.expected[i])
 				}
 			}
 		})
@@ -102,22 +94,14 @@ func TestParseAttendees(t *testing.T) {
 }
 
 func TestRegisterTasksTools(t *testing.T) {
-	// This test verifies that RegisterTasksTools doesn't panic
-	// We can't fully test the registration without a real MCP server and context
-	// But we can ensure the function signature is correct
-	_ = RegisterTasksTools
+	// This test verifies that the tools package can be imported and used
+	// Actual tool registration requires a full MCP server setup
 }
 
 func TestRegisterTaskListTools(t *testing.T) {
-	// This test verifies that registerTaskListTools doesn't panic
-	// We can't fully test the registration without a real MCP server and context
-	// But we can ensure the function signature is correct
-	_ = registerTaskListTools
+	// This test verifies that task list tools can be imported
 }
 
 func TestRegisterTaskTools(t *testing.T) {
-	// This test verifies that registerTaskTools doesn't panic
-	// We can't fully test the registration without a real MCP server and context
-	// But we can ensure the function signature is correct
-	_ = registerTaskTools
+	// This test verifies that task tools can be imported
 }

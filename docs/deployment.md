@@ -224,6 +224,7 @@ Deploy the latest stable release:
 # Using Helm
 helm install inboxfewer oci://ghcr.io/teemow/charts/inboxfewer \
   --set image.tag=v1.2.3 \
+  --set config.baseURL="https://inboxfewer.example.com" \
   --set googleAuth.clientId=$GOOGLE_CLIENT_ID \
   --set googleAuth.clientSecret=$GOOGLE_CLIENT_SECRET \
   --set githubToken.token=$GITHUB_TOKEN
@@ -261,6 +262,8 @@ spec:
         ports:
         - containerPort: 8080
         env:
+        - name: MCP_BASE_URL
+          value: "https://inboxfewer.example.com"
         - name: GOOGLE_CLIENT_ID
           valueFrom:
             secretKeyRef:
@@ -305,6 +308,7 @@ Run the container locally for testing:
 ```bash
 # Run latest release
 docker run -p 8080:8080 \
+  -e MCP_BASE_URL="https://inboxfewer.example.com" \
   -e GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID \
   -e GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET \
   -e GITHUB_TOKEN=$GITHUB_TOKEN \
@@ -334,6 +338,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      - MCP_BASE_URL=https://inboxfewer.example.com
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GITHUB_TOKEN=${GITHUB_TOKEN}

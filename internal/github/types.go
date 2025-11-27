@@ -4,7 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
+
+// secureHTTPClient is a configured HTTP client with proper timeouts and security settings
+var secureHTTPClient = &http.Client{
+	Timeout: 30 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:          10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		DisableKeepAlives:     false,
+	},
+}
 
 // GithubIssue represents a GitHub issue
 type GithubIssue struct {
@@ -19,7 +32,7 @@ func (id *GithubIssue) IsStale() (bool, error) {
 	issueURL := "https://api.github.com/repos/" + id.Repo + "/issues/" + id.Number
 	req, _ := http.NewRequest("GET", issueURL, nil)
 	req.SetBasicAuth(id.GithubUser, id.GithubToken)
-	res, err := http.DefaultClient.Do(req)
+	res, err := secureHTTPClient.Do(req)
 	if err != nil {
 		return false, nil
 	}
@@ -52,7 +65,7 @@ func (id *GithubPull) IsStale() (bool, error) {
 	pullURL := "https://api.github.com/repos/" + id.Repo + "/pulls/" + id.Number
 	req, _ := http.NewRequest("GET", pullURL, nil)
 	req.SetBasicAuth(id.GithubUser, id.GithubToken)
-	res, err := http.DefaultClient.Do(req)
+	res, err := secureHTTPClient.Do(req)
 	if err != nil {
 		return false, nil
 	}

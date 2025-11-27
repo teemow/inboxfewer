@@ -2,24 +2,18 @@ package meet_tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/meet"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
-
-// getAccountFromArgs extracts the account name from request arguments, defaulting to "default"
-func getAccountFromArgs(args map[string]interface{}) string {
-	account := "default"
-	if accountVal, ok := args["account"].(string); ok && accountVal != "" {
-		account = accountVal
-	}
-	return account
-}
 
 // getMeetClient retrieves or creates a meet client for the specified account
 func getMeetClient(ctx context.Context, account string, sc *server.ServerContext) (*meet.Client, error) {
@@ -27,20 +21,8 @@ func getMeetClient(ctx context.Context, account string, sc *server.ServerContext
 	if client == nil {
 		// Check if token exists before trying to create client
 		if !meet.HasTokenForAccount(account) {
-			authURL := meet.GetAuthURLForAccount(account)
-			return nil, fmt.Errorf(`Google OAuth token not found for account "%s". To authorize access:
-
-1. Visit this URL in your browser:
-   %s
-
-2. Sign in with your Google account
-3. Grant access to Google services (Calendar, Gmail, Docs, Drive, Meet)
-4. Copy the authorization code
-
-5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
-
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
+			errorMsg := google.GetAuthenticationErrorMessage(account)
+			return nil, errors.New(errorMsg)
 		}
 
 		var err error
@@ -226,7 +208,7 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 func handleGetConference(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	conferenceRecord, ok := args["conference_record"].(string)
 	if !ok || conferenceRecord == "" {
@@ -260,7 +242,7 @@ func handleGetConference(ctx context.Context, request mcp.CallToolRequest, sc *s
 
 func handleListRecordings(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	conferenceRecord, ok := args["conference_record"].(string)
 	if !ok || conferenceRecord == "" {
@@ -305,7 +287,7 @@ func handleListRecordings(ctx context.Context, request mcp.CallToolRequest, sc *
 
 func handleGetRecording(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	recordingName, ok := args["recording_name"].(string)
 	if !ok || recordingName == "" {
@@ -342,7 +324,7 @@ func handleGetRecording(ctx context.Context, request mcp.CallToolRequest, sc *se
 
 func handleListTranscripts(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	conferenceRecord, ok := args["conference_record"].(string)
 	if !ok || conferenceRecord == "" {
@@ -385,7 +367,7 @@ func handleListTranscripts(ctx context.Context, request mcp.CallToolRequest, sc 
 
 func handleGetTranscript(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	transcriptName, ok := args["transcript_name"].(string)
 	if !ok || transcriptName == "" {
@@ -420,7 +402,7 @@ func handleGetTranscript(ctx context.Context, request mcp.CallToolRequest, sc *s
 
 func handleGetTranscriptText(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	transcriptName, ok := args["transcript_name"].(string)
 	if !ok || transcriptName == "" {
@@ -464,7 +446,7 @@ func handleGetTranscriptText(ctx context.Context, request mcp.CallToolRequest, s
 
 func handleCreateSpace(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	client, err := getMeetClient(ctx, account, sc)
 	if err != nil {
@@ -528,7 +510,7 @@ func handleCreateSpace(ctx context.Context, request mcp.CallToolRequest, sc *ser
 
 func handleGetSpace(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	spaceName, ok := args["space_name"].(string)
 	if !ok || spaceName == "" {
@@ -577,7 +559,7 @@ func handleGetSpace(ctx context.Context, request mcp.CallToolRequest, sc *server
 
 func handleUpdateSpaceConfig(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	spaceName, ok := args["space_name"].(string)
 	if !ok || spaceName == "" {

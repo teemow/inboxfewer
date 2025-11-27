@@ -8,6 +8,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // RegisterCalendarListTools registers calendar list tools with the MCP server
@@ -45,7 +46,7 @@ func RegisterCalendarListTools(s *mcpserver.MCPServer, sc *server.ServerContext)
 
 func handleListCalendars(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	client, err := getCalendarClient(ctx, account, sc)
 	if err != nil {
@@ -79,7 +80,7 @@ func handleListCalendars(ctx context.Context, request mcp.CallToolRequest, sc *s
 
 func handleGetCalendar(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	calendarID, ok := args["calendarId"].(string)
 	if !ok || calendarID == "" {

@@ -1,25 +1,43 @@
 package gmail_tools
 
 import (
+	"context"
 	"testing"
+
+	"github.com/teemow/inboxfewer/internal/mcp/oauth"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
-// TestToolsPackage ensures the package compiles and basic functionality works
-func TestToolsPackage(t *testing.T) {
-	// Test that getAccountFromArgs works correctly
+// TestCommonGetAccountFromArgs verifies that the gmail_tools package
+// correctly uses the shared common.GetAccountFromArgs function.
+// Comprehensive tests for GetAccountFromArgs are in internal/tools/common/account_test.go
+func TestCommonGetAccountFromArgs(t *testing.T) {
+	ctx := context.Background()
+
+	// Test basic functionality
 	args := map[string]interface{}{
 		"account": "test-account",
 	}
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 	if account != "test-account" {
-		t.Errorf("getAccountFromArgs() = %v, want test-account", account)
+		t.Errorf("GetAccountFromArgs() = %v, want test-account", account)
 	}
 
 	// Test default account
 	emptyArgs := map[string]interface{}{}
-	defaultAccount := getAccountFromArgs(emptyArgs)
+	defaultAccount := common.GetAccountFromArgs(ctx, emptyArgs)
 	if defaultAccount != "default" {
-		t.Errorf("getAccountFromArgs() = %v, want default", defaultAccount)
+		t.Errorf("GetAccountFromArgs() = %v, want default", defaultAccount)
+	}
+
+	// Test OAuth integration
+	userInfo := &oauth.UserInfo{
+		Email: "oauth-user@example.com",
+	}
+	ctxWithUser := oauth.ContextWithUserInfo(context.Background(), userInfo)
+	result := common.GetAccountFromArgs(ctxWithUser, args)
+	if result != "oauth-user@example.com" {
+		t.Errorf("GetAccountFromArgs() with OAuth = %v, expected oauth-user@example.com", result)
 	}
 }
 

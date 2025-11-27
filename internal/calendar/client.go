@@ -1,16 +1,14 @@
 package calendar
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"regexp"
 	"strings"
 	"time"
 
+	"golang.org/x/oauth2"
 	calendar "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
 
@@ -19,8 +17,9 @@ import (
 
 // Client wraps the Google Calendar service
 type Client struct {
-	svc     *calendar.Service
-	account string // The account this client is associated with
+	svc           *calendar.Service
+	account       string // The account this client is associated with
+	tokenProvider google.TokenProvider
 }
 
 // Account returns the account name this client is associated with
@@ -28,68 +27,45 @@ func (c *Client) Account() string {
 	return c.account
 }
 
+// HasTokenForAccountWithProvider checks if a valid OAuth token exists for the specified account
+func HasTokenForAccountWithProvider(account string, provider google.TokenProvider) bool {
+	if provider == nil {
+		return false
+	}
+	return provider.HasTokenForAccount(account)
+}
+
 // HasTokenForAccount checks if a valid OAuth token exists for the specified account
 func HasTokenForAccount(account string) bool {
-	return google.HasTokenForAccount(account)
+	provider := google.NewFileTokenProvider()
+	return HasTokenForAccountWithProvider(account, provider)
 }
 
 // HasToken checks if a valid OAuth token exists for the default account
 func HasToken() bool {
-	return google.HasToken()
+	return HasTokenForAccount("default")
 }
 
-// GetAuthURLForAccount returns the OAuth URL for user authorization for a specific account
-func GetAuthURLForAccount(account string) string {
-	return google.GetAuthURLForAccount(account)
-}
-
-// GetAuthURL returns the OAuth URL for user authorization for the default account
-func GetAuthURL() string {
-	return google.GetAuthURL()
-}
-
-// SaveTokenForAccount exchanges an authorization code for tokens and saves them for a specific account
-func SaveTokenForAccount(ctx context.Context, account string, authCode string) error {
-	return google.SaveTokenForAccount(ctx, account, authCode)
-}
-
-// SaveToken exchanges an authorization code for tokens and saves them for the default account
-func SaveToken(ctx context.Context, authCode string) error {
-	return google.SaveToken(ctx, authCode)
-}
-
-// NewClientForAccount creates a new Calendar client with OAuth2 authentication for a specific account
-// For CLI usage, it will prompt for auth code via stdin if no token exists
-// For MCP usage, it will return an error if no token exists
-func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
-	// Try to get existing token
-	client, err := google.GetHTTPClientForAccount(ctx, account)
-	if err != nil {
-		// Check if we're in a terminal (CLI mode)
-		if isTerminal() {
-			authURL := google.GetAuthURLForAccount(account)
-			log.Printf("Go to %v", authURL)
-			log.Printf("Authorizing for account: %s", account)
-			io.WriteString(os.Stdout, "Enter code> ")
-
-			bs := bufio.NewScanner(os.Stdin)
-			if !bs.Scan() {
-				return nil, io.EOF
-			}
-			code := bs.Text()
-			if err := google.SaveTokenForAccount(ctx, account, code); err != nil {
-				return nil, err
-			}
-			// Try again with the new token
-			client, err = google.GetHTTPClientForAccount(ctx, account)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// MCP mode - return error with instructions
-			return nil, fmt.Errorf("no valid Google OAuth token found for account %s. Use google_get_auth_url and google_save_auth_code tools to authenticate", account)
-		}
+// NewClientForAccountWithProvider creates a new Calendar client with OAuth2 authentication for a specific account
+// The OAuth token is retrieved from the provided token provider
+func NewClientForAccountWithProvider(ctx context.Context, account string, tokenProvider google.TokenProvider) (*Client, error) {
+	if tokenProvider == nil {
+		return nil, fmt.Errorf("token provider cannot be nil")
 	}
+
+	// Get token from the provided provider
+	token, err := tokenProvider.GetTokenForAccount(ctx, account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Google OAuth token for account %s: %w", account, err)
+	}
+
+	// Create OAuth2 config and token source
+	conf := google.GetOAuthConfig()
+	tokenSource := conf.TokenSource(ctx, token)
+
+	// Create HTTP client with the token
+	client := oauth2.NewClient(ctx, tokenSource)
+	google.ForceHTTP11(client)
 
 	svc, err := calendar.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
@@ -97,9 +73,17 @@ func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
 	}
 
 	return &Client{
-		svc:     svc,
-		account: account,
+		svc:           svc,
+		account:       account,
+		tokenProvider: tokenProvider,
 	}, nil
+}
+
+// NewClientForAccount creates a new Calendar client with OAuth2 authentication for a specific account
+// Uses the default file-based token provider for backward compatibility
+func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
+	provider := google.NewFileTokenProvider()
+	return NewClientForAccountWithProvider(ctx, account, provider)
 }
 
 // NewClient creates a new Calendar client with OAuth2 authentication for the default account
@@ -107,6 +91,12 @@ func NewClientForAccount(ctx context.Context, account string) (*Client, error) {
 // For MCP usage, it will return an error if no token exists
 func NewClient(ctx context.Context) (*Client, error) {
 	return NewClientForAccount(ctx, "default")
+}
+
+// NewClientWithProvider creates a new Calendar client with OAuth2 authentication for the default account
+// using the provided token provider
+func NewClientWithProvider(ctx context.Context, provider google.TokenProvider) (*Client, error) {
+	return NewClientForAccountWithProvider(ctx, "default", provider)
 }
 
 // isTerminal checks if stdin is connected to a terminal (CLI mode)

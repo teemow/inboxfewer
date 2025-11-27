@@ -9,7 +9,9 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/teemow/inboxfewer/internal/gmail"
+	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // RegisterFilterTools registers filter-related tools with the MCP server
@@ -115,24 +117,11 @@ func handleCreateFilter(ctx context.Context, request mcp.CallToolRequest, sc *se
 	args := request.GetArguments()
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
-			authURL := gmail.GetAuthURLForAccount(account)
-			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
-
-1. Visit this URL in your browser:
-   %s
-
-2. Sign in with your Google account
-3. Grant access to Google services (Gmail, Docs, Drive, Contacts)
-4. Copy the authorization code
-
-5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
-
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
+			errorMsg := google.GetAuthenticationErrorMessage(account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
@@ -216,24 +205,11 @@ func handleListFilters(ctx context.Context, request mcp.CallToolRequest, sc *ser
 	args := request.GetArguments()
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
-			authURL := gmail.GetAuthURLForAccount(account)
-			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
-
-1. Visit this URL in your browser:
-   %s
-
-2. Sign in with your Google account
-3. Grant access to Google services (Gmail, Docs, Drive, Contacts)
-4. Copy the authorization code
-
-5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
-
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
+			errorMsg := google.GetAuthenticationErrorMessage(account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
@@ -278,24 +254,11 @@ func handleDeleteFilter(ctx context.Context, request mcp.CallToolRequest, sc *se
 	}
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
-			authURL := gmail.GetAuthURLForAccount(account)
-			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
-
-1. Visit this URL in your browser:
-   %s
-
-2. Sign in with your Google account
-3. Grant access to Google services (Gmail, Docs, Drive, Contacts)
-4. Copy the authorization code
-
-5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
-
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
+			errorMsg := google.GetAuthenticationErrorMessage(account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
@@ -319,24 +282,11 @@ func handleListLabels(ctx context.Context, request mcp.CallToolRequest, sc *serv
 	args := request.GetArguments()
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
-			authURL := gmail.GetAuthURLForAccount(account)
-			errorMsg := fmt.Sprintf(`Google OAuth token not found for account "%s". To authorize access:
-
-1. Visit this URL in your browser:
-   %s
-
-2. Sign in with your Google account
-3. Grant access to Google services (Gmail, Docs, Drive, Contacts)
-4. Copy the authorization code
-
-5. Provide the authorization code to your AI agent
-   The agent will use the google_save_auth_code tool with account="%s" to complete authentication.
-
-Note: You only need to authorize once. The tokens will be automatically refreshed.`, account, authURL, account)
+			errorMsg := google.GetAuthenticationErrorMessage(account)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 

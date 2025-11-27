@@ -11,6 +11,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // registerShareTools registers file sharing and permission management tools
@@ -51,7 +52,7 @@ func registerShareTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 
 		s.AddTool(shareFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
 			if err != nil {
@@ -120,7 +121,7 @@ func registerShareTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 
 	s.AddTool(listPermissionsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		fileID, ok := args["fileId"].(string)
 		if !ok || fileID == "" {
@@ -160,7 +161,7 @@ func registerShareTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 
 		s.AddTool(removePermissionTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			fileID, ok := args["fileId"].(string)
 			if !ok || fileID == "" {

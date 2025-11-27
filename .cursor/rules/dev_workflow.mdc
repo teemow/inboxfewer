@@ -160,10 +160,141 @@ Closes #52
     git add .
     git commit -m "..."
     ```
-3.  **Push Branch:**
+3.  **Never Amend Commits**: Amend is very difficult to handle with multiple people and with gitops. So avoid using this.
+4.  **Push Branch:**
     ```bash
     git push -u origin <your-branch-name>
     ```
-4.  **Create Pull Request:** Use `gh pr create` to create a PR targeting the `main` branch
-5.  **Mark Issue Done:** Set the task status to `done`.
-6.  **Announce Completion:** Inform the user that your changes have been pushed to a branch and a PR has been created.
+5.  **Create Pull Request:** Use `gh pr create` to create a PR targeting the `main` branch
+6.  **Mark Issue Done:** Set the task status to `done`.
+7.  **Announce Completion:** Inform the user that your changes have been pushed to a branch and a PR has been created.
+
+---
+
+## Phase 4: Test Deployments (Optional)
+
+For features that require testing in a live environment before merging, you can deploy feature branches to a test cluster.
+
+**⚠️ IMPORTANT: This repository is PUBLIC. Never commit cluster-specific configuration here.**
+
+### 4.1. Automatic Artifact Building
+
+When you create a Pull Request, GitHub Actions automatically builds and publishes:
+
+1. **Docker Images**: Tagged with the PR merge commit SHA
+2. **Helm Charts**: Tagged with the PR merge commit SHA
+
+These artifacts are published to the GitHub Container Registry (ghcr.io).
+
+### 4.2. Finding Published Artifact Versions
+
+After pushing to your feature branch and creating a PR, GitHub Actions will build the artifacts:
+
+```bash
+# List recent workflow runs for your branch
+gh run list --branch <your-branch-name> --limit 5
+
+# View a specific workflow run
+gh run view <run-id>
+
+# Check the Helm chart release logs to find the published version
+gh run view <helm-release-run-id> --log | grep "Chart:"
+```
+
+**Important:** GitHub Actions uses a temporary merge commit SHA when testing PRs. The published chart version will use this merge commit SHA, not your branch commit SHA.
+
+**Artifact naming pattern:**
+- Docker Image: `ghcr.io/teemow/inboxfewer:0.1.1-refs-pull-<PR#>-merge-<merge-commit-sha>`
+- Helm Chart: `ghcr.io/teemow/charts/inboxfewer:0.1.1-refs-pull-<PR#>-merge-<merge-commit-sha>`
+
+Example:
+```
+ghcr.io/teemow/charts/inboxfewer:0.1.1-refs-pull-56-merge-2d7d5eb6d373cc64bad752ae2713abfb8290ea4a
+```
+
+### 4.3. Deploying to a Test Cluster
+
+**Deployment configurations are managed in a separate, private GitOps repository.** This keeps sensitive cluster information (like ingress domains, secrets, and infrastructure details) out of this public repository.
+
+#### General Deployment Process:
+
+1. **Locate the HelmRelease configuration** in your GitOps repository
+   - Typically found under a path like `cluster/apps/<app-name>/release.yaml`
+
+2. **Update the Helm chart version** to use the PR artifact:
+   ```yaml
+   spec:
+     chart:
+       spec:
+         chart: inboxfewer
+         version: '0.1.1-refs-pull-56-merge-<merge-commit-sha>'
+         sourceRef:
+           kind: HelmRepository
+           name: inboxfewer
+           namespace: flux-system
+   ```
+
+3. **Force pod restart** (optional but recommended):
+   - Add or update a pod annotation to force a restart and image pull:
+   ```yaml
+   spec:
+     values:
+       podAnnotations:
+         rollme: "2025-11-23-01-40"  # Use current timestamp
+   ```
+
+4. **Commit and push** the deployment configuration changes to your GitOps repository
+
+5. **Reconcile Flux** to deploy the changes:
+   ```bash
+   # Reconcile the GitRepository and Kustomization
+   flux reconcile source git flux-system
+   flux reconcile kustomization flux-system
+   
+   # Reconcile the specific HelmRelease
+   flux reconcile helmrelease -n <namespace> <release-name>
+   ```
+
+6. **Verify the deployment**:
+   ```bash
+   # Check HelmRelease status
+   flux get helmreleases -n <namespace> <release-name>
+   
+   # Check pod status
+   kubectl -n <namespace> get pods
+   
+   # Wait for rollout
+   kubectl -n <namespace> rollout status deployment/<deployment-name>
+   
+   # Check logs
+   kubectl -n <namespace> logs deployment/<deployment-name>
+   ```
+
+### 4.4. Testing and Iteration
+
+Once deployed:
+
+1. **Test your changes** in the live environment
+2. **Check logs** for any errors or unexpected behavior
+3. **Iterate** if needed:
+   - Make code changes in your feature branch
+   - Push the changes
+   - Wait for new artifacts to be built
+   - Update the deployment configuration with the new artifact version
+   - Reconcile Flux again
+
+### 4.5. Cleanup After Testing
+
+After your testing is complete and the PR is merged:
+
+1. **Revert the test deployment configuration** in your GitOps repository
+2. **Deploy the official release** (merged to main) if appropriate
+
+### 4.6. Security Considerations
+
+- ✅ **DO:** Keep all cluster-specific configuration in a private GitOps repository (the inboxfewer repo is public!)
+- ✅ **DO:** Use Kubernetes secrets for sensitive data (OAuth credentials, API keys, etc.)
+- ✅ **DO:** Encrypt secrets with tools like SOPS before committing to Git
+- ❌ **DON'T:** Commit cluster URLs, domains, or network topology to public repositories
+- ❌ **DON'T:** Commit credentials or secrets to any Git repository (even private ones without encryption)
+- ❌ **DON'T:** Include deployment configuration in this public repository

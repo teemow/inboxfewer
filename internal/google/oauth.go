@@ -2,6 +2,8 @@ package google
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,11 +16,14 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	calendar "google.golang.org/api/calendar/v3"
-	gmail "google.golang.org/api/gmail/v1"
-	meet "google.golang.org/api/meet/v2"
-	tasks "google.golang.org/api/tasks/v1"
 )
+
+// hashEmail creates a hash of an email for logging purposes
+// This prevents PII leakage in logs while maintaining traceability
+func hashEmail(email string) string {
+	hash := sha256.Sum256([]byte(email))
+	return hex.EncodeToString(hash[:8]) // First 8 bytes (16 hex chars) for brevity
+}
 
 const defaultAccount = "default"
 
@@ -39,6 +44,10 @@ func MigrateDefaultToken() error {
 			if err := os.Rename(oldTokenFile, newTokenFile); err != nil {
 				return fmt.Errorf("failed to migrate token file: %w", err)
 			}
+			// Fix permissions on migrated file
+			if err := os.Chmod(newTokenFile, 0600); err != nil {
+				log.Printf("Warning: Failed to set permissions on migrated token file: %v", err)
+			}
 			log.Printf("Migrated google.token to google-default.token")
 		}
 	}
@@ -56,6 +65,13 @@ func getTokenFilePath(account string) string {
 func validateAccountName(account string) error {
 	if account == "" {
 		return fmt.Errorf("account name cannot be empty")
+	}
+	if len(account) > 255 {
+		return fmt.Errorf("account name too long (max 255 characters)")
+	}
+	// Additional path traversal protection
+	if strings.Contains(account, "..") || strings.Contains(account, "/") || strings.Contains(account, "\\") {
+		return fmt.Errorf("account name contains invalid path characters")
 	}
 	if !accountNameRegex.MatchString(account) {
 		return fmt.Errorf("account name must contain only alphanumeric characters, hyphens, and underscores")
@@ -78,29 +94,27 @@ func HasToken() bool {
 	return HasTokenForAccount(defaultAccount)
 }
 
-// GetAuthURLForAccount returns the OAuth URL for user authorization for a specific account
-func GetAuthURLForAccount(account string) string {
-	conf := getOAuthConfig()
-	// Include account name in state for better user experience
-	return conf.AuthCodeURL(fmt.Sprintf("state-%s", account))
+// GetAuthenticationErrorMessage returns a user-friendly error message when authentication is required
+func GetAuthenticationErrorMessage(account string) string {
+	return fmt.Sprintf(`Google OAuth authentication required for account "%s".
+
+For HTTP/SSE transports:
+  Your MCP client (e.g., Cursor, Claude Desktop) will automatically handle
+  the OAuth flow with Google. Make sure you're connected to an MCP server
+  that supports OAuth authentication.
+
+For STDIO transport:
+  Authentication tokens should be managed through environment variables or
+  the Google Cloud SDK.
+
+Account: %s`, account, account)
 }
 
-// GetAuthURL returns the OAuth URL for user authorization for the default account
-func GetAuthURL() string {
-	return GetAuthURLForAccount(defaultAccount)
-}
-
-// SaveTokenForAccount exchanges an authorization code for tokens and saves them for a specific account
-func SaveTokenForAccount(ctx context.Context, account string, authCode string) error {
+// SaveTokenForAccount saves a Google OAuth token for a specific account
+// This is called by the OAuth middleware after validating the user's token
+func SaveTokenForAccount(ctx context.Context, account string, token *oauth2.Token) error {
 	if err := validateAccountName(account); err != nil {
 		return fmt.Errorf("invalid account name: %w", err)
-	}
-
-	conf := getOAuthConfig()
-
-	t, err := conf.Exchange(ctx, authCode)
-	if err != nil {
-		return fmt.Errorf("failed to exchange auth code for account %s: %w", account, err)
 	}
 
 	cacheDir := filepath.Join(userCacheDir(), "inboxfewer")
@@ -110,42 +124,72 @@ func SaveTokenForAccount(ctx context.Context, account string, authCode string) e
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
-	tokenData := t.AccessToken + " " + t.RefreshToken
+	// Verify directory permissions for security
+	dirInfo, err := os.Stat(cacheDir)
+	if err != nil {
+		return fmt.Errorf("failed to stat cache directory: %w", err)
+	}
+	if dirInfo.Mode().Perm() != 0700 {
+		// Attempt to fix permissions
+		if err := os.Chmod(cacheDir, 0700); err != nil {
+			return fmt.Errorf("insecure cache directory permissions %o and failed to fix: %w", dirInfo.Mode().Perm(), err)
+		}
+		log.Printf("Fixed insecure cache directory permissions from %o to 0700", dirInfo.Mode().Perm())
+	}
+
+	tokenData := token.AccessToken + " " + token.RefreshToken
 	if err := os.WriteFile(tokenFile, []byte(tokenData), 0600); err != nil {
 		return fmt.Errorf("failed to write token file for account %s: %w", account, err)
 	}
 
-	log.Printf("Saved OAuth token for account: %s", account)
+	// Verify file permissions after write
+	fileInfo, err := os.Stat(tokenFile)
+	if err != nil {
+		return fmt.Errorf("failed to stat token file: %w", err)
+	}
+	if fileInfo.Mode().Perm() != 0600 {
+		// Attempt to fix permissions
+		if err := os.Chmod(tokenFile, 0600); err != nil {
+			return fmt.Errorf("insecure token file permissions %o and failed to fix: %w", fileInfo.Mode().Perm(), err)
+		}
+		log.Printf("Fixed insecure token file permissions from %o to 0600", fileInfo.Mode().Perm())
+	}
+
+	// Log with hashed email to prevent PII leakage
+	log.Printf("Saved OAuth token for account hash: %s", hashEmail(account))
 	return nil
 }
 
-// SaveToken exchanges an authorization code for tokens and saves them for the default account
-func SaveToken(ctx context.Context, authCode string) error {
-	return SaveTokenForAccount(ctx, defaultAccount, authCode)
-}
-
-// getOAuthConfig returns the OAuth2 configuration for all Google services
+// getOAuthConfig returns the OAuth2 configuration for all Google services (internal use)
+// Credentials are read from environment variables for security
 func getOAuthConfig() *oauth2.Config {
 	const OOB = "urn:ietf:wg:oauth:2.0:oob"
+
+	// Get credentials from environment variables
+	// These are required for STDIO transport token refresh
+	clientID := os.Getenv("GOOGLE_STDIO_CLIENT_ID")
+	clientSecret := os.Getenv("GOOGLE_STDIO_CLIENT_SECRET")
+
+	// Fall back to GOOGLE_CLIENT_ID/SECRET if STDIO-specific vars not set
+	if clientID == "" {
+		clientID = os.Getenv("GOOGLE_CLIENT_ID")
+	}
+	if clientSecret == "" {
+		clientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
+	}
+
 	return &oauth2.Config{
-		ClientID:     "615260903473-ctldo9bte5phiu092s8ovfbe7c8aao1o.apps.googleusercontent.com",
-		ClientSecret: "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",
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
 		Endpoint:     google.Endpoint,
 		RedirectURL:  OOB,
-		Scopes: []string{
-			gmail.MailGoogleComScope,                                  // Gmail access (includes send)
-			gmail.GmailSettingsBasicScope,                             // Gmail settings (filters, labels, etc.)
-			"https://www.googleapis.com/auth/documents.readonly",      // Google Docs access
-			"https://www.googleapis.com/auth/drive",                   // Google Drive access (read/write)
-			"https://www.googleapis.com/auth/contacts.readonly",       // Google Contacts access
-			"https://www.googleapis.com/auth/contacts.other.readonly", // Other contacts (interaction history)
-			"https://www.googleapis.com/auth/directory.readonly",      // Directory contacts (Workspace)
-			calendar.CalendarScope,                                    // Google Calendar access (read/write)
-			meet.MeetingsSpaceReadonlyScope,                           // Google Meet access (read-only artifacts)
-			"https://www.googleapis.com/auth/meetings.space.settings", // Google Meet settings (configure spaces)
-			tasks.TasksScope,                                          // Google Tasks access (read/write)
-		},
+		Scopes:       DefaultOAuthScopes,
 	}
+}
+
+// GetOAuthConfig returns the OAuth2 configuration for all Google services (exported for use by clients)
+func GetOAuthConfig() *oauth2.Config {
+	return getOAuthConfig()
 }
 
 // GetTokenSourceForAccount returns an OAuth2 token source for the stored token for a specific account
@@ -156,7 +200,25 @@ func GetTokenSourceForAccount(ctx context.Context, account string) (oauth2.Token
 	}
 
 	conf := getOAuthConfig()
+	if conf.ClientID == "" || conf.ClientSecret == "" {
+		return nil, fmt.Errorf("Google OAuth credentials not configured. Set GOOGLE_STDIO_CLIENT_ID and GOOGLE_STDIO_CLIENT_SECRET (or GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) environment variables")
+	}
+
 	tokenFile := getTokenFilePath(account)
+
+	// Verify file permissions before reading
+	fileInfo, err := os.Stat(tokenFile)
+	if err != nil {
+		return nil, fmt.Errorf("no valid Google OAuth token found for account %s", account)
+	}
+	if fileInfo.Mode().Perm() != 0600 {
+		log.Printf("Warning: Token file has insecure permissions %o (expected 0600) for account hash %s", fileInfo.Mode().Perm(), hashEmail(account))
+		// Attempt to fix permissions
+		if err := os.Chmod(tokenFile, 0600); err != nil {
+			return nil, fmt.Errorf("token file has insecure permissions %o and cannot be fixed: %w", fileInfo.Mode().Perm(), err)
+		}
+		log.Printf("Fixed token file permissions to 0600 for account hash %s", hashEmail(account))
+	}
 
 	slurp, err := os.ReadFile(tokenFile)
 	if err != nil {
@@ -177,7 +239,7 @@ func GetTokenSourceForAccount(ctx context.Context, account string) (oauth2.Token
 
 	// Validate the token
 	if _, err := ts.Token(); err != nil {
-		log.Printf("Cached token invalid for account %s: %v", account, err)
+		log.Printf("Cached token invalid for account hash %s: %v", hashEmail(account), err)
 		return nil, fmt.Errorf("cached token is invalid for account %s: %w", account, err)
 	}
 
@@ -199,13 +261,7 @@ func GetHTTPClientForAccount(ctx context.Context, account string) (*http.Client,
 	}
 
 	client := oauth2.NewClient(ctx, ts)
-
-	// Force HTTP/1.1 by disabling HTTP/2
-	transport := client.Transport.(*oauth2.Transport)
-	baseTransport := &http.Transport{
-		ForceAttemptHTTP2: false,
-	}
-	transport.Base = baseTransport
+	ForceHTTP11(client)
 
 	return client, nil
 }
@@ -239,4 +295,18 @@ func homeDir() string {
 		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 	}
 	return os.Getenv("HOME")
+}
+
+// ForceHTTP11 configures an HTTP client to use HTTP/1.1 instead of HTTP/2.
+// This is needed because some Google APIs have issues with HTTP/2.
+// If the client's transport is not an *oauth2.Transport, this is a no-op.
+func ForceHTTP11(client *http.Client) {
+	if client == nil || client.Transport == nil {
+		return
+	}
+	if transport, ok := client.Transport.(*oauth2.Transport); ok {
+		transport.Base = &http.Transport{
+			ForceAttemptHTTP2: false,
+		}
+	}
 }

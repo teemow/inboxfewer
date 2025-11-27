@@ -2,32 +2,63 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/teemow/inboxfewer/internal/mcp/oauth"
+	"github.com/teemow/inboxfewer/internal/resources"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/calendar_tools"
 	"github.com/teemow/inboxfewer/internal/tools/docs_tools"
 	"github.com/teemow/inboxfewer/internal/tools/drive_tools"
 	"github.com/teemow/inboxfewer/internal/tools/gmail_tools"
-	"github.com/teemow/inboxfewer/internal/tools/google_tools"
 	"github.com/teemow/inboxfewer/internal/tools/meet_tools"
 	"github.com/teemow/inboxfewer/internal/tools/tasks_tools"
 )
 
+// OAuthSecurityConfig holds OAuth security settings
+type OAuthSecurityConfig struct {
+	AllowPublicClientRegistration bool
+	RegistrationAccessToken       string
+	AllowInsecureAuthWithoutState bool
+	MaxClientsPerIP               int
+	EncryptionKey                 []byte
+
+	// Interstitial page branding
+	InterstitialLogoURL            string
+	InterstitialLogoAlt            string
+	InterstitialTitle              string
+	InterstitialMessage            string
+	InterstitialButtonText         string
+	InterstitialPrimaryColor       string
+	InterstitialBackgroundGradient string
+}
+
 func newServeCmd() *cobra.Command {
 	var (
-		debugMode bool
-		transport string
-		httpAddr  string
-		yolo      bool
+		debugMode          bool
+		transport          string
+		httpAddr           string
+		yolo               bool
+		googleClientID     string
+		googleClientSecret string
+		disableStreaming   bool
+		baseURL            string
+		// OAuth Security Settings
+		allowPublicClientRegistration bool
+		registrationAccessToken       string
+		allowInsecureAuthWithoutState bool
+		maxClientsPerIP               int
+		encryptionKey                 string
 	)
 
 	cmd := &cobra.Command{
@@ -38,26 +69,73 @@ integration tools for AI assistants.
 
 Supports multiple transport types:
   - stdio: Standard input/output (default)
-  - sse: Server-Sent Events over HTTP
   - streamable-http: Streamable HTTP transport
 
 Safety Mode:
   By default, the server operates in read-only mode, providing only safe operations.
-  Use --yolo to enable write operations (email sending, file deletion, etc.)`,
+  Use --yolo to enable write operations (email sending, file deletion, etc.)
+
+OAuth Configuration:
+  HTTP Transport:
+    Base URL (required for deployed instances):
+      --base-url https://your-domain.com OR MCP_BASE_URL env var
+      Auto-detected for localhost (development only)
+    
+    Token Refresh (required):
+      --google-client-id and --google-client-secret flags
+      OR GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars
+      Required for OAuth proxy mode and automatic token refresh
+
+  STDIO Transport:
+    Token Refresh (optional):
+      GOOGLE_STDIO_CLIENT_ID and GOOGLE_STDIO_CLIENT_SECRET env vars
+      OR GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars (fallback)
+      Without these, token refresh will fail when tokens expire (~1 hour).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runServe(transport, debugMode, httpAddr, yolo)
+			// Parse encryption key from base64 if provided
+			var encKeyBytes []byte
+			if encryptionKey != "" {
+				decoded, err := base64.StdEncoding.DecodeString(encryptionKey)
+				if err != nil {
+					return fmt.Errorf("invalid encryption key (must be base64 encoded): %w", err)
+				}
+				if len(decoded) != 32 {
+					return fmt.Errorf("encryption key must be exactly 32 bytes (got %d bytes)", len(decoded))
+				}
+				encKeyBytes = decoded
+			}
+
+			securityConfig := OAuthSecurityConfig{
+				AllowPublicClientRegistration: allowPublicClientRegistration,
+				RegistrationAccessToken:       registrationAccessToken,
+				AllowInsecureAuthWithoutState: allowInsecureAuthWithoutState,
+				MaxClientsPerIP:               maxClientsPerIP,
+				EncryptionKey:                 encKeyBytes,
+			}
+			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL, securityConfig)
 		},
 	}
 
 	cmd.Flags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
-	cmd.Flags().StringVar(&transport, "transport", "stdio", "Transport type: stdio, sse, or streamable-http")
-	cmd.Flags().StringVar(&httpAddr, "http-addr", ":8080", "HTTP server address (for sse and streamable-http transports)")
+	cmd.Flags().StringVar(&transport, "transport", "stdio", "Transport type: stdio or streamable-http")
+	cmd.Flags().StringVar(&httpAddr, "http-addr", ":8080", "HTTP server address (for streamable-http transport)")
 	cmd.Flags().BoolVar(&yolo, "yolo", false, "Enable write operations (email sending, file deletion, etc.). Default is read-only mode.")
+	cmd.Flags().StringVar(&googleClientID, "google-client-id", "", "Google OAuth Client ID for automatic token refresh (HTTP transport only). Can also use GOOGLE_CLIENT_ID env var.")
+	cmd.Flags().StringVar(&googleClientSecret, "google-client-secret", "", "Google OAuth Client Secret for automatic token refresh (HTTP transport only). Can also use GOOGLE_CLIENT_SECRET env var.")
+	cmd.Flags().BoolVar(&disableStreaming, "disable-streaming", false, "Disable streaming for HTTP transport (for compatibility with certain clients)")
+	cmd.Flags().StringVar(&baseURL, "base-url", "", "Public base URL for OAuth (HTTP transport only). Required for deployed instances. Can also use MCP_BASE_URL env var. Example: https://mcp.example.com")
+
+	// OAuth Security Settings (HTTP transport only)
+	cmd.Flags().BoolVar(&allowPublicClientRegistration, "oauth-allow-public-registration", false, "WARNING: Allow unauthenticated client registration (NOT recommended for production). Can also use MCP_OAUTH_ALLOW_PUBLIC_REGISTRATION env var. Default: false (secure)")
+	cmd.Flags().StringVar(&registrationAccessToken, "oauth-registration-token", "", "Registration access token required for client registration when public registration is disabled. Can also use MCP_OAUTH_REGISTRATION_TOKEN env var.")
+	cmd.Flags().StringVar(&encryptionKey, "oauth-encryption-key", "", "AES-256 encryption key for token storage at rest (32 bytes, base64 encoded). REQUIRED for production. Can also use MCP_OAUTH_ENCRYPTION_KEY env var. Generate with: openssl rand -base64 32")
+	cmd.Flags().BoolVar(&allowInsecureAuthWithoutState, "oauth-allow-no-state", false, "WARNING: Allow authorization without state parameter (weakens CSRF protection). Can also use MCP_OAUTH_ALLOW_NO_STATE env var. Default: false (secure)")
+	cmd.Flags().IntVar(&maxClientsPerIP, "oauth-max-clients-per-ip", 10, "Maximum number of clients that can be registered per IP address (prevents DoS). Can also use MCP_OAUTH_MAX_CLIENTS_PER_IP env var. Default: 10")
 
 	return cmd
 }
 
-func runServe(transport string, debugMode bool, httpAddr string, yolo bool) error {
+func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig) error {
 	// Setup graceful shutdown
 	shutdownCtx, cancel := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
@@ -75,7 +153,73 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool) erro
 		githubToken = ""
 	}
 
-	// Create server context
+	// Get Google OAuth credentials from environment if not provided via flags
+	if googleClientID == "" {
+		googleClientID = os.Getenv("GOOGLE_CLIENT_ID")
+	}
+	if googleClientSecret == "" {
+		googleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
+	}
+
+	// Get OAuth security settings from environment if not provided via flags
+	if !securityConfig.AllowPublicClientRegistration && os.Getenv("MCP_OAUTH_ALLOW_PUBLIC_REGISTRATION") == "true" {
+		securityConfig.AllowPublicClientRegistration = true
+	}
+	if securityConfig.RegistrationAccessToken == "" {
+		securityConfig.RegistrationAccessToken = os.Getenv("MCP_OAUTH_REGISTRATION_TOKEN")
+	}
+	if len(securityConfig.EncryptionKey) == 0 {
+		if encKeyStr := os.Getenv("MCP_OAUTH_ENCRYPTION_KEY"); encKeyStr != "" {
+			decoded, err := base64.StdEncoding.DecodeString(encKeyStr)
+			if err != nil {
+				log.Printf("Warning: Invalid encryption key in MCP_OAUTH_ENCRYPTION_KEY (must be base64): %v", err)
+			} else if len(decoded) != 32 {
+				log.Printf("Warning: Invalid encryption key length in MCP_OAUTH_ENCRYPTION_KEY (must be 32 bytes, got %d)", len(decoded))
+			} else {
+				securityConfig.EncryptionKey = decoded
+			}
+		}
+	}
+	if !securityConfig.AllowInsecureAuthWithoutState && os.Getenv("MCP_OAUTH_ALLOW_NO_STATE") == "true" {
+		securityConfig.AllowInsecureAuthWithoutState = true
+	}
+	if securityConfig.MaxClientsPerIP == 0 {
+		if envMax := os.Getenv("MCP_OAUTH_MAX_CLIENTS_PER_IP"); envMax != "" {
+			var maxClients int
+			if _, err := fmt.Sscanf(envMax, "%d", &maxClients); err == nil && maxClients > 0 {
+				securityConfig.MaxClientsPerIP = maxClients
+			}
+		}
+		// If still 0, use default of 10
+		if securityConfig.MaxClientsPerIP == 0 {
+			securityConfig.MaxClientsPerIP = 10
+		}
+	}
+
+	// Parse interstitial page branding from environment variables
+	if logoURL := os.Getenv("MCP_INTERSTITIAL_LOGO_URL"); logoURL != "" {
+		securityConfig.InterstitialLogoURL = logoURL
+	}
+	if logoAlt := os.Getenv("MCP_INTERSTITIAL_LOGO_ALT"); logoAlt != "" {
+		securityConfig.InterstitialLogoAlt = logoAlt
+	}
+	if title := os.Getenv("MCP_INTERSTITIAL_TITLE"); title != "" {
+		securityConfig.InterstitialTitle = title
+	}
+	if message := os.Getenv("MCP_INTERSTITIAL_MESSAGE"); message != "" {
+		securityConfig.InterstitialMessage = message
+	}
+	if buttonText := os.Getenv("MCP_INTERSTITIAL_BUTTON_TEXT"); buttonText != "" {
+		securityConfig.InterstitialButtonText = buttonText
+	}
+	if primaryColor := os.Getenv("MCP_INTERSTITIAL_PRIMARY_COLOR"); primaryColor != "" {
+		securityConfig.InterstitialPrimaryColor = primaryColor
+	}
+	if bgGradient := os.Getenv("MCP_INTERSTITIAL_BACKGROUND_GRADIENT"); bgGradient != "" {
+		securityConfig.InterstitialBackgroundGradient = bgGradient
+	}
+
+	// Create server context (will be recreated for HTTP with OAuth token provider)
 	serverContext, err := server.NewServerContext(shutdownCtx, githubUser, githubToken)
 	if err != nil {
 		return fmt.Errorf("failed to create server context: %w", err)
@@ -89,8 +233,10 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool) erro
 	}()
 
 	// Create MCP server
+	// Note: mcp.Implementation has Title field but WithTitle() ServerOption not available in v0.43.0
 	mcpSrv := mcpserver.NewMCPServer("inboxfewer", version,
 		mcpserver.WithToolCapabilities(true),
+		mcpserver.WithResourceCapabilities(false, false), // Subscribe and listChanged
 	)
 
 	// readOnly is the inverse of yolo
@@ -105,53 +251,20 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool) erro
 		}
 	}
 
-	// Register Google OAuth tools (always available for authentication)
-	if err := google_tools.RegisterGoogleTools(mcpSrv, serverContext); err != nil {
-		return fmt.Errorf("failed to register Google OAuth tools: %w", err)
-	}
-
-	// Register Gmail tools
-	if err := gmail_tools.RegisterGmailTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Gmail tools: %w", err)
-	}
-
-	// Register Docs tools (read-only by nature)
-	if err := docs_tools.RegisterDocsTools(mcpSrv, serverContext); err != nil {
-		return fmt.Errorf("failed to register Docs tools: %w", err)
-	}
-
-	// Register Drive tools
-	if err := drive_tools.RegisterDriveTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Drive tools: %w", err)
-	}
-
-	// Register Calendar tools
-	if err := calendar_tools.RegisterCalendarTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Calendar tools: %w", err)
-	}
-
-	// Register Meet tools
-	if err := meet_tools.RegisterMeetTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Meet tools: %w", err)
-	}
-
-	// Register Tasks tools
-	if err := tasks_tools.RegisterTasksTools(mcpSrv, serverContext, readOnly); err != nil {
-		return fmt.Errorf("failed to register Tasks tools: %w", err)
+	// Register all tools and resources
+	if err := registerAllTools(mcpSrv, serverContext, readOnly); err != nil {
+		return err
 	}
 
 	// Start the appropriate server based on transport type
 	switch transport {
 	case "stdio":
 		return runStdioServer(mcpSrv)
-	case "sse":
-		fmt.Printf("Starting inboxfewer MCP server with %s transport...\n", transport)
-		return runSSEServer(mcpSrv, httpAddr, shutdownCtx, debugMode)
 	case "streamable-http":
 		fmt.Printf("Starting inboxfewer MCP server with %s transport...\n", transport)
-		return runStreamableHTTPServer(mcpSrv, httpAddr, shutdownCtx, debugMode)
+		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL, securityConfig)
 	default:
-		return fmt.Errorf("unsupported transport type: %s (supported: stdio, sse, streamable-http)", transport)
+		return fmt.Errorf("unsupported transport type: %s (supported: stdio, streamable-http)", transport)
 	}
 }
 
@@ -171,55 +284,187 @@ func runStdioServer(mcpSrv *mcpserver.MCPServer) error {
 	return nil
 }
 
-func runSSEServer(mcpSrv *mcpserver.MCPServer, addr string, ctx context.Context, debugMode bool) error {
-	sseServer := mcpserver.NewSSEServer(mcpSrv,
-		mcpserver.WithSSEEndpoint("/sse"),
-		mcpserver.WithMessageEndpoint("/message"),
-	)
-
-	fmt.Printf("SSE server starting on %s\n", addr)
-	fmt.Printf("  SSE endpoint: /sse\n")
-	fmt.Printf("  Message endpoint: /message\n")
-
-	serverDone := make(chan error, 1)
-	go func() {
-		defer close(serverDone)
-		if err := sseServer.Start(addr); err != nil {
-			serverDone <- err
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		fmt.Println("Shutdown signal received, stopping SSE server...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30)
-		defer cancel()
-		if err := sseServer.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("error shutting down SSE server: %w", err)
-		}
-	case err := <-serverDone:
-		if err != nil {
-			return fmt.Errorf("SSE server stopped with error: %w", err)
-		}
-		fmt.Println("SSE server stopped normally")
+// registerAllTools registers all MCP tools and resources
+// Extracted to avoid duplication in serve.go
+func registerAllTools(mcpSrv *mcpserver.MCPServer, ctx *server.ServerContext, readOnly bool) error {
+	// Define all tool registrations
+	type toolRegistration struct {
+		name     string
+		register func() error
 	}
 
-	fmt.Println("SSE server gracefully stopped")
+	registrations := []toolRegistration{
+		{
+			name: "Gmail",
+			register: func() error {
+				return gmail_tools.RegisterGmailTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "Docs",
+			register: func() error {
+				return docs_tools.RegisterDocsTools(mcpSrv, ctx)
+			},
+		},
+		{
+			name: "Drive",
+			register: func() error {
+				return drive_tools.RegisterDriveTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "Calendar",
+			register: func() error {
+				return calendar_tools.RegisterCalendarTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "Meet",
+			register: func() error {
+				return meet_tools.RegisterMeetTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "Tasks",
+			register: func() error {
+				return tasks_tools.RegisterTasksTools(mcpSrv, ctx, readOnly)
+			},
+		},
+		{
+			name: "User Resources",
+			register: func() error {
+				return resources.RegisterUserResources(mcpSrv, ctx)
+			},
+		},
+	}
+
+	// Register all tools
+	for _, reg := range registrations {
+		if err := reg.register(); err != nil {
+			return fmt.Errorf("failed to register %s: %w", reg.name, err)
+		}
+	}
+
 	return nil
 }
 
-func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, addr string, ctx context.Context, debugMode bool) error {
-	httpServer := mcpserver.NewStreamableHTTPServer(mcpSrv,
-		mcpserver.WithEndpointPath("/mcp"),
-	)
+func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig) error {
+	// Create OAuth-enabled HTTP server
+	// Base URL should be the full URL where the server is accessible
+	// For development, use http://localhost:8080
+	// For production, use the actual HTTPS URL
 
-	fmt.Printf("Streamable HTTP server starting on %s\n", addr)
+	// Determine base URL from flag, environment variable, or auto-detection
+	if baseURL == "" {
+		baseURL = os.Getenv("MCP_BASE_URL")
+	}
+	if baseURL == "" {
+		// Fall back to auto-detection for local development
+		baseURL = fmt.Sprintf("http://%s", addr)
+		if addr[0] == ':' {
+			baseURL = fmt.Sprintf("http://localhost%s", addr)
+		}
+		log.Printf("No base URL configured, using auto-detected: %s", baseURL)
+		log.Printf("For deployed instances, set --base-url flag or MCP_BASE_URL env var")
+	} else {
+		log.Printf("Using configured base URL: %s", baseURL)
+	}
+
+	// Create OAuth handler
+	oauthConfig := server.OAuthConfig{
+		BaseURL:                       baseURL,
+		GoogleClientID:                googleClientID,
+		GoogleClientSecret:            googleClientSecret,
+		DisableStreaming:              disableStreaming,
+		DebugMode:                     debugMode,
+		AllowPublicClientRegistration: securityConfig.AllowPublicClientRegistration,
+		RegistrationAccessToken:       securityConfig.RegistrationAccessToken,
+		AllowInsecureAuthWithoutState: securityConfig.AllowInsecureAuthWithoutState,
+		MaxClientsPerIP:               securityConfig.MaxClientsPerIP,
+		EncryptionKey:                 securityConfig.EncryptionKey,
+	}
+
+	// Configure interstitial page branding if any env vars are set
+	if securityConfig.InterstitialLogoURL != "" ||
+		securityConfig.InterstitialLogoAlt != "" ||
+		securityConfig.InterstitialTitle != "" ||
+		securityConfig.InterstitialMessage != "" ||
+		securityConfig.InterstitialButtonText != "" ||
+		securityConfig.InterstitialPrimaryColor != "" ||
+		securityConfig.InterstitialBackgroundGradient != "" {
+		oauthConfig.Interstitial = &oauth.InterstitialConfig{
+			LogoURL:            securityConfig.InterstitialLogoURL,
+			LogoAlt:            securityConfig.InterstitialLogoAlt,
+			Title:              securityConfig.InterstitialTitle,
+			Message:            securityConfig.InterstitialMessage,
+			ButtonText:         securityConfig.InterstitialButtonText,
+			PrimaryColor:       securityConfig.InterstitialPrimaryColor,
+			BackgroundGradient: securityConfig.InterstitialBackgroundGradient,
+		}
+	}
+
+	oauthHandler, err := server.CreateOAuthHandler(oauthConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create OAuth handler: %w", err)
+	}
+	defer oauthHandler.Stop() // Ensure cleanup
+
+	// Create token provider from OAuth store
+	tokenProvider := oauth.NewTokenProvider(oauthHandler.GetStore())
+
+	// Recreate server context with OAuth token provider
+	// This ensures Google API clients use tokens from OAuth authentication
+	githubUser := oldServerContext.GithubUser()
+	githubToken := oldServerContext.GithubToken()
+
+	// Shutdown old context and create new one with OAuth token provider
+	if err := oldServerContext.Shutdown(); err != nil {
+		log.Printf("Warning: failed to shutdown old server context: %v", err)
+	}
+
+	serverContext, err := server.NewServerContextWithProvider(ctx, githubUser, githubToken, tokenProvider)
+	if err != nil {
+		return fmt.Errorf("failed to create server context with OAuth token provider: %w", err)
+	}
+	defer func() {
+		if err := serverContext.Shutdown(); err != nil {
+			log.Printf("Error during server context shutdown: %v", err)
+		}
+	}()
+
+	// Re-register all tools with the new context
+	if err := registerAllTools(mcpSrv, serverContext, readOnly); err != nil {
+		return err
+	}
+
+	// Create OAuth server with existing handler
+	oauthServer, err := server.NewOAuthHTTPServerWithHandler(mcpSrv, "streamable-http", oauthHandler, disableStreaming)
+	if err != nil {
+		return fmt.Errorf("failed to create OAuth HTTP server: %w", err)
+	}
+
+	fmt.Printf("Streamable HTTP server with Google OAuth authentication starting on %s\n", addr)
 	fmt.Printf("  HTTP endpoint: /mcp\n")
+	fmt.Printf("  OAuth metadata: /.well-known/oauth-protected-resource\n")
+	fmt.Printf("  Authorization Server: %s\n", baseURL)
+
+	if googleClientID != "" && googleClientSecret != "" {
+		fmt.Println("\n✓ Automatic token refresh: ENABLED")
+		fmt.Println("  Tokens will be refreshed automatically before expiration")
+		fmt.Println("  Enhanced security features: proactive refresh, atomic operations, token families")
+	} else {
+		fmt.Println("\n⚠ Automatic token refresh: DISABLED")
+		fmt.Println("  Users will need to re-authenticate when tokens expire (~1 hour)")
+		fmt.Println("  To enable, provide --google-client-id and --google-client-secret")
+	}
+
+	fmt.Println("\nClients must authenticate with Google OAuth to access this server.")
+	fmt.Println("The MCP client (e.g., Cursor, Claude Desktop) will handle the OAuth flow automatically.")
 
 	serverDone := make(chan error, 1)
 	go func() {
 		defer close(serverDone)
-		if err := httpServer.Start(addr); err != nil {
+		if err := oauthServer.Start(addr); err != nil {
 			serverDone <- err
 		}
 	}()
@@ -227,9 +472,9 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, addr string, ctx conte
 	select {
 	case <-ctx.Done():
 		fmt.Println("Shutdown signal received, stopping HTTP server...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		if err := oauthServer.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("error shutting down HTTP server: %w", err)
 		}
 	case err := <-serverDone:

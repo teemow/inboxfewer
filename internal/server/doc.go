@@ -1,33 +1,32 @@
-// Package server provides the MCP (Model Context Protocol) server context.
+// Package server provides the MCP server context, session management,
+// and OAuth-enabled HTTP server for the inboxfewer application.
 //
-// This package manages the lifecycle and state of the MCP server, including:
-//   - Context management with cancellation support
-//   - Multi-account client management for all Google services
-//   - Lazy initialization of clients on first use
-//   - Thread-safe access to shared resources
-//   - GitHub credentials management
+// # Key Components
 //
-// The ServerContext maintains separate client instances for each account across
-// all supported Google services: Gmail, Google Docs, Google Drive, Google Calendar,
-// Google Meet, and Google Tasks. Clients are created lazily when first requested
-// and cached for subsequent use.
+// ServerContext manages Google API clients with lazy initialization and caching.
+// It supports multiple accounts and can use different token providers:
+//   - FileTokenProvider: For STDIO transport, reads tokens from disk
+//   - OAuth TokenProvider: For HTTP/SSE transport, manages tokens via OAuth flow
 //
-// Multi-Account Support:
-// Each Google service client can be associated with a specific account (e.g., "work",
-// "personal"). The "default" account is used when no specific account is specified.
+// OAuthHTTPServer wraps an MCP server with OAuth 2.1 authentication:
+//   - Authorization Server Metadata (RFC 8414)
+//   - Protected Resource Metadata (RFC 9728)
+//   - Dynamic Client Registration (RFC 7591)
+//   - Token Revocation (RFC 7009)
+//   - Token Introspection (RFC 7662)
 //
-// Example usage:
+// SessionIDManager handles multi-account session tracking for HTTP transport.
+// It maps Bearer tokens to Google accounts, enabling multiple users to share
+// a single MCP server instance.
 //
-//	ctx := context.Background()
-//	serverCtx, err := server.NewServerContext(ctx, githubUser, githubToken)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//	defer serverCtx.Shutdown()
+// # Security Features
 //
-//	// Get Gmail client for default account
-//	gmailClient := serverCtx.GmailClient()
-//
-//	// Get Calendar client for a specific account
-//	calendarClient := serverCtx.CalendarClientForAccount("work")
+// The OAuth server includes security-focused defaults:
+//   - HTTPS required for production (localhost exempt for development)
+//   - PKCE required (OAuth 2.1 compliance)
+//   - State parameter required for CSRF protection
+//   - Rate limiting per IP and per authenticated user
+//   - Optional token encryption at rest (AES-256-GCM)
+//   - Security headers on all HTTP responses
+//   - Audit logging for authentication events
 package server

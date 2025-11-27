@@ -1,10 +1,17 @@
 package gmail_tools
 
 import (
+	"context"
 	"testing"
+
+	"github.com/teemow/inboxfewer/internal/mcp/oauth"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
-func TestGetAccountFromArgs(t *testing.T) {
+// TestEmailToolsGetAccountFromArgs verifies that email_tools correctly uses the shared
+// common.GetAccountFromArgs function.
+// Comprehensive tests for GetAccountFromArgs are in internal/tools/common/account_test.go
+func TestEmailToolsGetAccountFromArgs(t *testing.T) {
 	tests := []struct {
 		name string
 		args map[string]interface{}
@@ -22,33 +29,36 @@ func TestGetAccountFromArgs(t *testing.T) {
 			args: map[string]interface{}{},
 			want: "default",
 		},
-		{
-			name: "with empty account string",
-			args: map[string]interface{}{
-				"account": "",
-			},
-			want: "default",
-		},
-		{
-			name: "with non-string account",
-			args: map[string]interface{}{
-				"account": 123,
-			},
-			want: "default",
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getAccountFromArgs(tt.args)
+			got := common.GetAccountFromArgs(context.Background(), tt.args)
 			if got != tt.want {
-				t.Errorf("getAccountFromArgs() = %v, want %v", got, tt.want)
+				t.Errorf("GetAccountFromArgs() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-// Test email tools package
+func TestEmailToolsGetAccountFromArgs_WithOAuthContext(t *testing.T) {
+	// Create a context with OAuth user info
+	userInfo := &oauth.UserInfo{
+		Email: "oauth-user@example.com",
+	}
+	ctx := oauth.ContextWithUserInfo(context.Background(), userInfo)
+
+	// OAuth context should take precedence
+	args := map[string]interface{}{
+		"account": "explicit-account",
+	}
+	got := common.GetAccountFromArgs(ctx, args)
+	if got != "oauth-user@example.com" {
+		t.Errorf("GetAccountFromArgs() = %v, want oauth-user@example.com", got)
+	}
+}
+
+// TestEmailToolsPackage tests email tools package helper functions
 func TestEmailToolsPackage(t *testing.T) {
 	// Test that the package compiles and basic functionality works
 	result := splitEmailAddresses("test@example.com")

@@ -42,22 +42,6 @@ func TestHasTokenForAccount(t *testing.T) {
 	}
 }
 
-func TestGetAuthURL(t *testing.T) {
-	// Test that GetAuthURL returns a non-empty URL
-	url := GetAuthURL()
-	if url == "" {
-		t.Error("Expected non-empty auth URL")
-	}
-}
-
-func TestGetAuthURLForAccount(t *testing.T) {
-	// Test that GetAuthURLForAccount returns a non-empty URL
-	url := GetAuthURLForAccount("test-account")
-	if url == "" {
-		t.Error("Expected non-empty auth URL for account")
-	}
-}
-
 func TestEventInput_Validation(t *testing.T) {
 	// Test EventInput structure with various valid and invalid inputs
 	tests := []struct {

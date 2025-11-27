@@ -19,8 +19,8 @@
 //
 // Authentication:
 // The client uses OAuth2 with the meetings.space.readonly and meetings.space.settings
-// scopes. Users must authenticate via the google_get_auth_url and google_save_auth_code
-// tools before using the Meet API.
+// scopes. For HTTP/SSE transports: OAuth is handled automatically by the MCP client.
+// For STDIO transport: Tokens are loaded from the file system (~/.cache/inboxfewer/).
 //
 // Example usage:
 //
