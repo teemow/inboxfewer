@@ -30,6 +30,10 @@ type OAuthConfig struct {
 	AllowInsecureAuthWithoutState bool   // Default: false (state parameter required)
 	MaxClientsPerIP               int    // Default: 10 (prevents DoS)
 	EncryptionKey                 []byte // AES-256 key for token encryption (32 bytes)
+
+	// Interstitial page branding configuration
+	// If nil, uses the default mcp-oauth interstitial page
+	Interstitial *oauth.InterstitialConfig
 }
 
 // OAuthHTTPServer wraps an MCP server with OAuth 2.1 authentication
@@ -57,7 +61,7 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 		logger = slog.Default()
 	}
 
-	return &oauth.Config{
+	oauthConfig := &oauth.Config{
 		BaseURL:            config.BaseURL,
 		GoogleClientID:     config.GoogleClientID,
 		GoogleClientSecret: config.GoogleClientSecret,
@@ -77,6 +81,13 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 			UserBurst: 200, // Allow burst of 200
 		},
 	}
+
+	// Pass through interstitial config if provided
+	if config.Interstitial != nil {
+		oauthConfig.Interstitial = config.Interstitial
+	}
+
+	return oauthConfig
 }
 
 // NewOAuthHTTPServer creates a new OAuth-enabled HTTP server

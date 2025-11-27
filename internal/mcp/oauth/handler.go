@@ -9,6 +9,7 @@ import (
 	oauth "github.com/giantswarm/mcp-oauth"
 	"github.com/giantswarm/mcp-oauth/providers/google"
 	"github.com/giantswarm/mcp-oauth/security"
+	oauthserver "github.com/giantswarm/mcp-oauth/server"
 	"github.com/giantswarm/mcp-oauth/storage/memory"
 
 	inboxgoogle "github.com/teemow/inboxfewer/internal/google"
@@ -38,8 +39,46 @@ type Config struct {
 	// RateLimit configuration
 	RateLimit RateLimitConfig
 
+	// Interstitial configures the OAuth success page for custom URL schemes (cursor://, vscode://, etc.)
+	// If nil, uses the default mcp-oauth interstitial page
+	Interstitial *InterstitialConfig
+
 	// Logger for structured logging (optional, uses default if not provided)
 	Logger *slog.Logger
+}
+
+// InterstitialConfig configures the OAuth success interstitial page branding
+type InterstitialConfig struct {
+	// LogoURL is an optional URL to a logo image (must be HTTPS)
+	// Leave empty to use the default animated checkmark icon
+	LogoURL string
+
+	// LogoAlt is the alt text for the logo image (for accessibility)
+	LogoAlt string
+
+	// Title replaces the "Authorization Successful" heading
+	// Example: "Connected to Inboxfewer"
+	Title string
+
+	// Message replaces the default success message
+	// Use {{.AppName}} placeholder for the application name
+	Message string
+
+	// ButtonText replaces the "Open [AppName]" button text
+	// Use {{.AppName}} placeholder for the application name
+	ButtonText string
+
+	// PrimaryColor is the primary brand color (CSS color value)
+	// Example: "#667eea" or "rgb(102, 126, 234)"
+	PrimaryColor string
+
+	// BackgroundGradient is the body background CSS value
+	// Example: "linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)"
+	BackgroundGradient string
+
+	// CustomCSS allows additional CSS customization (injected into <style> tag)
+	// WARNING: Be careful with CSS injection - avoid user-provided values
+	CustomCSS string
 }
 
 // SecurityConfig holds OAuth security settings (secure by default)
@@ -159,6 +198,22 @@ func NewHandler(config *Config) (*Handler, error) {
 		TrustProxy:                    config.RateLimit.TrustProxy,
 		TokenRefreshThreshold:         300, // 5 minutes proactive refresh
 		ClockSkewGracePeriod:          5,   // 5 seconds clock skew tolerance
+	}
+
+	// Configure interstitial page branding if provided
+	if config.Interstitial != nil {
+		serverConfig.Interstitial = &oauthserver.InterstitialConfig{
+			Branding: &oauthserver.InterstitialBranding{
+				LogoURL:            config.Interstitial.LogoURL,
+				LogoAlt:            config.Interstitial.LogoAlt,
+				Title:              config.Interstitial.Title,
+				Message:            config.Interstitial.Message,
+				ButtonText:         config.Interstitial.ButtonText,
+				PrimaryColor:       config.Interstitial.PrimaryColor,
+				BackgroundGradient: config.Interstitial.BackgroundGradient,
+				CustomCSS:          config.Interstitial.CustomCSS,
+			},
+		}
 	}
 
 	// Create OAuth server

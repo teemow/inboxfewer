@@ -32,6 +32,13 @@ type OAuthSecurityConfig struct {
 	AllowInsecureAuthWithoutState bool
 	MaxClientsPerIP               int
 	EncryptionKey                 []byte
+
+	// Interstitial page branding
+	InterstitialTitle              string
+	InterstitialMessage            string
+	InterstitialButtonText         string
+	InterstitialPrimaryColor       string
+	InterstitialBackgroundGradient string
 }
 
 func newServeCmd() *cobra.Command {
@@ -185,6 +192,23 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		if securityConfig.MaxClientsPerIP == 0 {
 			securityConfig.MaxClientsPerIP = 10
 		}
+	}
+
+	// Parse interstitial page branding from environment variables
+	if title := os.Getenv("MCP_INTERSTITIAL_TITLE"); title != "" {
+		securityConfig.InterstitialTitle = title
+	}
+	if message := os.Getenv("MCP_INTERSTITIAL_MESSAGE"); message != "" {
+		securityConfig.InterstitialMessage = message
+	}
+	if buttonText := os.Getenv("MCP_INTERSTITIAL_BUTTON_TEXT"); buttonText != "" {
+		securityConfig.InterstitialButtonText = buttonText
+	}
+	if primaryColor := os.Getenv("MCP_INTERSTITIAL_PRIMARY_COLOR"); primaryColor != "" {
+		securityConfig.InterstitialPrimaryColor = primaryColor
+	}
+	if bgGradient := os.Getenv("MCP_INTERSTITIAL_BACKGROUND_GRADIENT"); bgGradient != "" {
+		securityConfig.InterstitialBackgroundGradient = bgGradient
 	}
 
 	// Create server context (will be recreated for HTTP with OAuth token provider)
@@ -350,6 +374,21 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		AllowInsecureAuthWithoutState: securityConfig.AllowInsecureAuthWithoutState,
 		MaxClientsPerIP:               securityConfig.MaxClientsPerIP,
 		EncryptionKey:                 securityConfig.EncryptionKey,
+	}
+
+	// Configure interstitial page branding if any env vars are set
+	if securityConfig.InterstitialTitle != "" ||
+		securityConfig.InterstitialMessage != "" ||
+		securityConfig.InterstitialButtonText != "" ||
+		securityConfig.InterstitialPrimaryColor != "" ||
+		securityConfig.InterstitialBackgroundGradient != "" {
+		oauthConfig.Interstitial = &oauth.InterstitialConfig{
+			Title:              securityConfig.InterstitialTitle,
+			Message:            securityConfig.InterstitialMessage,
+			ButtonText:         securityConfig.InterstitialButtonText,
+			PrimaryColor:       securityConfig.InterstitialPrimaryColor,
+			BackgroundGradient: securityConfig.InterstitialBackgroundGradient,
+		}
 	}
 
 	oauthHandler, err := server.CreateOAuthHandler(oauthConfig)
