@@ -42,7 +42,12 @@ jobs:
         id: version
         run: |
           set -e
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          # Use git tag with version sort instead of git describe
+          # git describe only finds tags reachable from HEAD, which fails for parallel branches
+          LATEST_TAG=$(git tag --sort=-version:refname | head -n1 || echo "v0.0.0")
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.0.0"
+          fi
           LATEST_VERSION=${LATEST_TAG#v}
           IFS='.' read -r -a VERSION_PARTS <<< "$LATEST_VERSION"
           NEXT_PATCH=$((VERSION_PARTS[2] + 1))
