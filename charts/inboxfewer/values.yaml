@@ -186,7 +186,7 @@ oauthSecurity:
 # (cursor://, vscode://, etc.). If not set, uses the mcp-oauth default styling.
 interstitial:
   # Logo URL displayed on the success page (must be HTTPS)
-  # Example: "https://raw.githubusercontent.com/teemow/inboxfewer/main/assets/logo/inboxfewer-512.png"
+  # Example: "https://raw.githubusercontent.com/teemow/inboxfewer/main/assets/logo/logo-512.png"
   logoURL: ""
   # Alt text for the logo image (for accessibility)
   # Example: "inboxfewer logo"
