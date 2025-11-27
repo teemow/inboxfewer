@@ -10,6 +10,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // RegisterSchedulingTools registers scheduling and availability tools with the MCP server
@@ -74,7 +75,7 @@ func RegisterSchedulingTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 
 func handleQueryFreeBusy(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	timeMinStr, ok := args["timeMin"].(string)
 	if !ok || timeMinStr == "" {
@@ -141,7 +142,7 @@ func handleQueryFreeBusy(ctx context.Context, request mcp.CallToolRequest, sc *s
 
 func handleFindAvailableTime(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	attendeesStr, ok := args["attendees"].(string)
 	if !ok || attendeesStr == "" {

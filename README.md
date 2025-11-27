@@ -133,11 +133,15 @@ Create `~/keys/github-inboxfewer.token` with:
 
 ## Google OAuth
 
-On first run, authenticate with Google services. OAuth tokens are cached at:
+Authentication with Google differs by transport type:
+
+**STDIO Transport (desktop):** On first run, authenticate via browser. Tokens are cached locally:
 
 - Linux/Unix: `~/.cache/inboxfewer/google-{account}.token`
 - macOS: `~/Library/Caches/inboxfewer/google-{account}.token`
 - Windows: `%TEMP%/inboxfewer/google-{account}.token`
+
+**HTTP Transport (deployed):** Uses OAuth 2.1 with Dynamic Client Registration. MCP clients authenticate through the server's OAuth proxy, no Google credentials needed on the client side. See [docs/mcp-oauth.md](docs/mcp-oauth.md) for setup.
 
 ## Multi-Account Support
 
@@ -203,6 +207,7 @@ See [docs/tools.md](docs/tools.md) for the complete tool reference (auto-generat
 
 - [Configuration Guide](docs/configuration.md)
 - [Deployment Guide](docs/deployment.md) - Docker, Kubernetes, Helm
+- [MCP OAuth Guide](docs/mcp-oauth.md) - OAuth 2.1 authentication for HTTP transport
 - [Security Guide](docs/security.md) - Security best practices and compliance
 - [MCP Tools Reference](docs/tools.md)
 - [Development Guide](docs/development.md)

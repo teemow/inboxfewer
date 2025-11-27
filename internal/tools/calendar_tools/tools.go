@@ -12,15 +12,6 @@ import (
 	"github.com/teemow/inboxfewer/internal/server"
 )
 
-// getAccountFromArgs extracts the account name from request arguments, defaulting to "default"
-func getAccountFromArgs(args map[string]interface{}) string {
-	account := "default"
-	if accountVal, ok := args["account"].(string); ok && accountVal != "" {
-		account = accountVal
-	}
-	return account
-}
-
 // getCalendarClient retrieves or creates a calendar client for the specified account
 func getCalendarClient(ctx context.Context, account string, sc *server.ServerContext) (*calendar.Client, error) {
 	client := sc.CalendarClientForAccount(account)

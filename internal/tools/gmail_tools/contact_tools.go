@@ -10,6 +10,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // RegisterContactTools registers contact-related tools with the MCP server
@@ -52,7 +53,7 @@ func handleSearchContacts(ctx context.Context, request mcp.CallToolRequest, sc *
 	}
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {

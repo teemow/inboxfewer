@@ -15,16 +15,8 @@ import (
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tasks"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
-
-// getAccountFromArgs extracts the account name from request arguments, defaulting to "default"
-func getAccountFromArgs(args map[string]interface{}) string {
-	account := "default"
-	if accountVal, ok := args["account"].(string); ok && accountVal != "" {
-		account = accountVal
-	}
-	return account
-}
 
 // getTasksClient retrieves or creates a tasks client for the specified account
 func getTasksClient(ctx context.Context, account string, sc *server.ServerContext) (*tasks.Client, error) {
@@ -73,7 +65,7 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 
 	s.AddTool(listTaskListsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		client, err := getTasksClient(ctx, account, sc)
 		if err != nil {
@@ -103,7 +95,7 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 
 	s.AddTool(getTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		taskListID, ok := args["taskListId"].(string)
 		if !ok || taskListID == "" {
@@ -138,7 +130,7 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 
 	s.AddTool(createTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		title, ok := args["title"].(string)
 		if !ok || title == "" {
@@ -179,7 +171,7 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 
 		s.AddTool(updateTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			taskListID, ok := args["taskListID"].(string)
 			if !ok || taskListID == "" {
@@ -219,7 +211,7 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 
 		s.AddTool(deleteTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			taskListID, ok := args["taskListId"].(string)
 			if !ok || taskListID == "" {
@@ -268,7 +260,7 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 	s.AddTool(listTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		taskListID, ok := args["taskListId"].(string)
 		if !ok || taskListID == "" {
@@ -324,7 +316,7 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 	s.AddTool(getTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		taskListID, ok := args["taskListId"].(string)
 		if !ok || taskListID == "" {
@@ -385,7 +377,7 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 	s.AddTool(createTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		taskListID, ok := args["taskListId"].(string)
 		if !ok || taskListID == "" {
@@ -492,7 +484,7 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 		s.AddTool(updateTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			taskListID, ok := args["taskListId"].(string)
 			if !ok || taskListID == "" {
@@ -556,7 +548,7 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 		s.AddTool(deleteTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			taskListID, ok := args["taskListId"].(string)
 			if !ok || taskListID == "" {
@@ -601,7 +593,7 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 		s.AddTool(completeTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			taskListID, ok := args["taskListId"].(string)
 			if !ok || taskListID == "" {
@@ -653,7 +645,7 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 		s.AddTool(moveTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			taskListID, ok := args["taskListId"].(string)
 			if !ok || taskListID == "" {
@@ -703,7 +695,7 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 		s.AddTool(clearCompletedTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			taskListID, ok := args["taskListId"].(string)
 			if !ok || taskListID == "" {

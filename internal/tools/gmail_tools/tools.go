@@ -10,29 +10,10 @@ import (
 
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/google"
-	"github.com/teemow/inboxfewer/internal/mcp/oauth"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
-
-// getAccountFromArgs extracts the account name from request arguments and context
-// For OAuth-authenticated requests, uses the authenticated user's email
-// Otherwise defaults to "default" or the explicitly provided account name
-func getAccountFromArgs(ctx context.Context, args map[string]interface{}) string {
-	// First, check if there's an authenticated user in the OAuth context
-	// This is set by the OAuth middleware after validating the Bearer token
-	if userInfo, ok := oauth.GetUserFromContext(ctx); ok && userInfo != nil && userInfo.Email != "" {
-		// Use the authenticated user's email as the account
-		return userInfo.Email
-	}
-
-	// Fall back to explicit account argument or "default"
-	account := "default"
-	if accountVal, ok := args["account"].(string); ok && accountVal != "" {
-		account = accountVal
-	}
-	return account
-}
 
 // RegisterGmailTools registers all Gmail-related tools with the MCP server
 func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnly bool) error {
@@ -198,7 +179,7 @@ func handleListThreads(ctx context.Context, request mcp.CallToolRequest, sc *ser
 	args := request.GetArguments()
 
 	// Get account name
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	query, ok := args["query"].(string)
 	if !ok || query == "" {
@@ -244,7 +225,7 @@ func handleListThreads(ctx context.Context, request mcp.CallToolRequest, sc *ser
 
 func handleArchiveThreads(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	// Parse threadIds - can be string or array
 	threadIDs, err := batch.ParseStringOrArray(args["threadIds"], "threadIds")
@@ -281,7 +262,7 @@ func handleArchiveThreads(ctx context.Context, request mcp.CallToolRequest, sc *
 
 func handleUnarchiveThreads(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	// Parse threadIds - can be string or array
 	threadIDs, err := batch.ParseStringOrArray(args["threadIds"], "threadIds")
@@ -318,7 +299,7 @@ func handleUnarchiveThreads(ctx context.Context, request mcp.CallToolRequest, sc
 
 func handleClassifyThread(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	threadID, ok := args["threadId"].(string)
 	if !ok || threadID == "" {
@@ -356,7 +337,7 @@ func handleClassifyThread(ctx context.Context, request mcp.CallToolRequest, sc *
 
 func handleCheckStale(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	threadID, ok := args["threadId"].(string)
 	if !ok || threadID == "" {
@@ -403,7 +384,7 @@ func handleCheckStale(ctx context.Context, request mcp.CallToolRequest, sc *serv
 
 func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	query := "in:inbox"
 	if queryVal, ok := args["query"].(string); ok && queryVal != "" {
@@ -465,7 +446,7 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 
 func handleMarkThreadsAsSpam(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	// Parse threadIds - can be string or array
 	threadIDs, err := batch.ParseStringOrArray(args["threadIds"], "threadIds")
@@ -502,7 +483,7 @@ func handleMarkThreadsAsSpam(ctx context.Context, request mcp.CallToolRequest, s
 
 func handleUnmarkThreadsAsSpam(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	// Parse threadIds - can be string or array
 	threadIDs, err := batch.ParseStringOrArray(args["threadIds"], "threadIds")

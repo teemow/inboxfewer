@@ -12,6 +12,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // RegisterDocsTools registers all Google Docs-related tools with the MCP server
@@ -56,12 +57,7 @@ func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 
 func handleGetDocuments(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-
-	// Get account name, default to "default"
-	account := "default"
-	if accountVal, ok := args["account"].(string); ok && accountVal != "" {
-		account = accountVal
-	}
+	account := common.GetAccountFromArgs(ctx, args)
 
 	documentIDs, err := batch.ParseStringOrArray(args["documentIds"], "documentIds")
 	if err != nil {
@@ -127,12 +123,7 @@ func handleGetDocuments(ctx context.Context, request mcp.CallToolRequest, sc *se
 
 func handleGetDocumentsMetadata(ctx context.Context, request mcp.CallToolRequest, sc *server.ServerContext) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-
-	// Get account name, default to "default"
-	account := "default"
-	if accountVal, ok := args["account"].(string); ok && accountVal != "" {
-		account = accountVal
-	}
+	account := common.GetAccountFromArgs(ctx, args)
 
 	documentIDs, err := batch.ParseStringOrArray(args["documentIds"], "documentIds")
 	if err != nil {

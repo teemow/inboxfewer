@@ -11,6 +11,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // RegisterUnsubscribeTools registers unsubscribe-related tools with the MCP server
@@ -60,7 +61,7 @@ func handleGetUnsubscribeInfo(ctx context.Context, request mcp.CallToolRequest, 
 	}
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -121,7 +122,7 @@ func handleUnsubscribeViaHTTP(ctx context.Context, request mcp.CallToolRequest, 
 	}
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {

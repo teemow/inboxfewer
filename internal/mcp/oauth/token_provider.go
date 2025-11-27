@@ -61,3 +61,9 @@ type UserInfo = providers.UserInfo
 func GetUserFromContext(ctx context.Context) (*UserInfo, bool) {
 	return oauth.UserInfoFromContext(ctx)
 }
+
+// ContextWithUserInfo creates a context with the given user info.
+// This is useful for testing code that depends on authenticated user context.
+func ContextWithUserInfo(ctx context.Context, userInfo *UserInfo) context.Context {
+	return oauth.ContextWithUserInfo(ctx, userInfo)
+}

@@ -11,6 +11,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // registerFolderTools registers folder management tools
@@ -37,7 +38,7 @@ func registerFolderTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 
 	s.AddTool(createFolderTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		name, ok := args["name"].(string)
 		if !ok || name == "" {
@@ -86,7 +87,7 @@ func registerFolderTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 
 	s.AddTool(moveFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
 		if err != nil {

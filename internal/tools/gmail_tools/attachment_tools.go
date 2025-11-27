@@ -15,6 +15,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // RegisterAttachmentTools registers attachment-related tools with the MCP server
@@ -134,7 +135,7 @@ func handleListAttachments(ctx context.Context, request mcp.CallToolRequest, sc 
 	}
 
 	// Get or create Gmail client
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -207,7 +208,7 @@ func handleGetAttachment(ctx context.Context, request mcp.CallToolRequest, sc *s
 	}
 
 	// Get or create Gmail client
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -262,7 +263,7 @@ func handleGetMessageBodies(ctx context.Context, request mcp.CallToolRequest, sc
 	}
 
 	// Get or create Gmail client
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -303,7 +304,7 @@ func handleExtractDocLinks(ctx context.Context, request mcp.CallToolRequest, sc 
 	}
 
 	// Get or create Gmail client
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -366,7 +367,7 @@ func handleTransferAttachmentsToDrive(ctx context.Context, request mcp.CallToolR
 	}
 
 	// Get account name
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 
 	// Get or create Gmail client
 	gmailClient := sc.GmailClientForAccount(account)

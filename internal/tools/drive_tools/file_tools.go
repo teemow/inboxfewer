@@ -14,6 +14,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/server"
 	"github.com/teemow/inboxfewer/internal/tools/batch"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // registerFileTools registers file management tools
@@ -50,7 +51,7 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 		s.AddTool(uploadFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			name, ok := args["name"].(string)
 			if !ok || name == "" {
@@ -133,7 +134,7 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 	s.AddTool(listFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		client, err := getDriveClient(ctx, account, sc)
 		if err != nil {
@@ -192,7 +193,7 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 	s.AddTool(getFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
 		if err != nil {
@@ -233,7 +234,7 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 	s.AddTool(downloadFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := getAccountFromArgs(args)
+		account := common.GetAccountFromArgs(ctx, args)
 
 		fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
 		if err != nil {
@@ -288,7 +289,7 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 
 		s.AddTool(deleteFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := getAccountFromArgs(args)
+			account := common.GetAccountFromArgs(ctx, args)
 
 			fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
 			if err != nil {

@@ -11,6 +11,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/google"
 	"github.com/teemow/inboxfewer/internal/server"
+	"github.com/teemow/inboxfewer/internal/tools/common"
 )
 
 // RegisterEmailTools registers email-related tools with the MCP server
@@ -162,7 +163,7 @@ func handleSendEmail(ctx context.Context, request mcp.CallToolRequest, sc *serve
 	bcc := splitEmailAddresses(bccStr)
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -263,7 +264,7 @@ func handleReplyToEmail(ctx context.Context, request mcp.CallToolRequest, sc *se
 	bcc := splitEmailAddresses(bccStr)
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
@@ -339,7 +340,7 @@ func handleForwardEmail(ctx context.Context, request mcp.CallToolRequest, sc *se
 	bcc := splitEmailAddresses(bccStr)
 
 	// Get or create Gmail client for the specified account
-	account := getAccountFromArgs(ctx, args)
+	account := common.GetAccountFromArgs(ctx, args)
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
 		if !gmail.HasTokenForAccount(account) {
