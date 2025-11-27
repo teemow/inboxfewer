@@ -19,7 +19,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          ref: main  # Checkout main branch, not the PR head
           fetch-depth: 0
+
+      - name: Fetch all tags
+        run: |
+          git fetch --tags --force
+          echo "All tags:"
+          git tag --sort=-v:refname | head -5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -42,7 +49,11 @@ jobs:
         id: version
         run: |
           set -e
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          # Get the actual latest tag by version sorting (not git describe which only finds ancestors)
+          LATEST_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.0.0"
+          fi
           LATEST_VERSION=${LATEST_TAG#v}
           IFS='.' read -r -a VERSION_PARTS <<< "$LATEST_VERSION"
           NEXT_PATCH=$((VERSION_PARTS[2] + 1))
@@ -73,20 +84,25 @@ jobs:
           git commit -m "chore(helm): Update appVersion to ${VERSION#v}" || echo "No changes to commit"
 
       - name: Create Tag
+        id: create_tag
         run: |
           NEXT_VERSION="${{ steps.version.outputs.next_version }}"
           # Check if tag already exists (locally or remotely)
           if git rev-parse "$NEXT_VERSION" >/dev/null 2>&1; then
             echo "Tag $NEXT_VERSION already exists locally, skipping tag creation"
+            echo "created=false" >> "$GITHUB_OUTPUT"
           elif git ls-remote --tags origin | grep -q "refs/tags/$NEXT_VERSION$"; then
             echo "Tag $NEXT_VERSION already exists on remote, skipping tag creation"
+            echo "created=false" >> "$GITHUB_OUTPUT"
           else
             git tag "$NEXT_VERSION"
             git push origin "$NEXT_VERSION"
             echo "Created and pushed tag $NEXT_VERSION"
+            echo "created=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run GoReleaser
+        if: steps.create_tag.outputs.created == 'true'
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -94,3 +110,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip Release (tag already exists)
+        if: steps.create_tag.outputs.created != 'true'
+        run: |
+          echo "::warning::Skipping release - tag ${{ steps.version.outputs.next_version }} already exists"
+          echo "This can happen if multiple PRs are merged in quick succession"
