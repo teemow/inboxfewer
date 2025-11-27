@@ -35,6 +35,9 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
+      - name: Fetch all tags
+        run: git fetch --tags --force
+
       - name: Determine Next Version
         id: version
         run: |
@@ -72,6 +75,10 @@ jobs:
       - name: Create Tag
         run: |
           NEXT_VERSION="${{ steps.version.outputs.next_version }}"
+          if git rev-parse "$NEXT_VERSION" >/dev/null 2>&1; then
+            echo "Tag $NEXT_VERSION already exists, skipping tag creation"
+            exit 1
+          fi
           git tag "$NEXT_VERSION"
           git push origin "$NEXT_VERSION"
           echo "Created and pushed tag $NEXT_VERSION"
