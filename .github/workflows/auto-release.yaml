@@ -1,19 +1,16 @@
 ---
 name: Auto Release
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - main
 
 permissions:
   contents: write
-  pull-requests: read
 
 jobs:
   auto_release:
     name: Auto Release
-    if: github.event.pull_request.merged
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
