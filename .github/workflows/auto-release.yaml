@@ -36,7 +36,7 @@ jobs:
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
       - name: Fetch all tags
-        run: git fetch --tags --force
+        run: git fetch origin --tags --force
 
       - name: Determine Next Version
         id: version
