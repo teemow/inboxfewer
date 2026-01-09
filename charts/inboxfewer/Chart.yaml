@@ -5,7 +5,7 @@ type: application
 version: 0.1.1
 # appVersion is automatically updated by the release workflow to match the latest release
 # Users can override with: --set image.tag=v1.2.3
-appVersion: "0.0.1"
+appVersion: "0.0.31"
 home: https://github.com/teemow/inboxfewer
 sources:
   - https://github.com/teemow/inboxfewer
