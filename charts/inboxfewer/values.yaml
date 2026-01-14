@@ -518,3 +518,55 @@ serviceMonitor:
   relabelings: []
   # Metric relabelings for the ServiceMonitor
   metricRelabelings: []
+
+# Grafana Dashboard ConfigMaps
+# Creates ConfigMaps containing Grafana dashboards that can be automatically
+# imported by Grafana's sidecar (e.g., kube-prometheus-stack)
+grafanaDashboards:
+  # Enable dashboard ConfigMap creation
+  enabled: false
+
+  # Namespace where Grafana is installed (for dashboard ConfigMaps)
+  # If not set, dashboards are created in the release namespace
+  # Note: Grafana sidecar must be configured to watch this namespace
+  namespace: ""
+
+  # Labels to add to dashboard ConfigMaps for Grafana sidecar discovery
+  # The default label "grafana_dashboard: '1'" is used by kube-prometheus-stack
+  labels:
+    grafana_dashboard: "1"
+
+  # Additional annotations for dashboard ConfigMaps
+  annotations: {}
+
+  # Folder in Grafana where dashboards will be placed
+  # Requires Grafana sidecar v1.3.0+ with folderAnnotation enabled
+  folder: "Inboxfewer"
+
+  # Data source names to use in dashboards
+  # These should match the data source names configured in your Grafana instance
+  datasources:
+    # Prometheus data source name
+    prometheus: "Prometheus"
+    # Loki data source name (for log panels in Security and End-User dashboards)
+    loki: "Loki"
+    # Tempo data source name (for trace correlation in Security dashboard)
+    tempo: "Tempo"
+
+  # Enable individual dashboards
+  dashboards:
+    # Administrator dashboard for Kubernetes operators
+    # Monitors service health, performance, and resource utilization
+    administrator:
+      enabled: true
+
+    # Security Operations dashboard for incident investigation
+    # Provides audit trails, anomaly detection, and compliance reporting
+    # Requires Loki for log panels
+    security:
+      enabled: true
+
+    # End-User dashboard for AI agent activity visibility
+    # Helps users understand how AI agents use MCP tools on their behalf
+    endUser:
+      enabled: true

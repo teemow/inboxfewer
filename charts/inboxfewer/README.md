@@ -225,6 +225,24 @@ The following table lists the configurable parameters of the inboxfewer chart an
 
 **Note:** NetworkPolicy requires a CNI plugin that supports it (Calico, Cilium, Weave Net). It provides defense-in-depth by restricting network access to/from pods.
 
+### Grafana Dashboards
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `grafanaDashboards.enabled` | Enable Grafana dashboard ConfigMaps | `false` |
+| `grafanaDashboards.namespace` | Namespace for dashboard ConfigMaps (defaults to release namespace) | `""` |
+| `grafanaDashboards.labels` | Labels for Grafana sidecar discovery | `{grafana_dashboard: "1"}` |
+| `grafanaDashboards.annotations` | Additional annotations for dashboard ConfigMaps | `{}` |
+| `grafanaDashboards.folder` | Grafana folder for dashboards | `Inboxfewer` |
+| `grafanaDashboards.datasources.prometheus` | Prometheus data source name | `Prometheus` |
+| `grafanaDashboards.datasources.loki` | Loki data source name | `Loki` |
+| `grafanaDashboards.datasources.tempo` | Tempo data source name | `Tempo` |
+| `grafanaDashboards.dashboards.administrator.enabled` | Enable Administrator dashboard | `true` |
+| `grafanaDashboards.dashboards.security.enabled` | Enable Security Operations dashboard | `true` |
+| `grafanaDashboards.dashboards.endUser.enabled` | Enable End-User dashboard | `true` |
+
+**Note:** Dashboard ConfigMaps are created with labels that match the default Grafana sidecar configuration in kube-prometheus-stack. The sidecar automatically imports dashboards from ConfigMaps with the `grafana_dashboard: "1"` label.
+
 ### Volumes and Storage
 
 | Parameter | Description | Default |
@@ -292,6 +310,27 @@ Then install with:
 helm install inboxfewer ./charts/inboxfewer \
   --set existingSecret=inboxfewer-oauth
 ```
+
+### With Grafana Dashboards
+
+Enable automatic dashboard provisioning for Grafana (requires kube-prometheus-stack or similar with sidecar):
+
+```bash
+helm install inboxfewer ./charts/inboxfewer \
+  --set grafanaDashboards.enabled=true \
+  --set grafanaDashboards.namespace=monitoring
+```
+
+Custom data source names:
+
+```bash
+helm install inboxfewer ./charts/inboxfewer \
+  --set grafanaDashboards.enabled=true \
+  --set grafanaDashboards.datasources.prometheus="prometheus-kube-prom" \
+  --set grafanaDashboards.datasources.loki="loki-stack"
+```
+
+**Note:** The Grafana sidecar must be configured to watch the namespace where dashboards are created. By default, kube-prometheus-stack watches all namespaces for ConfigMaps with the `grafana_dashboard: "1"` label.
 
 ### With Persistent OAuth Token Storage
 

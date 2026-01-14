@@ -1,0 +1,83 @@
+{{- if .Values.grafanaDashboards.enabled }}
+{{- $namespace := .Values.grafanaDashboards.namespace | default .Release.Namespace }}
+{{- $labels := .Values.grafanaDashboards.labels }}
+{{- $annotations := .Values.grafanaDashboards.annotations }}
+{{- $folder := .Values.grafanaDashboards.folder }}
+{{- $datasources := .Values.grafanaDashboards.datasources }}
+
+{{- if .Values.grafanaDashboards.dashboards.administrator.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inboxfewer.fullname" . }}-dashboard-admin
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "inboxfewer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana-dashboard
+    {{- range $key, $value := $labels }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  annotations:
+    {{- if $folder }}
+    grafana_folder: {{ $folder | quote }}
+    {{- end }}
+    {{- with $annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  inboxfewer-administrator.json: |
+    {{- .Files.Get "dashboards/administrator-dashboard.json" | nindent 4 }}
+{{- end }}
+
+{{- if .Values.grafanaDashboards.dashboards.security.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inboxfewer.fullname" . }}-dashboard-security
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "inboxfewer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana-dashboard
+    {{- range $key, $value := $labels }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  annotations:
+    {{- if $folder }}
+    grafana_folder: {{ $folder | quote }}
+    {{- end }}
+    {{- with $annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  inboxfewer-security.json: |
+    {{- .Files.Get "dashboards/security-dashboard.json" | nindent 4 }}
+{{- end }}
+
+{{- if .Values.grafanaDashboards.dashboards.endUser.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inboxfewer.fullname" . }}-dashboard-enduser
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "inboxfewer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana-dashboard
+    {{- range $key, $value := $labels }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  annotations:
+    {{- if $folder }}
+    grafana_folder: {{ $folder | quote }}
+    {{- end }}
+    {{- with $annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  inboxfewer-enduser.json: |
+    {{- .Files.Get "dashboards/end-user-dashboard.json" | nindent 4 }}
+{{- end }}
+
+{{- end }}
