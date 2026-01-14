@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feature/issue-oauth-mcp-server-authentication  # For testing
     paths:
       - 'charts/**'
   pull_request:
@@ -39,33 +38,46 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
 
+      - name: Determine versions
+        id: versions
+        run: |
+          # Get chart version from Chart.yaml
+          CHART_VERSION=$(helm show chart charts/${{ env.CHART_NAME }} | grep '^version:' | awk '{print $2}')
+          
+          # Get the latest release tag for appVersion using shared script
+          APP_VERSION=$(./scripts/get-latest-version.sh)
+          
+          # For non-main branches, append branch info to chart version
+          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+            BRANCH_NAME=$(echo "${{ github.ref }}" | sed 's/refs\/heads\///' | sed 's/\//-/g')
+            CHART_VERSION="${CHART_VERSION}-${BRANCH_NAME}-${{ github.sha }}"
+            # For PRs/branches, use the commit SHA as appVersion suffix
+            APP_VERSION="${APP_VERSION}-${BRANCH_NAME}-${{ github.sha }}"
+          fi
+          
+          echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Chart version: ${CHART_VERSION}"
+          echo "App version: ${APP_VERSION}"
+
       - name: Package Helm chart
         run: |
-          helm package charts/${{ env.CHART_NAME }} -d .helm-packages
+          # Package with the determined appVersion (dynamically derived from git tags)
+          helm package charts/${{ env.CHART_NAME }} \
+            --version "${{ steps.versions.outputs.chart_version }}" \
+            --app-version "${{ steps.versions.outputs.app_version }}" \
+            -d .helm-packages
 
       - name: Push Helm chart to OCI registry
         run: |
-          CHART_VERSION=$(helm show chart charts/${{ env.CHART_NAME }} | grep '^version:' | awk '{print $2}')
-          
-          # For feature branches, append branch name to version
-          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
-            BRANCH_NAME=$(echo "${{ github.ref }}" | sed 's/refs\/heads\///' | sed 's/\//-/g')
-            CHART_VERSION="${CHART_VERSION}-${BRANCH_NAME}-${{ github.sha }}"
-            
-            # Update version in packaged chart
-            helm package charts/${{ env.CHART_NAME }} --version ${CHART_VERSION} -d .helm-packages
-          fi
-          
-          helm push .helm-packages/${{ env.CHART_NAME }}-${CHART_VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+          helm push .helm-packages/${{ env.CHART_NAME }}-${{ steps.versions.outputs.chart_version }}.tgz \
+            oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
 
       - name: Summary
         run: |
-          CHART_VERSION=$(helm show chart charts/${{ env.CHART_NAME }} | grep '^version:' | awk '{print $2}')
-          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
-            BRANCH_NAME=$(echo "${{ github.ref }}" | sed 's/refs\/heads\///' | sed 's/\//-/g')
-            CHART_VERSION="${CHART_VERSION}-${BRANCH_NAME}-${{ github.sha }}"
-          fi
-          echo "### Helm Chart Released! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "### Helm Chart Released!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Chart: \`${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/${{ env.CHART_NAME }}:${CHART_VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Chart:** \`${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/${{ env.CHART_NAME }}:${{ steps.versions.outputs.chart_version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**App Version:** \`${{ steps.versions.outputs.app_version }}\`" >> $GITHUB_STEP_SUMMARY
 

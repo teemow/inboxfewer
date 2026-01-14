@@ -35,47 +35,20 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
-      - name: Fetch all tags
-        run: git fetch origin --tags --force
-
       - name: Determine Next Version
         id: version
         run: |
           set -e
-          # Use git tag with version sort instead of git describe
-          # git describe only finds tags reachable from HEAD, which fails for parallel branches
-          LATEST_TAG=$(git tag --sort=-version:refname | head -n1 || echo "v0.0.0")
-          if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="v0.0.0"
-          fi
-          LATEST_VERSION=${LATEST_TAG#v}
+          # Get latest version using shared script
+          LATEST_VERSION=$(./scripts/get-latest-version.sh)
           IFS='.' read -r -a VERSION_PARTS <<< "$LATEST_VERSION"
           NEXT_PATCH=$((VERSION_PARTS[2] + 1))
           NEXT_VERSION="v${VERSION_PARTS[0]}.${VERSION_PARTS[1]}.$NEXT_PATCH"
           NEXT_VERSION_NO_V="${VERSION_PARTS[0]}.${VERSION_PARTS[1]}.$NEXT_PATCH"
-          echo "Latest tag: $LATEST_TAG"
+          echo "Latest version: $LATEST_VERSION"
           echo "Next version: $NEXT_VERSION"
           echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
           echo "next_version_no_v=$NEXT_VERSION_NO_V" >> "$GITHUB_OUTPUT"
-
-      - name: Update Helm Chart AppVersion
-        run: |
-          VERSION="${{ steps.version.outputs.next_version_no_v }}"
-          CHART_FILE="charts/inboxfewer/Chart.yaml"
-
-          # Update appVersion in Chart.yaml
-          sed -i "s/^appVersion: .*/appVersion: \"$VERSION\"/" "$CHART_FILE"
-
-          echo "Updated Helm chart appVersion to $VERSION"
-          git diff "$CHART_FILE"
-
-      - name: Commit Chart Version Update
-        run: |
-          VERSION="${{ steps.version.outputs.next_version }}"
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git add charts/inboxfewer/Chart.yaml
-          git commit -m "chore(helm): Update appVersion to ${VERSION#v}" || echo "No changes to commit"
 
       - name: Create Tag
         run: |
