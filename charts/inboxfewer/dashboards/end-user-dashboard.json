@@ -58,7 +58,9 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -101,7 +103,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\"}[24h])) or vector(0))",
           "legendFormat": "Total Operations",
           "refId": "A"
         }
@@ -127,7 +129,8 @@
               "viz": false
             }
           },
-          "mappings": []
+          "mappings": [],
+          "noValue": "0"
         },
         "overrides": [
           {
@@ -201,7 +204,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (status) (increase(mcp_tool_invocations_total{namespace=~\"$namespace\"}[24h]))",
+          "expr": "sum by (status) (increase(mcp_tool_invocations_total{namespace=~\"$namespace\"}[24h])) or vector(0)",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -221,6 +224,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "0s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -275,7 +279,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "avg(rate(mcp_tool_duration_seconds_sum{namespace=~\"$namespace\"}[$__rate_interval]) / rate(mcp_tool_duration_seconds_count{namespace=~\"$namespace\"}[$__rate_interval]))",
+          "expr": "avg(rate(mcp_tool_duration_seconds_sum{namespace=~\"$namespace\"}[$__rate_interval]) / rate(mcp_tool_duration_seconds_count{namespace=~\"$namespace\"}[$__rate_interval])) or vector(0)",
           "legendFormat": "Average Response Time",
           "refId": "A"
         }
@@ -295,6 +299,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "None",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -323,11 +328,11 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "/^google_service$/",
           "values": false
         },
         "showPercentChange": false,
-        "textMode": "auto",
+        "textMode": "name",
         "wideLayout": true
       },
       "targets": [
@@ -369,7 +374,9 @@
             "fixedColor": "red",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -412,7 +419,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"gmail\"}[24h]))",
+          "expr": "floor(sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"gmail\"}[24h])) or vector(0))",
           "legendFormat": "Gmail",
           "refId": "A"
         }
@@ -432,7 +439,9 @@
             "fixedColor": "blue",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -475,7 +484,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"calendar\"}[24h]))",
+          "expr": "floor(sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"calendar\"}[24h])) or vector(0))",
           "legendFormat": "Calendar",
           "refId": "A"
         }
@@ -495,7 +504,9 @@
             "fixedColor": "green",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -538,7 +549,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"drive\"}[24h]))",
+          "expr": "floor(sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"drive\"}[24h])) or vector(0))",
           "legendFormat": "Drive",
           "refId": "A"
         }
@@ -558,7 +569,9 @@
             "fixedColor": "purple",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -601,7 +614,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"docs\"}[24h]))",
+          "expr": "floor(sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"docs\"}[24h])) or vector(0))",
           "legendFormat": "Docs",
           "refId": "A"
         }
@@ -621,7 +634,9 @@
             "fixedColor": "yellow",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -664,7 +679,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"meet\"}[24h]))",
+          "expr": "floor(sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"meet\"}[24h])) or vector(0))",
           "legendFormat": "Meet",
           "refId": "A"
         }
@@ -684,7 +699,9 @@
             "fixedColor": "orange",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -727,7 +744,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"tasks\"}[24h]))",
+          "expr": "floor(sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"tasks\"}[24h])) or vector(0))",
           "legendFormat": "Tasks",
           "refId": "A"
         }
@@ -766,7 +783,8 @@
               "viz": false
             }
           },
-          "mappings": []
+          "mappings": [],
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -836,6 +854,7 @@
             "inspect": false
           },
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -899,6 +918,7 @@
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
+          "enablePagination": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -987,6 +1007,7 @@
             }
           },
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1059,7 +1080,9 @@
             "fixedColor": "blue",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1102,7 +1125,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"gmail_get.*|gmail_list.*\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"gmail_get.*|gmail_list.*\"}[24h])) or vector(0))",
           "legendFormat": "Emails Read",
           "refId": "A"
         }
@@ -1122,7 +1145,9 @@
             "fixedColor": "orange",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1165,7 +1190,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"gmail_send.*\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"gmail_send.*\"}[24h])) or vector(0))",
           "legendFormat": "Emails Sent",
           "refId": "A"
         }
@@ -1185,7 +1210,9 @@
             "fixedColor": "purple",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1228,7 +1255,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"gmail_create_filter.*\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"gmail_create_filter.*\"}[24h])) or vector(0))",
           "legendFormat": "Filters Created",
           "refId": "A"
         }
@@ -1248,7 +1275,9 @@
             "fixedColor": "green",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1291,7 +1320,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"gmail_unsubscribe.*\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"gmail_unsubscribe.*\"}[24h])) or vector(0))",
           "legendFormat": "Unsubscribes",
           "refId": "A"
         }
@@ -1324,7 +1353,9 @@
             "fixedColor": "blue",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1367,7 +1398,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"calendar_get.*|calendar_list.*\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"calendar_get.*|calendar_list.*\"}[24h])) or vector(0))",
           "legendFormat": "Events Viewed",
           "refId": "A"
         }
@@ -1387,7 +1418,9 @@
             "fixedColor": "green",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1430,7 +1463,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"calendar_create.*\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"calendar_create.*\"}[24h])) or vector(0))",
           "legendFormat": "Events Created",
           "refId": "A"
         }
@@ -1450,7 +1483,9 @@
             "fixedColor": "purple",
             "mode": "fixed"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1493,7 +1528,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"calendar_check.*|calendar_find.*\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"calendar_check.*|calendar_find.*\"}[24h])) or vector(0))",
           "legendFormat": "Scheduling Checks",
           "refId": "A"
         }
@@ -1557,6 +1592,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1623,6 +1660,7 @@
             "inspect": false
           },
           "mappings": [],
+          "noValue": "No errors",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1646,6 +1684,7 @@
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
+          "enablePagination": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -1732,7 +1771,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json | line_format \"[{{.google_service}}] {{.tool}} - {{if .success}}OK{{else}}FAILED: {{.error}}{{end}} ({{.duration}})\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool_.*\" | line_format \"[{{.google_service | default \\\"unknown\\\"}}] {{.tool | default \\\"unknown\\\"}} - {{if eq .success \\\"true\\\"}}OK{{else}}FAILED: {{.error | default \\\"unknown error\\\"}}{{end}} ({{.duration | default \\\"n/a\\\"}})\"",
           "legendFormat": "",
           "refId": "A"
         }
