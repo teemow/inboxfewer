@@ -63,23 +63,25 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 		),
 	)
 
-	s.AddTool(listTaskListsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(listTaskListsTool, common.InstrumentedToolHandlerWithService(
+		"tasks_list_task_lists", "tasks", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		lists, err := client.ListTaskLists()
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to list task lists: %v", err)), nil
-		}
+			lists, err := client.ListTaskLists()
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to list task lists: %v", err)), nil
+			}
 
-		result, _ := json.MarshalIndent(lists, "", "  ")
-		return mcp.NewToolResultText(string(result)), nil
-	})
+			result, _ := json.MarshalIndent(lists, "", "  ")
+			return mcp.NewToolResultText(string(result)), nil
+		}))
 
 	// Get task list tool
 	getTaskListTool := mcp.NewTool("tasks_get_task_list",
@@ -93,28 +95,30 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 		),
 	)
 
-	s.AddTool(getTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(getTaskListTool, common.InstrumentedToolHandlerWithService(
+		"tasks_get_task_list", "tasks", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
+			}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		taskList, err := client.GetTaskList(taskListID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to get task list: %v", err)), nil
-		}
+			taskList, err := client.GetTaskList(taskListID)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to get task list: %v", err)), nil
+			}
 
-		result, _ := json.MarshalIndent(taskList, "", "  ")
-		return mcp.NewToolResultText(string(result)), nil
-	})
+			result, _ := json.MarshalIndent(taskList, "", "  ")
+			return mcp.NewToolResultText(string(result)), nil
+		}))
 
 	// Create task list tool
 	createTaskListTool := mcp.NewTool("tasks_create_task_list",
@@ -128,28 +132,30 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 		),
 	)
 
-	s.AddTool(createTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(createTaskListTool, common.InstrumentedToolHandlerWithService(
+		"tasks_create_task_list", "tasks", "create", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		title, ok := args["title"].(string)
-		if !ok || title == "" {
-			return mcp.NewToolResultError("title is required"), nil
-		}
+			title, ok := args["title"].(string)
+			if !ok || title == "" {
+				return mcp.NewToolResultError("title is required"), nil
+			}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		taskList, err := client.CreateTaskList(title)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create task list: %v", err)), nil
-		}
+			taskList, err := client.CreateTaskList(title)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to create task list: %v", err)), nil
+			}
 
-		result, _ := json.MarshalIndent(taskList, "", "  ")
-		return mcp.NewToolResultText(fmt.Sprintf("Task list created successfully:\n%s", string(result))), nil
-	})
+			result, _ := json.MarshalIndent(taskList, "", "  ")
+			return mcp.NewToolResultText(fmt.Sprintf("Task list created successfully:\n%s", string(result))), nil
+		}))
 
 	// Register update/delete task list tools only if not in read-only mode
 	if !readOnly {
@@ -169,33 +175,35 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 			),
 		)
 
-		s.AddTool(updateTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(updateTaskListTool, common.InstrumentedToolHandlerWithService(
+			"tasks_update_task_list", "tasks", "update", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			taskListID, ok := args["taskListID"].(string)
-			if !ok || taskListID == "" {
-				return mcp.NewToolResultError("taskListId is required"), nil
-			}
+				taskListID, ok := args["taskListID"].(string)
+				if !ok || taskListID == "" {
+					return mcp.NewToolResultError("taskListId is required"), nil
+				}
 
-			title, ok := args["title"].(string)
-			if !ok || title == "" {
-				return mcp.NewToolResultError("title is required"), nil
-			}
+				title, ok := args["title"].(string)
+				if !ok || title == "" {
+					return mcp.NewToolResultError("title is required"), nil
+				}
 
-			client, err := getTasksClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
+				client, err := getTasksClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
 
-			taskList, err := client.UpdateTaskList(taskListID, title)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to update task list: %v", err)), nil
-			}
+				taskList, err := client.UpdateTaskList(taskListID, title)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to update task list: %v", err)), nil
+				}
 
-			result, _ := json.MarshalIndent(taskList, "", "  ")
-			return mcp.NewToolResultText(fmt.Sprintf("Task list updated successfully:\n%s", string(result))), nil
-		})
+				result, _ := json.MarshalIndent(taskList, "", "  ")
+				return mcp.NewToolResultText(fmt.Sprintf("Task list updated successfully:\n%s", string(result))), nil
+			}))
 
 		// Delete task list tool
 		deleteTaskListTool := mcp.NewTool("tasks_delete_task_list",
@@ -209,27 +217,29 @@ func registerTaskListTools(s *mcpserver.MCPServer, sc *server.ServerContext, rea
 			),
 		)
 
-		s.AddTool(deleteTaskListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(deleteTaskListTool, common.InstrumentedToolHandlerWithService(
+			"tasks_delete_task_list", "tasks", "delete", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			taskListID, ok := args["taskListId"].(string)
-			if !ok || taskListID == "" {
-				return mcp.NewToolResultError("taskListId is required"), nil
-			}
+				taskListID, ok := args["taskListId"].(string)
+				if !ok || taskListID == "" {
+					return mcp.NewToolResultError("taskListId is required"), nil
+				}
 
-			client, err := getTasksClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
+				client, err := getTasksClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
 
-			err = client.DeleteTaskList(taskListID)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to delete task list: %v", err)), nil
-			}
+				err = client.DeleteTaskList(taskListID)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to delete task list: %v", err)), nil
+				}
 
-			return mcp.NewToolResultText(fmt.Sprintf("Task list %s deleted successfully", taskListID)), nil
-		})
+				return mcp.NewToolResultText(fmt.Sprintf("Task list %s deleted successfully", taskListID)), nil
+			}))
 	}
 
 	return nil
@@ -258,45 +268,47 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(listTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(listTasksTool, common.InstrumentedToolHandlerWithService(
+		"tasks_list_tasks", "tasks", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
-
-		showCompleted := false
-		if sc, ok := args["showCompleted"].(bool); ok {
-			showCompleted = sc
-		}
-
-		var dueMin, dueMax time.Time
-		if dueMinStr, ok := args["dueMin"].(string); ok && dueMinStr != "" {
-			if t, err := time.Parse(time.RFC3339, dueMinStr); err == nil {
-				dueMin = t
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
 			}
-		}
-		if dueMaxStr, ok := args["dueMax"].(string); ok && dueMaxStr != "" {
-			if t, err := time.Parse(time.RFC3339, dueMaxStr); err == nil {
-				dueMax = t
+
+			showCompleted := false
+			if scArg, ok := args["showCompleted"].(bool); ok {
+				showCompleted = scArg
 			}
-		}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			var dueMin, dueMax time.Time
+			if dueMinStr, ok := args["dueMin"].(string); ok && dueMinStr != "" {
+				if t, err := time.Parse(time.RFC3339, dueMinStr); err == nil {
+					dueMin = t
+				}
+			}
+			if dueMaxStr, ok := args["dueMax"].(string); ok && dueMaxStr != "" {
+				if t, err := time.Parse(time.RFC3339, dueMaxStr); err == nil {
+					dueMax = t
+				}
+			}
 
-		tasksList, err := client.ListTasks(taskListID, showCompleted, dueMin, dueMax)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to list tasks: %v", err)), nil
-		}
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		result, _ := json.MarshalIndent(tasksList, "", "  ")
-		return mcp.NewToolResultText(string(result)), nil
-	})
+			tasksList, err := client.ListTasks(taskListID, showCompleted, dueMin, dueMax)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to list tasks: %v", err)), nil
+			}
+
+			result, _ := json.MarshalIndent(tasksList, "", "  ")
+			return mcp.NewToolResultText(string(result)), nil
+		}))
 
 	// Get tasks tool
 	getTasksTool := mcp.NewTool("tasks_get_tasks",
@@ -314,36 +326,38 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(getTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(getTasksTool, common.InstrumentedToolHandlerWithService(
+		"tasks_get_tasks", "tasks", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
-
-		taskIDs, err := batch.ParseStringOrArray(args["taskIds"], "taskIds")
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		results := batch.ProcessBatch(taskIDs, func(taskID string) (string, error) {
-			task, err := client.GetTask(taskListID, taskID)
-			if err != nil {
-				return "", err
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
 			}
-			jsonBytes, _ := json.Marshal(task)
-			return string(jsonBytes), nil
-		})
 
-		return mcp.NewToolResultText(batch.FormatResults(results)), nil
-	})
+			taskIDs, err := batch.ParseStringOrArray(args["taskIds"], "taskIds")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			client, err := getTasksClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			results := batch.ProcessBatch(taskIDs, func(taskID string) (string, error) {
+				task, err := client.GetTask(taskListID, taskID)
+				if err != nil {
+					return "", err
+				}
+				jsonBytes, _ := json.Marshal(task)
+				return string(jsonBytes), nil
+			})
+
+			return mcp.NewToolResultText(batch.FormatResults(results)), nil
+		}))
 
 	// Create tasks tool
 	createTasksTool := mcp.NewTool("tasks_create_tasks",
@@ -375,82 +389,84 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(createTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(createTasksTool, common.InstrumentedToolHandlerWithService(
+		"tasks_create_tasks", "tasks", "create", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		taskListID, ok := args["taskListId"].(string)
-		if !ok || taskListID == "" {
-			return mcp.NewToolResultError("taskListId is required"), nil
-		}
+			taskListID, ok := args["taskListId"].(string)
+			if !ok || taskListID == "" {
+				return mcp.NewToolResultError("taskListId is required"), nil
+			}
 
-		client, err := getTasksClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		// Check if batch mode (titles array) or single mode (title string)
-		var titles []string
-		if titlesArg, ok := args["titles"]; ok {
-			parsedTitles, err := batch.ParseStringOrArray(titlesArg, "titles")
+			client, err := getTasksClient(ctx, account, sc)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			titles = parsedTitles
-		} else if title, ok := args["title"].(string); ok && title != "" {
-			titles = []string{title}
-		} else {
-			return mcp.NewToolResultError("either 'title' or 'titles' is required"), nil
-		}
 
-		// For batch mode with simple titles, create tasks with just titles
-		if len(titles) > 1 || (len(titles) == 1 && args["titles"] != nil) {
-			results := batch.ProcessBatch(titles, func(title string) (string, error) {
-				input := tasks.TaskInput{
-					Title:  title,
-					Status: "needsAction",
-				}
-				task, err := client.CreateTask(taskListID, input)
+			// Check if batch mode (titles array) or single mode (title string)
+			var titles []string
+			if titlesArg, ok := args["titles"]; ok {
+				parsedTitles, err := batch.ParseStringOrArray(titlesArg, "titles")
 				if err != nil {
-					return "", err
+					return mcp.NewToolResultError(err.Error()), nil
 				}
-				return fmt.Sprintf("Task '%s' created with ID: %s", task.Title, task.ID), nil
-			})
-			return mcp.NewToolResultText(batch.FormatResults(results)), nil
-		}
-
-		// Single task creation with full parameters
-		input := tasks.TaskInput{
-			Title:  titles[0],
-			Status: "needsAction",
-		}
-
-		if notes, ok := args["notes"].(string); ok {
-			input.Notes = notes
-		}
-
-		if dueStr, ok := args["due"].(string); ok && dueStr != "" {
-			if due, err := time.Parse(time.RFC3339, dueStr); err == nil {
-				input.Due = due
+				titles = parsedTitles
+			} else if title, ok := args["title"].(string); ok && title != "" {
+				titles = []string{title}
+			} else {
+				return mcp.NewToolResultError("either 'title' or 'titles' is required"), nil
 			}
-		}
 
-		if parent, ok := args["parent"].(string); ok {
-			input.Parent = parent
-		}
+			// For batch mode with simple titles, create tasks with just titles
+			if len(titles) > 1 || (len(titles) == 1 && args["titles"] != nil) {
+				results := batch.ProcessBatch(titles, func(title string) (string, error) {
+					input := tasks.TaskInput{
+						Title:  title,
+						Status: "needsAction",
+					}
+					task, err := client.CreateTask(taskListID, input)
+					if err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("Task '%s' created with ID: %s", task.Title, task.ID), nil
+				})
+				return mcp.NewToolResultText(batch.FormatResults(results)), nil
+			}
 
-		if previous, ok := args["previous"].(string); ok {
-			input.Previous = previous
-		}
+			// Single task creation with full parameters
+			input := tasks.TaskInput{
+				Title:  titles[0],
+				Status: "needsAction",
+			}
 
-		task, err := client.CreateTask(taskListID, input)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to create task: %v", err)), nil
-		}
+			if notes, ok := args["notes"].(string); ok {
+				input.Notes = notes
+			}
 
-		result, _ := json.MarshalIndent(task, "", "  ")
-		return mcp.NewToolResultText(fmt.Sprintf("Task created successfully:\n%s", string(result))), nil
-	})
+			if dueStr, ok := args["due"].(string); ok && dueStr != "" {
+				if due, err := time.Parse(time.RFC3339, dueStr); err == nil {
+					input.Due = due
+				}
+			}
+
+			if parent, ok := args["parent"].(string); ok {
+				input.Parent = parent
+			}
+
+			if previous, ok := args["previous"].(string); ok {
+				input.Previous = previous
+			}
+
+			task, err := client.CreateTask(taskListID, input)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to create task: %v", err)), nil
+			}
+
+			result, _ := json.MarshalIndent(task, "", "  ")
+			return mcp.NewToolResultText(fmt.Sprintf("Task created successfully:\n%s", string(result))), nil
+		}))
 
 	// Register update/delete/complete/move/clear tools only if not in read-only mode
 	if !readOnly {
@@ -482,53 +498,55 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			),
 		)
 
-		s.AddTool(updateTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(updateTaskTool, common.InstrumentedToolHandlerWithService(
+			"tasks_update_task", "tasks", "update", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			taskListID, ok := args["taskListId"].(string)
-			if !ok || taskListID == "" {
-				return mcp.NewToolResultError("taskListId is required"), nil
-			}
-
-			taskID, ok := args["taskId"].(string)
-			if !ok || taskID == "" {
-				return mcp.NewToolResultError("taskId is required"), nil
-			}
-
-			input := tasks.TaskInput{}
-
-			if title, ok := args["title"].(string); ok {
-				input.Title = title
-			}
-
-			if notes, ok := args["notes"].(string); ok {
-				input.Notes = notes
-			}
-
-			if status, ok := args["status"].(string); ok {
-				input.Status = status
-			}
-
-			if dueStr, ok := args["due"].(string); ok && dueStr != "" {
-				if due, err := time.Parse(time.RFC3339, dueStr); err == nil {
-					input.Due = due
+				taskListID, ok := args["taskListId"].(string)
+				if !ok || taskListID == "" {
+					return mcp.NewToolResultError("taskListId is required"), nil
 				}
-			}
 
-			client, err := getTasksClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
+				taskID, ok := args["taskId"].(string)
+				if !ok || taskID == "" {
+					return mcp.NewToolResultError("taskId is required"), nil
+				}
 
-			task, err := client.UpdateTask(taskListID, taskID, input)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to update task: %v", err)), nil
-			}
+				input := tasks.TaskInput{}
 
-			result, _ := json.MarshalIndent(task, "", "  ")
-			return mcp.NewToolResultText(fmt.Sprintf("Task updated successfully:\n%s", string(result))), nil
-		})
+				if title, ok := args["title"].(string); ok {
+					input.Title = title
+				}
+
+				if notes, ok := args["notes"].(string); ok {
+					input.Notes = notes
+				}
+
+				if status, ok := args["status"].(string); ok {
+					input.Status = status
+				}
+
+				if dueStr, ok := args["due"].(string); ok && dueStr != "" {
+					if due, err := time.Parse(time.RFC3339, dueStr); err == nil {
+						input.Due = due
+					}
+				}
+
+				client, err := getTasksClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+
+				task, err := client.UpdateTask(taskListID, taskID, input)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to update task: %v", err)), nil
+				}
+
+				result, _ := json.MarshalIndent(task, "", "  ")
+				return mcp.NewToolResultText(fmt.Sprintf("Task updated successfully:\n%s", string(result))), nil
+			}))
 
 		// Delete tasks tool
 		deleteTasksTool := mcp.NewTool("tasks_delete_tasks",
@@ -546,34 +564,36 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			),
 		)
 
-		s.AddTool(deleteTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(deleteTasksTool, common.InstrumentedToolHandlerWithService(
+			"tasks_delete_tasks", "tasks", "delete", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			taskListID, ok := args["taskListId"].(string)
-			if !ok || taskListID == "" {
-				return mcp.NewToolResultError("taskListId is required"), nil
-			}
-
-			taskIDs, err := batch.ParseStringOrArray(args["taskIds"], "taskIds")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			client, err := getTasksClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			results := batch.ProcessBatch(taskIDs, func(taskID string) (string, error) {
-				if err := client.DeleteTask(taskListID, taskID); err != nil {
-					return "", err
+				taskListID, ok := args["taskListId"].(string)
+				if !ok || taskListID == "" {
+					return mcp.NewToolResultError("taskListId is required"), nil
 				}
-				return fmt.Sprintf("Task %s deleted successfully", taskID), nil
-			})
 
-			return mcp.NewToolResultText(batch.FormatResults(results)), nil
-		})
+				taskIDs, err := batch.ParseStringOrArray(args["taskIds"], "taskIds")
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+
+				client, err := getTasksClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+
+				results := batch.ProcessBatch(taskIDs, func(taskID string) (string, error) {
+					if err := client.DeleteTask(taskListID, taskID); err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("Task %s deleted successfully", taskID), nil
+				})
+
+				return mcp.NewToolResultText(batch.FormatResults(results)), nil
+			}))
 
 		// Complete tasks tool
 		completeTasksTool := mcp.NewTool("tasks_complete_tasks",
@@ -591,35 +611,37 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			),
 		)
 
-		s.AddTool(completeTasksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(completeTasksTool, common.InstrumentedToolHandlerWithService(
+			"tasks_complete_tasks", "tasks", "update", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			taskListID, ok := args["taskListId"].(string)
-			if !ok || taskListID == "" {
-				return mcp.NewToolResultError("taskListId is required"), nil
-			}
-
-			taskIDs, err := batch.ParseStringOrArray(args["taskIds"], "taskIds")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			client, err := getTasksClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			results := batch.ProcessBatch(taskIDs, func(taskID string) (string, error) {
-				task, err := client.CompleteTask(taskListID, taskID)
-				if err != nil {
-					return "", err
+				taskListID, ok := args["taskListId"].(string)
+				if !ok || taskListID == "" {
+					return mcp.NewToolResultError("taskListId is required"), nil
 				}
-				return fmt.Sprintf("Task %s (%s) completed successfully", taskID, task.Title), nil
-			})
 
-			return mcp.NewToolResultText(batch.FormatResults(results)), nil
-		})
+				taskIDs, err := batch.ParseStringOrArray(args["taskIds"], "taskIds")
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+
+				client, err := getTasksClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+
+				results := batch.ProcessBatch(taskIDs, func(taskID string) (string, error) {
+					task, err := client.CompleteTask(taskListID, taskID)
+					if err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("Task %s (%s) completed successfully", taskID, task.Title), nil
+				})
+
+				return mcp.NewToolResultText(batch.FormatResults(results)), nil
+			}))
 
 		// Move task tool
 		moveTaskTool := mcp.NewTool("tasks_move_task",
@@ -643,43 +665,45 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			),
 		)
 
-		s.AddTool(moveTaskTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(moveTaskTool, common.InstrumentedToolHandlerWithService(
+			"tasks_move_task", "tasks", "update", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			taskListID, ok := args["taskListId"].(string)
-			if !ok || taskListID == "" {
-				return mcp.NewToolResultError("taskListId is required"), nil
-			}
+				taskListID, ok := args["taskListId"].(string)
+				if !ok || taskListID == "" {
+					return mcp.NewToolResultError("taskListId is required"), nil
+				}
 
-			taskID, ok := args["taskId"].(string)
-			if !ok || taskID == "" {
-				return mcp.NewToolResultError("taskId is required"), nil
-			}
+				taskID, ok := args["taskId"].(string)
+				if !ok || taskID == "" {
+					return mcp.NewToolResultError("taskId is required"), nil
+				}
 
-			parent := ""
-			if p, ok := args["parent"].(string); ok {
-				parent = p
-			}
+				parent := ""
+				if p, ok := args["parent"].(string); ok {
+					parent = p
+				}
 
-			previous := ""
-			if p, ok := args["previous"].(string); ok {
-				previous = p
-			}
+				previous := ""
+				if p, ok := args["previous"].(string); ok {
+					previous = p
+				}
 
-			client, err := getTasksClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
+				client, err := getTasksClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
 
-			task, err := client.MoveTask(taskListID, taskID, parent, previous)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to move task: %v", err)), nil
-			}
+				task, err := client.MoveTask(taskListID, taskID, parent, previous)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to move task: %v", err)), nil
+				}
 
-			result, _ := json.MarshalIndent(task, "", "  ")
-			return mcp.NewToolResultText(fmt.Sprintf("Task moved successfully:\n%s", string(result))), nil
-		})
+				result, _ := json.MarshalIndent(task, "", "  ")
+				return mcp.NewToolResultText(fmt.Sprintf("Task moved successfully:\n%s", string(result))), nil
+			}))
 
 		// Clear completed tasks tool
 		clearCompletedTool := mcp.NewTool("tasks_clear_completed",
@@ -693,27 +717,29 @@ func registerTaskTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			),
 		)
 
-		s.AddTool(clearCompletedTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(clearCompletedTool, common.InstrumentedToolHandlerWithService(
+			"tasks_clear_completed", "tasks", "delete", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			taskListID, ok := args["taskListId"].(string)
-			if !ok || taskListID == "" {
-				return mcp.NewToolResultError("taskListId is required"), nil
-			}
+				taskListID, ok := args["taskListId"].(string)
+				if !ok || taskListID == "" {
+					return mcp.NewToolResultError("taskListId is required"), nil
+				}
 
-			client, err := getTasksClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
+				client, err := getTasksClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
 
-			err = client.ClearCompletedTasks(taskListID)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to clear completed tasks: %v", err)), nil
-			}
+				err = client.ClearCompletedTasks(taskListID)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to clear completed tasks: %v", err)), nil
+				}
 
-			return mcp.NewToolResultText(fmt.Sprintf("Completed tasks cleared from list %s", taskListID)), nil
-		})
+				return mcp.NewToolResultText(fmt.Sprintf("Completed tasks cleared from list %s", taskListID)), nil
+			}))
 	}
 
 	return nil

@@ -49,64 +49,66 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			),
 		)
 
-		s.AddTool(uploadFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(uploadFileTool, common.InstrumentedToolHandlerWithService(
+			"drive_upload_file", "drive", "create", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			name, ok := args["name"].(string)
-			if !ok || name == "" {
-				return mcp.NewToolResultError("name is required"), nil
-			}
-
-			contentStr, ok := args["content"].(string)
-			if !ok || contentStr == "" {
-				return mcp.NewToolResultError("content is required"), nil
-			}
-
-			client, err := getDriveClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			options := &drive.UploadOptions{}
-
-			if mimeType, ok := args["mimeType"].(string); ok && mimeType != "" {
-				options.MimeType = mimeType
-			}
-
-			if description, ok := args["description"].(string); ok && description != "" {
-				options.Description = description
-			}
-
-			if parentFoldersStr, ok := args["parentFolders"].(string); ok && parentFoldersStr != "" {
-				options.ParentFolders = parseCommaList(parentFoldersStr)
-			}
-
-			// Decode content if base64
-			isBase64 := true
-			if isB64, ok := args["isBase64"].(bool); ok {
-				isBase64 = isB64
-			}
-
-			var content io.Reader
-			if isBase64 {
-				decoded, err := base64.StdEncoding.DecodeString(contentStr)
-				if err != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("Failed to decode base64 content: %v", err)), nil
+				name, ok := args["name"].(string)
+				if !ok || name == "" {
+					return mcp.NewToolResultError("name is required"), nil
 				}
-				content = strings.NewReader(string(decoded))
-			} else {
-				content = strings.NewReader(contentStr)
-			}
 
-			fileInfo, err := client.UploadFile(ctx, name, content, options)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to upload file: %v", err)), nil
-			}
+				contentStr, ok := args["content"].(string)
+				if !ok || contentStr == "" {
+					return mcp.NewToolResultError("content is required"), nil
+				}
 
-			result, _ := json.MarshalIndent(fileInfo, "", "  ")
-			return mcp.NewToolResultText(fmt.Sprintf("File uploaded successfully:\n%s", string(result))), nil
-		})
+				client, err := getDriveClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+
+				options := &drive.UploadOptions{}
+
+				if mimeType, ok := args["mimeType"].(string); ok && mimeType != "" {
+					options.MimeType = mimeType
+				}
+
+				if description, ok := args["description"].(string); ok && description != "" {
+					options.Description = description
+				}
+
+				if parentFoldersStr, ok := args["parentFolders"].(string); ok && parentFoldersStr != "" {
+					options.ParentFolders = parseCommaList(parentFoldersStr)
+				}
+
+				// Decode content if base64
+				isBase64 := true
+				if isB64, ok := args["isBase64"].(bool); ok {
+					isBase64 = isB64
+				}
+
+				var content io.Reader
+				if isBase64 {
+					decoded, err := base64.StdEncoding.DecodeString(contentStr)
+					if err != nil {
+						return mcp.NewToolResultError(fmt.Sprintf("Failed to decode base64 content: %v", err)), nil
+					}
+					content = strings.NewReader(string(decoded))
+				} else {
+					content = strings.NewReader(contentStr)
+				}
+
+				fileInfo, err := client.UploadFile(ctx, name, content, options)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to upload file: %v", err)), nil
+				}
+
+				result, _ := json.MarshalIndent(fileInfo, "", "  ")
+				return mcp.NewToolResultText(fmt.Sprintf("File uploaded successfully:\n%s", string(result))), nil
+			}))
 	}
 
 	// List files tool (read-only, always available)
@@ -132,52 +134,54 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(listFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(listFilesTool, common.InstrumentedToolHandlerWithService(
+		"drive_list_files", "drive", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		client, err := getDriveClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			client, err := getDriveClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		options := &drive.ListOptions{
-			MaxResults: 100, // default
-		}
+			options := &drive.ListOptions{
+				MaxResults: 100, // default
+			}
 
-		if query, ok := args["query"].(string); ok && query != "" {
-			options.Query = query
-		}
+			if query, ok := args["query"].(string); ok && query != "" {
+				options.Query = query
+			}
 
-		if maxResults, ok := args["maxResults"].(float64); ok && maxResults > 0 {
-			options.MaxResults = int(maxResults)
-		}
+			if maxResults, ok := args["maxResults"].(float64); ok && maxResults > 0 {
+				options.MaxResults = int(maxResults)
+			}
 
-		if orderBy, ok := args["orderBy"].(string); ok && orderBy != "" {
-			options.OrderBy = orderBy
-		}
+			if orderBy, ok := args["orderBy"].(string); ok && orderBy != "" {
+				options.OrderBy = orderBy
+			}
 
-		if includeTrashed, ok := args["includeTrashed"].(bool); ok {
-			options.IncludeTrashed = includeTrashed
-		}
+			if includeTrashed, ok := args["includeTrashed"].(bool); ok {
+				options.IncludeTrashed = includeTrashed
+			}
 
-		if pageToken, ok := args["pageToken"].(string); ok && pageToken != "" {
-			options.PageToken = pageToken
-		}
+			if pageToken, ok := args["pageToken"].(string); ok && pageToken != "" {
+				options.PageToken = pageToken
+			}
 
-		files, nextPageToken, err := client.ListFiles(ctx, options)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to list files: %v", err)), nil
-		}
+			files, nextPageToken, err := client.ListFiles(ctx, options)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to list files: %v", err)), nil
+			}
 
-		response := map[string]interface{}{
-			"files":         files,
-			"nextPageToken": nextPageToken,
-		}
+			response := map[string]interface{}{
+				"files":         files,
+				"nextPageToken": nextPageToken,
+			}
 
-		result, _ := json.MarshalIndent(response, "", "  ")
-		return mcp.NewToolResultText(string(result)), nil
-	})
+			result, _ := json.MarshalIndent(response, "", "  ")
+			return mcp.NewToolResultText(string(result)), nil
+		}))
 
 	// Get files tool
 	getFilesTool := mcp.NewTool("drive_get_files",
@@ -191,31 +195,33 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(getFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(getFilesTool, common.InstrumentedToolHandlerWithService(
+		"drive_get_files", "drive", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		client, err := getDriveClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
-			fileInfo, err := client.GetFile(ctx, fileID)
+			fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
 			if err != nil {
-				return "", err
+				return mcp.NewToolResultError(err.Error()), nil
 			}
-			jsonBytes, _ := json.Marshal(fileInfo)
-			return string(jsonBytes), nil
-		})
 
-		return mcp.NewToolResultText(batch.FormatResults(results)), nil
-	})
+			client, err := getDriveClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
+				fileInfo, err := client.GetFile(ctx, fileID)
+				if err != nil {
+					return "", err
+				}
+				jsonBytes, _ := json.Marshal(fileInfo)
+				return string(jsonBytes), nil
+			})
+
+			return mcp.NewToolResultText(batch.FormatResults(results)), nil
+		}))
 
 	// Download files tool
 	downloadFilesTool := mcp.NewTool("drive_download_files",
@@ -232,47 +238,49 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(downloadFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(downloadFilesTool, common.InstrumentedToolHandlerWithService(
+		"drive_download_files", "drive", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		asBase64 := false
-		if asB64, ok := args["asBase64"].(bool); ok {
-			asBase64 = asB64
-		}
-
-		client, err := getDriveClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
-			reader, err := client.DownloadFile(ctx, fileID)
+			fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
 			if err != nil {
-				return "", err
+				return mcp.NewToolResultError(err.Error()), nil
 			}
-			defer reader.Close()
 
-			content, err := io.ReadAll(reader)
+			asBase64 := false
+			if asB64, ok := args["asBase64"].(bool); ok {
+				asBase64 = asB64
+			}
+
+			client, err := getDriveClient(ctx, account, sc)
 			if err != nil {
-				return "", fmt.Errorf("failed to read content: %w", err)
+				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			if asBase64 {
-				encoded := base64.StdEncoding.EncodeToString(content)
-				return fmt.Sprintf("File content (base64, %d bytes):\n%s", len(content), encoded), nil
-			}
+			results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
+				reader, err := client.DownloadFile(ctx, fileID)
+				if err != nil {
+					return "", err
+				}
+				defer reader.Close()
 
-			return fmt.Sprintf("File content (text, %d bytes):\n%s", len(content), string(content)), nil
-		})
+				content, err := io.ReadAll(reader)
+				if err != nil {
+					return "", fmt.Errorf("failed to read content: %w", err)
+				}
 
-		return mcp.NewToolResultText(batch.FormatResults(results)), nil
-	})
+				if asBase64 {
+					encoded := base64.StdEncoding.EncodeToString(content)
+					return fmt.Sprintf("File content (base64, %d bytes):\n%s", len(content), encoded), nil
+				}
+
+				return fmt.Sprintf("File content (text, %d bytes):\n%s", len(content), string(content)), nil
+			})
+
+			return mcp.NewToolResultText(batch.FormatResults(results)), nil
+		}))
 
 	// Delete files tool (write operation, only available with !readOnly)
 	if !readOnly {
@@ -287,29 +295,31 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 			),
 		)
 
-		s.AddTool(deleteFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(deleteFilesTool, common.InstrumentedToolHandlerWithService(
+			"drive_delete_files", "drive", "delete", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			client, err := getDriveClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
-				if err := client.DeleteFile(ctx, fileID); err != nil {
-					return "", err
+				fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
 				}
-				return fmt.Sprintf("File %s deleted successfully", fileID), nil
-			})
 
-			return mcp.NewToolResultText(batch.FormatResults(results)), nil
-		})
+				client, err := getDriveClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+
+				results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
+					if err := client.DeleteFile(ctx, fileID); err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("File %s deleted successfully", fileID), nil
+				})
+
+				return mcp.NewToolResultText(batch.FormatResults(results)), nil
+			}))
 	}
 
 	return nil

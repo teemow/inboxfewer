@@ -30,9 +30,11 @@ func RegisterContactTools(s *mcpserver.MCPServer, sc *server.ServerContext) erro
 		),
 	)
 
-	s.AddTool(searchContactsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleSearchContacts(ctx, request, sc)
-	})
+	s.AddTool(searchContactsTool, common.InstrumentedToolHandlerWithService(
+		"gmail_search_contacts", "gmail", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleSearchContacts(ctx, request, sc)
+		}))
 
 	return nil
 }

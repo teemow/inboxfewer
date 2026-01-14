@@ -50,61 +50,63 @@ func registerShareTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 			),
 		)
 
-		s.AddTool(shareFilesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(shareFilesTool, common.InstrumentedToolHandlerWithService(
+			"drive_share_files", "drive", "update", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			permType, ok := args["type"].(string)
-			if !ok || permType == "" {
-				return mcp.NewToolResultError("type is required"), nil
-			}
-
-			role, ok := args["role"].(string)
-			if !ok || role == "" {
-				return mcp.NewToolResultError("role is required"), nil
-			}
-
-			client, err := getDriveClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			options := &drive.ShareOptions{
-				Type: permType,
-				Role: role,
-			}
-
-			if emailAddress, ok := args["emailAddress"].(string); ok && emailAddress != "" {
-				options.EmailAddress = emailAddress
-			}
-
-			if domain, ok := args["domain"].(string); ok && domain != "" {
-				options.Domain = domain
-			}
-
-			if sendNotif, ok := args["sendNotificationEmail"].(bool); ok {
-				options.SendNotificationEmail = sendNotif
-			}
-
-			if emailMsg, ok := args["emailMessage"].(string); ok && emailMsg != "" {
-				options.EmailMessage = emailMsg
-			}
-
-			results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
-				permission, err := client.ShareFile(ctx, fileID, options)
+				fileIDs, err := batch.ParseStringOrArray(args["fileIds"], "fileIds")
 				if err != nil {
-					return "", err
+					return mcp.NewToolResultError(err.Error()), nil
 				}
-				return fmt.Sprintf("File %s shared with %s (%s)", fileID, options.EmailAddress, permission.Role), nil
-			})
 
-			return mcp.NewToolResultText(batch.FormatResults(results)), nil
-		})
+				permType, ok := args["type"].(string)
+				if !ok || permType == "" {
+					return mcp.NewToolResultError("type is required"), nil
+				}
+
+				role, ok := args["role"].(string)
+				if !ok || role == "" {
+					return mcp.NewToolResultError("role is required"), nil
+				}
+
+				client, err := getDriveClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+
+				options := &drive.ShareOptions{
+					Type: permType,
+					Role: role,
+				}
+
+				if emailAddress, ok := args["emailAddress"].(string); ok && emailAddress != "" {
+					options.EmailAddress = emailAddress
+				}
+
+				if domain, ok := args["domain"].(string); ok && domain != "" {
+					options.Domain = domain
+				}
+
+				if sendNotif, ok := args["sendNotificationEmail"].(bool); ok {
+					options.SendNotificationEmail = sendNotif
+				}
+
+				if emailMsg, ok := args["emailMessage"].(string); ok && emailMsg != "" {
+					options.EmailMessage = emailMsg
+				}
+
+				results := batch.ProcessBatch(fileIDs, func(fileID string) (string, error) {
+					permission, err := client.ShareFile(ctx, fileID, options)
+					if err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("File %s shared with %s (%s)", fileID, options.EmailAddress, permission.Role), nil
+				})
+
+				return mcp.NewToolResultText(batch.FormatResults(results)), nil
+			}))
 	}
 
 	// List permissions tool (read-only, always available)
@@ -119,28 +121,30 @@ func registerShareTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(listPermissionsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, _ := request.Params.Arguments.(map[string]interface{})
-		account := common.GetAccountFromArgs(ctx, args)
+	s.AddTool(listPermissionsTool, common.InstrumentedToolHandlerWithService(
+		"drive_list_permissions", "drive", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args, _ := request.Params.Arguments.(map[string]interface{})
+			account := common.GetAccountFromArgs(ctx, args)
 
-		fileID, ok := args["fileId"].(string)
-		if !ok || fileID == "" {
-			return mcp.NewToolResultError("fileId is required"), nil
-		}
+			fileID, ok := args["fileId"].(string)
+			if !ok || fileID == "" {
+				return mcp.NewToolResultError("fileId is required"), nil
+			}
 
-		client, err := getDriveClient(ctx, account, sc)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
+			client, err := getDriveClient(ctx, account, sc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
 
-		permissions, err := client.ListPermissions(ctx, fileID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to list permissions: %v", err)), nil
-		}
+			permissions, err := client.ListPermissions(ctx, fileID)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to list permissions: %v", err)), nil
+			}
 
-		result, _ := json.MarshalIndent(permissions, "", "  ")
-		return mcp.NewToolResultText(string(result)), nil
-	})
+			result, _ := json.MarshalIndent(permissions, "", "  ")
+			return mcp.NewToolResultText(string(result)), nil
+		}))
 
 	// Remove permission tool (write operation, only available with !readOnly)
 	if !readOnly {
@@ -159,32 +163,34 @@ func registerShareTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 			),
 		)
 
-		s.AddTool(removePermissionTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			account := common.GetAccountFromArgs(ctx, args)
+		s.AddTool(removePermissionTool, common.InstrumentedToolHandlerWithService(
+			"drive_remove_permission", "drive", "delete", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				args, _ := request.Params.Arguments.(map[string]interface{})
+				account := common.GetAccountFromArgs(ctx, args)
 
-			fileID, ok := args["fileId"].(string)
-			if !ok || fileID == "" {
-				return mcp.NewToolResultError("fileId is required"), nil
-			}
+				fileID, ok := args["fileId"].(string)
+				if !ok || fileID == "" {
+					return mcp.NewToolResultError("fileId is required"), nil
+				}
 
-			permissionID, ok := args["permissionId"].(string)
-			if !ok || permissionID == "" {
-				return mcp.NewToolResultError("permissionId is required"), nil
-			}
+				permissionID, ok := args["permissionId"].(string)
+				if !ok || permissionID == "" {
+					return mcp.NewToolResultError("permissionId is required"), nil
+				}
 
-			client, err := getDriveClient(ctx, account, sc)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
+				client, err := getDriveClient(ctx, account, sc)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
 
-			err = client.RemovePermission(ctx, fileID, permissionID)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to remove permission: %v", err)), nil
-			}
+				err = client.RemovePermission(ctx, fileID, permissionID)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to remove permission: %v", err)), nil
+				}
 
-			return mcp.NewToolResultText(fmt.Sprintf("Permission %s removed successfully from file %s", permissionID, fileID)), nil
-		})
+				return mcp.NewToolResultText(fmt.Sprintf("Permission %s removed successfully from file %s", permissionID, fileID)), nil
+			}))
 	}
 
 	return nil
