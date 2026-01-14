@@ -7,7 +7,11 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric/noop"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/teemow/inboxfewer/internal/instrumentation"
 	"github.com/teemow/inboxfewer/internal/server"
@@ -248,4 +252,305 @@ func TestInstrumentedToolHandlerWithService_ErrorWithMetrics(t *testing.T) {
 	// The metrics are recorded with status "error" via:
 	// - metrics.RecordToolInvocation(ctx, "calendar_create_event", "error", duration)
 	// - metrics.RecordGoogleAPIOperation(ctx, "calendar", "create", "error", duration)
+}
+
+// setupTestTracer creates a tracer provider with an in-memory span exporter for testing.
+// Returns the exporter (for verification) and a cleanup function.
+func setupTestTracer() (*tracetest.InMemoryExporter, func()) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSyncer(exporter),
+	)
+	oldTP := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+
+	return exporter, func() {
+		otel.SetTracerProvider(oldTP)
+		_ = tp.Shutdown(context.Background())
+	}
+}
+
+func TestInstrumentedToolHandler_CreatesSpan(t *testing.T) {
+	exporter, cleanup := setupTestTracer()
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a server context
+	sc, err := server.NewServerContext(ctx, "", "")
+	if err != nil {
+		t.Fatalf("failed to create server context: %v", err)
+	}
+	defer sc.Shutdown()
+
+	// Create a handler that returns success
+	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultText("success"), nil
+	}
+
+	// Wrap with instrumentation
+	wrapped := InstrumentedToolHandler("test_tool", sc, handler)
+
+	// Call the wrapped handler
+	req := mcp.CallToolRequest{}
+	_, err = wrapped(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify span was created
+	spans := exporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+
+	span := spans[0]
+
+	// Verify span name follows convention: tool.<tool_name>
+	expectedName := "tool.test_tool"
+	if span.Name != expectedName {
+		t.Errorf("expected span name %q, got %q", expectedName, span.Name)
+	}
+
+	// Verify span has success status
+	if span.Status.Code != codes.Ok {
+		t.Errorf("expected span status Ok, got %v", span.Status.Code)
+	}
+
+	// Verify mcp.tool attribute is present
+	found := false
+	for _, attr := range span.Attributes {
+		if string(attr.Key) == instrumentation.SpanAttrTool {
+			if attr.Value.AsString() != "test_tool" {
+				t.Errorf("expected mcp.tool='test_tool', got %v", attr.Value.AsString())
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected mcp.tool attribute to be present")
+	}
+}
+
+func TestInstrumentedToolHandler_SpanRecordsError(t *testing.T) {
+	exporter, cleanup := setupTestTracer()
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a server context
+	sc, err := server.NewServerContext(ctx, "", "")
+	if err != nil {
+		t.Fatalf("failed to create server context: %v", err)
+	}
+	defer sc.Shutdown()
+
+	// Create a handler that returns an error
+	expectedErr := errors.New("test error")
+	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return nil, expectedErr
+	}
+
+	// Wrap with instrumentation
+	wrapped := InstrumentedToolHandler("test_tool", sc, handler)
+
+	// Call the wrapped handler
+	req := mcp.CallToolRequest{}
+	_, _ = wrapped(ctx, req)
+
+	// Verify span was created with error status
+	spans := exporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+
+	span := spans[0]
+
+	// Verify span has error status
+	if span.Status.Code != codes.Error {
+		t.Errorf("expected span status Error, got %v", span.Status.Code)
+	}
+
+	// Verify error was recorded
+	if len(span.Events) == 0 {
+		t.Error("expected span to have error event recorded")
+	}
+}
+
+func TestInstrumentedToolHandlerWithService_CreatesSpanWithServiceAttributes(t *testing.T) {
+	exporter, cleanup := setupTestTracer()
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a server context
+	sc, err := server.NewServerContext(ctx, "", "")
+	if err != nil {
+		t.Fatalf("failed to create server context: %v", err)
+	}
+	defer sc.Shutdown()
+
+	// Create a handler that returns success
+	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultText("success"), nil
+	}
+
+	// Wrap with instrumentation including service info
+	wrapped := InstrumentedToolHandlerWithService("gmail_list_emails", "gmail", "list", sc, handler)
+
+	// Call the wrapped handler
+	req := mcp.CallToolRequest{}
+	_, err = wrapped(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify span was created
+	spans := exporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+
+	span := spans[0]
+
+	// Verify span name follows convention: tool.<tool_name>
+	expectedName := "tool.gmail_list_emails"
+	if span.Name != expectedName {
+		t.Errorf("expected span name %q, got %q", expectedName, span.Name)
+	}
+
+	// Verify span has success status
+	if span.Status.Code != codes.Ok {
+		t.Errorf("expected span status Ok, got %v", span.Status.Code)
+	}
+
+	// Build a map of attributes for easier checking
+	attrMap := make(map[string]string)
+	for _, attr := range span.Attributes {
+		attrMap[string(attr.Key)] = attr.Value.AsString()
+	}
+
+	// Verify required attributes are present
+	if attrMap[instrumentation.SpanAttrTool] != "gmail_list_emails" {
+		t.Errorf("expected mcp.tool='gmail_list_emails', got %v", attrMap[instrumentation.SpanAttrTool])
+	}
+	if attrMap[instrumentation.SpanAttrService] != "gmail" {
+		t.Errorf("expected google.service='gmail', got %v", attrMap[instrumentation.SpanAttrService])
+	}
+	if attrMap[instrumentation.SpanAttrOperation] != "list" {
+		t.Errorf("expected google.operation='list', got %v", attrMap[instrumentation.SpanAttrOperation])
+	}
+}
+
+func TestInstrumentedToolHandlerWithService_SpanRecordsErrorWithService(t *testing.T) {
+	exporter, cleanup := setupTestTracer()
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a server context
+	sc, err := server.NewServerContext(ctx, "", "")
+	if err != nil {
+		t.Fatalf("failed to create server context: %v", err)
+	}
+	defer sc.Shutdown()
+
+	// Create a handler that returns an error
+	expectedErr := errors.New("gmail API error")
+	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return nil, expectedErr
+	}
+
+	// Wrap with instrumentation including service info
+	wrapped := InstrumentedToolHandlerWithService("gmail_send_email", "gmail", "send", sc, handler)
+
+	// Call the wrapped handler
+	req := mcp.CallToolRequest{}
+	_, _ = wrapped(ctx, req)
+
+	// Verify span was created with error status
+	spans := exporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+
+	span := spans[0]
+
+	// Verify span has error status
+	if span.Status.Code != codes.Error {
+		t.Errorf("expected span status Error, got %v", span.Status.Code)
+	}
+
+	// Verify service attributes are still present
+	attrMap := make(map[string]string)
+	for _, attr := range span.Attributes {
+		attrMap[string(attr.Key)] = attr.Value.AsString()
+	}
+
+	if attrMap[instrumentation.SpanAttrService] != "gmail" {
+		t.Errorf("expected google.service='gmail', got %v", attrMap[instrumentation.SpanAttrService])
+	}
+	if attrMap[instrumentation.SpanAttrOperation] != "send" {
+		t.Errorf("expected google.operation='send', got %v", attrMap[instrumentation.SpanAttrOperation])
+	}
+
+	// Verify error was recorded
+	if len(span.Events) == 0 {
+		t.Error("expected span to have error event recorded")
+	}
+}
+
+func TestInstrumentedToolHandler_SpanContextPassedToHandler(t *testing.T) {
+	exporter, cleanup := setupTestTracer()
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a server context
+	sc, err := server.NewServerContext(ctx, "", "")
+	if err != nil {
+		t.Fatalf("failed to create server context: %v", err)
+	}
+	defer sc.Shutdown()
+
+	// Create a handler that verifies trace context is present
+	var traceID, spanID string
+	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		traceID = instrumentation.GetTraceID(ctx)
+		spanID = instrumentation.GetSpanID(ctx)
+		return mcp.NewToolResultText("success"), nil
+	}
+
+	// Wrap with instrumentation
+	wrapped := InstrumentedToolHandler("test_tool", sc, handler)
+
+	// Call the wrapped handler
+	req := mcp.CallToolRequest{}
+	_, err = wrapped(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify trace context was available inside the handler
+	if traceID == "" {
+		t.Error("expected trace ID to be available inside handler")
+	}
+	if spanID == "" {
+		t.Error("expected span ID to be available inside handler")
+	}
+
+	// Verify the span in the exporter matches
+	spans := exporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+
+	span := spans[0]
+	if span.SpanContext.TraceID().String() != traceID {
+		t.Errorf("expected trace ID %q, got %q", span.SpanContext.TraceID().String(), traceID)
+	}
+	if span.SpanContext.SpanID().String() != spanID {
+		t.Errorf("expected span ID %q, got %q", span.SpanContext.SpanID().String(), spanID)
+	}
 }

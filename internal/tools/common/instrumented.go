@@ -5,13 +5,15 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/teemow/inboxfewer/internal/instrumentation"
 	"github.com/teemow/inboxfewer/internal/server"
 )
 
-// InstrumentedToolHandler wraps a tool handler with metrics and audit logging.
-// It records tool invocation metrics and logs the invocation for audit purposes.
+// InstrumentedToolHandler wraps a tool handler with tracing, metrics and audit logging.
+// It creates a trace span, records tool invocation metrics, and logs the invocation
+// for audit purposes.
 //
 // Usage:
 //
@@ -22,16 +24,16 @@ func InstrumentedToolHandler(
 	handler func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error),
 ) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Start trace span for this tool invocation
+		ctx, span := instrumentation.StartToolSpan(ctx, toolName)
+		defer span.End()
+
 		// Get metrics and audit logger (may be nil if not configured)
 		metrics := sc.Metrics()
 		auditLogger := sc.AuditLogger()
 
-		// If no instrumentation configured, just call the handler
-		if metrics == nil && auditLogger == nil {
-			return handler(ctx, request)
-		}
-
 		// Start timing and create invocation record
+		// Note: We create the invocation after starting the span so it captures the new span context
 		start := time.Now()
 		invocation := instrumentation.NewToolInvocation(toolName).
 			WithSpanContext(ctx)
@@ -41,23 +43,28 @@ func InstrumentedToolHandler(
 		account := GetAccountFromArgs(ctx, args)
 		if account != "" {
 			invocation.WithAccount(account)
+			span.SetAttributes(attribute.String(instrumentation.SpanAttrAccount, account))
 		}
 
 		// Call the actual handler
 		result, err := handler(ctx, request)
 		duration := time.Since(start)
 
-		// Determine status
+		// Determine status and update span
 		status := instrumentation.StatusSuccess
 		if err != nil || (result != nil && result.IsError) {
 			status = instrumentation.StatusError
 			if err != nil {
 				invocation.CompleteWithError(err)
+				instrumentation.SetSpanError(span, err)
 			} else {
 				invocation.Complete(false, nil)
+				// For error results without Go errors, still mark span as error
+				span.SetAttributes(attribute.String("mcp.status", "error"))
 			}
 		} else {
 			invocation.CompleteSuccess()
+			instrumentation.SetSpanSuccess(span)
 		}
 
 		// Record metrics
@@ -75,9 +82,9 @@ func InstrumentedToolHandler(
 }
 
 // InstrumentedToolHandlerWithService is like InstrumentedToolHandler but also
-// records the Google service and operation type for more detailed metrics.
+// records the Google service and operation type for more detailed metrics and tracing.
 //
-// This handler records both:
+// This handler creates a trace span with service attributes and records both:
 // - MCP tool invocation metrics (mcp_tool_invocations_total, mcp_tool_duration_seconds)
 // - Google API operation metrics (google_api_operations_total, google_api_operation_duration_seconds)
 //
@@ -92,16 +99,22 @@ func InstrumentedToolHandlerWithService(
 	handler func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error),
 ) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Build span attributes for service-specific tracing
+		spanAttrs := instrumentation.NewSpanAttributeBuilder().
+			WithService(serviceName).
+			WithOperation(operation).
+			Build()
+
+		// Start trace span for this tool invocation with service attributes
+		ctx, span := instrumentation.StartToolSpan(ctx, toolName, spanAttrs...)
+		defer span.End()
+
 		// Get metrics and audit logger (may be nil if not configured)
 		metrics := sc.Metrics()
 		auditLogger := sc.AuditLogger()
 
-		// If no instrumentation configured, just call the handler
-		if metrics == nil && auditLogger == nil {
-			return handler(ctx, request)
-		}
-
 		// Start timing and create invocation record
+		// Note: We create the invocation after starting the span so it captures the new span context
 		start := time.Now()
 		invocation := instrumentation.NewToolInvocation(toolName).
 			WithSpanContext(ctx).
@@ -112,23 +125,28 @@ func InstrumentedToolHandlerWithService(
 		account := GetAccountFromArgs(ctx, args)
 		if account != "" {
 			invocation.WithAccount(account)
+			span.SetAttributes(attribute.String(instrumentation.SpanAttrAccount, account))
 		}
 
 		// Call the actual handler
 		result, err := handler(ctx, request)
 		duration := time.Since(start)
 
-		// Determine status
+		// Determine status and update span
 		status := instrumentation.StatusSuccess
 		if err != nil || (result != nil && result.IsError) {
 			status = instrumentation.StatusError
 			if err != nil {
 				invocation.CompleteWithError(err)
+				instrumentation.SetSpanError(span, err)
 			} else {
 				invocation.Complete(false, nil)
+				// For error results without Go errors, still mark span as error
+				span.SetAttributes(attribute.String("mcp.status", "error"))
 			}
 		} else {
 			invocation.CompleteSuccess()
+			instrumentation.SetSpanSuccess(span)
 		}
 
 		// Record metrics
