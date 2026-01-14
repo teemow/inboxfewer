@@ -58,25 +58,6 @@ jobs:
           echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
           echo "next_version_no_v=$NEXT_VERSION_NO_V" >> "$GITHUB_OUTPUT"
 
-      - name: Update Helm Chart AppVersion
-        run: |
-          VERSION="${{ steps.version.outputs.next_version_no_v }}"
-          CHART_FILE="charts/inboxfewer/Chart.yaml"
-
-          # Update appVersion in Chart.yaml
-          sed -i "s/^appVersion: .*/appVersion: \"$VERSION\"/" "$CHART_FILE"
-
-          echo "Updated Helm chart appVersion to $VERSION"
-          git diff "$CHART_FILE"
-
-      - name: Commit Chart Version Update
-        run: |
-          VERSION="${{ steps.version.outputs.next_version }}"
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git add charts/inboxfewer/Chart.yaml
-          git commit -m "chore(helm): Update appVersion to ${VERSION#v}" || echo "No changes to commit"
-
       - name: Create Tag
         run: |
           NEXT_VERSION="${{ steps.version.outputs.next_version }}"
