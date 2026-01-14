@@ -409,6 +409,12 @@ func (s *OAuthHTTPServer) oauthInstrumentationWrapper(handler http.Handler) http
 		// Track auth validation result using response status
 		rw := newResponseWriter(w)
 
+		// Track active sessions (concurrent authenticated requests)
+		if s.metrics != nil {
+			s.metrics.IncrementActiveSessions(r.Context())
+			defer s.metrics.DecrementActiveSessions(r.Context())
+		}
+
 		handler.ServeHTTP(rw, r)
 
 		// Record OAuth auth metrics based on response status
@@ -417,8 +423,6 @@ func (s *OAuthHTTPServer) oauthInstrumentationWrapper(handler http.Handler) http
 				s.metrics.RecordOAuthAuth(r.Context(), instrumentation.OAuthResultFailure)
 			} else if rw.statusCode >= 200 && rw.statusCode < 400 {
 				s.metrics.RecordOAuthAuth(r.Context(), instrumentation.OAuthResultSuccess)
-				// Increment active sessions on successful auth
-				s.metrics.IncrementActiveSessions(r.Context())
 			}
 		}
 	})
