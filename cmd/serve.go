@@ -711,8 +711,13 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	}
 	defer oauthHandler.Stop() // Ensure cleanup
 
-	// Create token provider from OAuth store
-	tokenProvider := oauth.NewTokenProvider(oauthHandler.GetStore())
+	// Create token provider from OAuth store with metrics for observability
+	var tokenProvider *oauth.TokenProvider
+	if instrProvider != nil && instrProvider.Enabled() {
+		tokenProvider = oauth.NewTokenProviderWithMetrics(oauthHandler.GetStore(), instrProvider.Metrics())
+	} else {
+		tokenProvider = oauth.NewTokenProvider(oauthHandler.GetStore())
+	}
 
 	// Recreate server context with OAuth token provider
 	// This ensures Google API clients use tokens from OAuth authentication

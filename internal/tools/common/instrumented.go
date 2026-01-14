@@ -77,6 +77,10 @@ func InstrumentedToolHandler(
 // InstrumentedToolHandlerWithService is like InstrumentedToolHandler but also
 // records the Google service and operation type for more detailed metrics.
 //
+// This handler records both:
+// - MCP tool invocation metrics (mcp_tool_invocations_total, mcp_tool_duration_seconds)
+// - Google API operation metrics (google_api_operations_total, google_api_operation_duration_seconds)
+//
 // Usage:
 //
 //	s.AddTool(myTool, common.InstrumentedToolHandlerWithService("my_tool", "gmail", "list", sc, handler))
@@ -129,7 +133,13 @@ func InstrumentedToolHandlerWithService(
 
 		// Record metrics
 		if metrics != nil {
+			// Record MCP tool invocation metrics
 			metrics.RecordToolInvocation(ctx, toolName, status, duration)
+
+			// Record Google API operation metrics for detailed service-level observability
+			// This provides insight into which Google services/operations are used most
+			// and their performance characteristics
+			metrics.RecordGoogleAPIOperation(ctx, serviceName, operation, status, duration)
 		}
 
 		// Log audit
