@@ -189,6 +189,25 @@ The following table lists the configurable parameters of the inboxfewer chart an
 
 **Note:** The chart uses both the annotation (`kubernetes.io/ingress.class`) and spec field (`spec.ingressClassName`) for maximum compatibility with both legacy and modern ingress controllers.
 
+### Gateway API Configuration
+
+Gateway API is the successor to Ingress in Kubernetes, providing more powerful and expressive routing capabilities. Both Ingress and Gateway API can be enabled simultaneously for migration scenarios.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `gatewayAPI.enabled` | Enable Gateway API HTTPRoute | `false` |
+| `gatewayAPI.httpRoute.parentRefs` | Parent gateway references | `[]` |
+| `gatewayAPI.httpRoute.hostnames` | Hostnames for the route | `[]` |
+| `gatewayAPI.httpRoute.rules` | Routing rules (defaults to PathPrefix /) | `[]` |
+| `gatewayAPI.httpRoute.annotations` | Additional annotations for HTTPRoute | `{}` |
+| `gatewayAPI.httpRoute.labels` | Additional labels for HTTPRoute | `{}` |
+| `gatewayAPI.backendTrafficPolicy.enabled` | Enable Envoy Gateway BackendTrafficPolicy | `false` |
+| `gatewayAPI.backendTrafficPolicy.timeout` | Request timeout for MCP sessions | `300s` |
+| `gatewayAPI.backendTrafficPolicy.annotations` | Additional annotations | `{}` |
+| `gatewayAPI.backendTrafficPolicy.labels` | Additional labels | `{}` |
+
+**Note:** The BackendTrafficPolicy is specific to Envoy Gateway. Other Gateway API implementations (Cilium Gateway, Istio, etc.) may use different CRDs for timeout configuration.
+
 ### Resource Limits
 
 | Parameter | Description | Default |
@@ -299,6 +318,32 @@ helm install inboxfewer ./charts/inboxfewer \
   --set ingress.hosts[0].paths[0].path=/ \
   --set ingress.hosts[0].paths[0].pathType=Prefix
 ```
+
+### With Gateway API (HTTPRoute)
+
+Gateway API is the successor to Ingress, providing more expressive routing capabilities. This example uses Envoy Gateway:
+
+```yaml
+# values-gateway.yaml
+gatewayAPI:
+  enabled: true
+  httpRoute:
+    parentRefs:
+      - name: internal
+        namespace: envoy-gateway-system
+    hostnames:
+      - inboxfewer.example.com
+  # Optional: Configure extended timeout for long-running MCP sessions
+  backendTrafficPolicy:
+    enabled: true
+    timeout: "300s"
+```
+
+```bash
+helm install inboxfewer ./charts/inboxfewer -f values-gateway.yaml
+```
+
+**Note:** Gateway API requires a Gateway API implementation (Envoy Gateway, Cilium Gateway, Istio, etc.) to be installed in your cluster. Both Ingress and Gateway API can be enabled simultaneously for migration scenarios.
 
 ### With Write Operations Enabled
 
