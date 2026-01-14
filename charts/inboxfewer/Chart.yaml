@@ -2,7 +2,7 @@ apiVersion: v2
 name: inboxfewer
 description: A Helm chart for inboxfewer MCP server for Gmail and Google services integration
 type: application
-version: 0.1.1
+version: 0.1.2
 # appVersion is dynamically set at package time from the latest git tag by helm-release.yml
 # This value is only used for local development; CI overrides it with --app-version
 # Users can also override with: --set image.tag=v1.2.3
