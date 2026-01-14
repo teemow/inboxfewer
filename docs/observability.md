@@ -412,7 +412,202 @@ groups:
 
 ## Grafana Dashboards
 
-### Key Panels
+`inboxfewer` ships with three pre-built Grafana dashboards tailored to different personas. Dashboard JSON files are located in `docs/dashboards/`.
+
+### Available Dashboards
+
+| Dashboard | File | Purpose | Data Sources |
+|-----------|------|---------|--------------|
+| **Administrator** | `administrator-dashboard.json` | Kubernetes operations, service health, resource monitoring | Prometheus (required) |
+| **Security Operations** | `security-dashboard.json` | Incident investigation, audit trails, anomaly detection | Prometheus (required), Loki (required), Tempo (recommended) |
+| **End-User** | `end-user-dashboard.json` | AI agent activity visibility, tool usage transparency | Prometheus (required), Loki (recommended) |
+
+### Data Source Requirements
+
+Before importing dashboards, configure the following data sources in Grafana:
+
+#### Prometheus (Required for all dashboards)
+
+```yaml
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus-server:9090
+    access: proxy
+    isDefault: true
+```
+
+#### Loki (Required for Security, Recommended for End-User)
+
+Loki ingests structured JSON logs from inboxfewer. Configure your log collection (e.g., Promtail, Fluent Bit) to forward container logs.
+
+```yaml
+  - name: Loki
+    type: loki
+    url: http://loki:3100
+    access: proxy
+```
+
+**Promtail configuration example:**
+
+```yaml
+scrape_configs:
+  - job_name: kubernetes-pods
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: inboxfewer
+        action: keep
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            msg: msg
+            tool: tool
+            service: service
+            user_domain: user_domain
+      - labels:
+          level:
+          tool:
+          service:
+```
+
+#### Tempo/Jaeger (Recommended for Security)
+
+For distributed tracing correlation, configure an OTLP-compatible trace backend:
+
+```yaml
+  - name: Tempo
+    type: tempo
+    url: http://tempo:3200
+    access: proxy
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: true
+```
+
+### Importing Dashboards
+
+#### Option 1: Grafana UI Import
+
+1. Open Grafana and navigate to **Dashboards > Import**
+2. Click **Upload dashboard JSON file**
+3. Select the dashboard file from `docs/dashboards/`
+4. Select the appropriate data sources for each variable
+5. Click **Import**
+
+#### Option 2: Grafana Provisioning (Recommended for GitOps)
+
+Add a ConfigMap with the dashboard JSON and configure Grafana's provisioning:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inboxfewer-dashboards
+  labels:
+    grafana_dashboard: "1"  # Sidecar label for kube-prometheus-stack
+data:
+  administrator-dashboard.json: |
+    <contents of administrator-dashboard.json>
+```
+
+If using kube-prometheus-stack, the sidecar will automatically detect and import dashboards.
+
+#### Option 3: Grafana HTTP API
+
+```bash
+# Import dashboard via API
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  -d @docs/dashboards/administrator-dashboard.json \
+  http://grafana:3000/api/dashboards/db
+```
+
+### Dashboard Template Variables
+
+All dashboards use template variables for flexible filtering:
+
+| Variable | Description | Used In |
+|----------|-------------|---------|
+| `$datasource` | Prometheus data source | All |
+| `$loki_datasource` | Loki data source | Security, End-User |
+| `$tempo_datasource` | Tempo data source | Security |
+| `$namespace` | Kubernetes namespace filter | All |
+| `$service` | Google service filter (gmail, calendar, etc.) | All |
+| `$tool` | MCP tool filter | Administrator |
+
+### Dashboard Details
+
+#### Administrator Dashboard
+
+**Purpose:** Monitor service health, performance, and Kubernetes resources.
+
+**Rows:**
+1. **Service Health Overview** - Request rate, error rate, active sessions, P95 latency
+2. **Request Performance** - Latency percentiles, request rate by status, duration heatmap
+3. **Google API Health** - Operations by service, error rates, latency, slowest operations
+4. **MCP Tool Health** - Invocation rate, error rate, tool duration, top tools by usage
+5. **OAuth Health** - Auth success rate, token refresh status, refresh failures
+6. **Kubernetes Resources** - Pod status, CPU/memory usage, restart count (requires kube-state-metrics)
+
+**Key Alerts to Configure:**
+- HTTP error rate > 5%
+- P95 latency > 2s
+- OAuth failures > 10/min
+- Pod restart count increasing
+
+#### Security Operations Dashboard
+
+**Purpose:** Incident investigation, audit trails, and anomaly detection.
+
+**Rows:**
+1. **Security Overview** - Total invocations, failed operations, auth failures, unique users (24h)
+2. **Activity Timeline** - Operations by service, write operations, failed operations
+3. **User Activity Analysis** - Activity by domain, top users, activity heatmap by hour
+4. **Operation Audit Trail** - Read vs write operations, service access patterns, sensitive operations
+5. **Authentication Security** - Auth events, token refresh anomalies, expired token retrievals
+6. **Audit Log Viewer** - Real-time audit logs, error details (requires Loki)
+7. **Anomaly Detection** - Burst activity detection, failed operation correlation
+
+**Sensitive Operations Tracked:**
+- `gmail_send_*` - Email sending
+- `gmail_delete_*` - Email deletion
+- `drive_delete_*` - File deletion
+- `drive_share_*` - File sharing
+- `calendar_create_*`, `calendar_delete_*` - Calendar modifications
+
+**Trace Correlation:**
+- Audit logs include `trace_id` for correlation with distributed traces
+- Click trace IDs to view full request flow in Tempo/Jaeger
+
+#### End-User Dashboard
+
+**Purpose:** Help users understand AI agent activity on their behalf.
+
+**Rows:**
+1. **Activity Summary** - Total operations, success/error ratio, avg response time, most used service
+2. **Service Usage Breakdown** - Operations per Google service (Gmail, Calendar, Drive, Docs, Meet, Tasks)
+3. **Tool Activity** - Tool usage distribution, recent invocations, tool performance
+4. **Gmail Activity Details** - Emails read/sent, filters created, unsubscribe actions
+5. **Calendar Activity Details** - Events viewed/created, scheduling checks
+6. **Activity Timeline** - Operations over time by service, recent errors
+7. **Activity Logs** - Human-readable activity log (requires Loki)
+
+**Privacy Considerations:**
+- By default, user emails are anonymized to domain-only in logs
+- Enable `AUDIT_LOGGING_INCLUDE_PII=true` for full email addresses (security dashboard use)
+
+### Key Panels Reference
+
+For custom dashboard creation, here are essential PromQL queries:
 
 1. **Request Rate**: `rate(http_requests_total[1m])`
 2. **Error Rate**: `rate(http_requests_total{status=~"5.."}[1m])`
@@ -435,10 +630,6 @@ groups:
    ```promql
    sum by (result) (rate(oauth_token_refresh_total[5m]))
    ```
-
-### Example Dashboard JSON
-
-A basic Grafana dashboard can be created with these panels. See the [Grafana documentation](https://grafana.com/docs/grafana/latest/dashboards/) for creating dashboards from PromQL queries.
 
 ## Tracing
 
