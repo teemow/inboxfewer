@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feature/issue-oauth-mcp-server-authentication  # For testing
     paths:
       - 'charts/**'
   pull_request:
@@ -45,10 +44,8 @@ jobs:
           # Get chart version from Chart.yaml
           CHART_VERSION=$(helm show chart charts/${{ env.CHART_NAME }} | grep '^version:' | awk '{print $2}')
           
-          # Get the latest release tag for appVersion
-          # Use git tag with version sort to find the latest release
-          LATEST_TAG=$(git tag --sort=-version:refname | head -n1 || echo "v0.0.0")
-          APP_VERSION="${LATEST_TAG#v}"  # Strip 'v' prefix
+          # Get the latest release tag for appVersion using shared script
+          APP_VERSION=$(./scripts/get-latest-version.sh)
           
           # For non-main branches, append branch info to chart version
           if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
