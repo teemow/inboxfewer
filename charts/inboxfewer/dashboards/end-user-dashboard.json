@@ -336,8 +336,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(1, sum by (service) (increase(google_api_operations_total{namespace=~\"$namespace\"}[24h])))",
-          "legendFormat": "{{service}}",
+          "expr": "topk(1, sum by (google_service) (increase(google_api_operations_total{namespace=~\"$namespace\"}[24h])))",
+          "legendFormat": "{{google_service}}",
           "refId": "A"
         }
       ],
@@ -412,7 +412,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"gmail\"}[24h]))",
+          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"gmail\"}[24h]))",
           "legendFormat": "Gmail",
           "refId": "A"
         }
@@ -475,7 +475,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"calendar\"}[24h]))",
+          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"calendar\"}[24h]))",
           "legendFormat": "Calendar",
           "refId": "A"
         }
@@ -538,7 +538,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"drive\"}[24h]))",
+          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"drive\"}[24h]))",
           "legendFormat": "Drive",
           "refId": "A"
         }
@@ -601,7 +601,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"docs\"}[24h]))",
+          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"docs\"}[24h]))",
           "legendFormat": "Docs",
           "refId": "A"
         }
@@ -664,7 +664,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"meet\"}[24h]))",
+          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"meet\"}[24h]))",
           "legendFormat": "Meet",
           "refId": "A"
         }
@@ -727,7 +727,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"tasks\"}[24h]))",
+          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", google_service=\"tasks\"}[24h]))",
           "legendFormat": "Tasks",
           "refId": "A"
         }
@@ -1597,8 +1597,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval]))",
-          "legendFormat": "{{service}}",
+          "expr": "sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "{{google_service}}",
           "refId": "A"
         }
       ],
@@ -1732,7 +1732,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json | line_format \"[{{.service}}] {{.tool}} - {{if .success}}OK{{else}}FAILED: {{.error}}{{end}} ({{.duration}})\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json | line_format \"[{{.google_service}}] {{.tool}} - {{if .success}}OK{{else}}FAILED: {{.error}}{{end}} ({{.duration}})\"",
           "legendFormat": "",
           "refId": "A"
         }

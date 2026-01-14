@@ -1,6 +1,8 @@
 package server
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -80,4 +82,78 @@ func TestValidateHTTPSRequirement(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResponseWriter(t *testing.T) {
+	t.Run("captures status code", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		rw := newResponseWriter(recorder)
+
+		rw.WriteHeader(http.StatusNotFound)
+
+		if rw.statusCode != http.StatusNotFound {
+			t.Errorf("statusCode = %d, want %d", rw.statusCode, http.StatusNotFound)
+		}
+	})
+
+	t.Run("defaults to 200", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		rw := newResponseWriter(recorder)
+
+		// Don't call WriteHeader, check default
+		if rw.statusCode != http.StatusOK {
+			t.Errorf("statusCode = %d, want %d", rw.statusCode, http.StatusOK)
+		}
+	})
+
+	t.Run("passes write header to underlying writer", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		rw := newResponseWriter(recorder)
+
+		rw.WriteHeader(http.StatusCreated)
+
+		if recorder.Code != http.StatusCreated {
+			t.Errorf("recorder.Code = %d, want %d", recorder.Code, http.StatusCreated)
+		}
+	})
+}
+
+func TestInstrumentationMiddleware(t *testing.T) {
+	t.Run("calls next handler when no metrics", func(t *testing.T) {
+		server := &OAuthHTTPServer{} // No metrics set
+		called := false
+		next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			called = true
+		})
+
+		handler := server.instrumentationMiddleware(next)
+		req := httptest.NewRequest("GET", "/test", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if !called {
+			t.Error("expected next handler to be called")
+		}
+	})
+}
+
+func TestOAuthInstrumentationWrapper(t *testing.T) {
+	t.Run("calls next handler when no metrics", func(t *testing.T) {
+		server := &OAuthHTTPServer{} // No metrics set
+		called := false
+		next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			called = true
+		})
+
+		handler := server.oauthInstrumentationWrapper(next)
+		req := httptest.NewRequest("GET", "/mcp", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if !called {
+			t.Error("expected next handler to be called")
+		}
+	})
 }

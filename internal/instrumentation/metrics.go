@@ -17,7 +17,7 @@ const (
 	attrPath      = "path"
 	attrStatus    = "status"
 	attrOperation = "operation"
-	attrService   = "service"
+	attrService   = "google_service"
 	attrResult    = "result"
 	attrTool      = "tool"
 	attrAccount   = "account"

@@ -783,6 +783,11 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	healthChecker := server.NewHealthChecker(serverContext)
 	oauthServer.SetHealthChecker(healthChecker)
 
+	// Set up HTTP instrumentation for metrics
+	if instrProvider != nil && instrProvider.Enabled() {
+		oauthServer.SetMetrics(instrProvider.Metrics())
+	}
+
 	fmt.Printf("Streamable HTTP server with Google OAuth authentication starting on %s\n", addr)
 	fmt.Printf("  HTTP endpoint: /mcp\n")
 	fmt.Printf("  Health endpoints: /healthz, /readyz\n")

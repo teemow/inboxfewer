@@ -407,8 +407,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\", service=~\"$service\"}[$__rate_interval]))",
-          "legendFormat": "{{service}}",
+          "expr": "sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\", google_service=~\"$google_service\"}[$__rate_interval]))",
+          "legendFormat": "{{google_service}}",
           "refId": "A"
         }
       ],
@@ -1087,8 +1087,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (service, operation) (rate(google_api_operations_total{namespace=~\"$namespace\", service=~\"$service\"}[$__rate_interval]))",
-          "legendFormat": "{{service}}/{{operation}}",
+          "expr": "sum by (google_service, operation) (rate(google_api_operations_total{namespace=~\"$namespace\", google_service=~\"$google_service\"}[$__rate_interval]))",
+          "legendFormat": "{{google_service}}/{{operation}}",
           "refId": "A"
         }
       ],
@@ -1582,7 +1582,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json | line_format \"{{.tool}} - {{.service}}/{{.operation}} - {{if .success}}SUCCESS{{else}}FAILED{{end}} ({{.duration}})\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json | line_format \"{{.tool}} - {{.google_service}}/{{.operation}} - {{if .success}}SUCCESS{{else}}FAILED{{end}} ({{.duration}})\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1919,7 +1919,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json | line_format \"{{.trace_id}} | {{.tool}} | {{.service}} | {{.operation}} | {{if .success}}SUCCESS{{else}}FAILED{{end}}\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json | line_format \"{{.trace_id}} | {{.tool}} | {{.google_service}} | {{.operation}} | {{if .success}}SUCCESS{{else}}FAILED{{end}}\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -2044,15 +2044,15 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(google_api_operations_total, service)",
+        "definition": "label_values(google_api_operations_total, google_service)",
         "hide": 0,
         "includeAll": true,
-        "label": "Service",
+        "label": "Google Service",
         "multi": true,
-        "name": "service",
+        "name": "google_service",
         "options": [],
         "query": {
-          "query": "label_values(google_api_operations_total, service)",
+          "query": "label_values(google_api_operations_total, google_service)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 2,
