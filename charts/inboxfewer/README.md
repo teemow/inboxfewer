@@ -234,9 +234,6 @@ The following table lists the configurable parameters of the inboxfewer chart an
 | `grafanaDashboards.labels` | Labels for Grafana sidecar discovery | `{grafana_dashboard: "1"}` |
 | `grafanaDashboards.annotations` | Additional annotations for dashboard ConfigMaps | `{}` |
 | `grafanaDashboards.folder` | Grafana folder for dashboards | `Inboxfewer` |
-| `grafanaDashboards.datasources.prometheus` | Prometheus data source name | `Prometheus` |
-| `grafanaDashboards.datasources.loki` | Loki data source name | `Loki` |
-| `grafanaDashboards.datasources.tempo` | Tempo data source name | `Tempo` |
 | `grafanaDashboards.dashboards.administrator.enabled` | Enable Administrator dashboard | `true` |
 | `grafanaDashboards.dashboards.security.enabled` | Enable Security Operations dashboard | `true` |
 | `grafanaDashboards.dashboards.endUser.enabled` | Enable End-User dashboard | `true` |
@@ -318,9 +315,7 @@ Enable automatic dashboard provisioning for Grafana (requires kube-prometheus-st
 ```bash
 helm install inboxfewer ./charts/inboxfewer \
   --set grafanaDashboards.enabled=true \
-  --set grafanaDashboards.namespace=monitoring \
-  --set grafanaDashboards.datasources.prometheus="Prometheus" \
-  --set grafanaDashboards.datasources.loki="Loki"
+  --set grafanaDashboards.namespace=monitoring
 ```
 
 This creates ConfigMaps containing three dashboards:
@@ -328,7 +323,7 @@ This creates ConfigMaps containing three dashboards:
 - **Security Operations** - Audit trails, anomaly detection, and incident investigation
 - **End-User** - AI agent activity visibility and tool usage transparency
 
-**Note:** The Grafana sidecar must be configured to watch the namespace where dashboards are created. By default, kube-prometheus-stack watches all namespaces for ConfigMaps with the `grafana_dashboard: "1"` label. Adjust `grafanaDashboards.datasources.*` to match your configured data source names.
+**Note:** The Grafana sidecar must be configured to watch the namespace where dashboards are created. By default, kube-prometheus-stack watches all namespaces for ConfigMaps with the `grafana_dashboard: "1"` label. Dashboards use Grafana template variables for data source selection.
 
 ### With Persistent OAuth Token Storage
 

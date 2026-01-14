@@ -543,16 +543,6 @@ grafanaDashboards:
   # Requires Grafana sidecar v1.3.0+ with folderAnnotation enabled
   folder: "Inboxfewer"
 
-  # Data source names to use in dashboards
-  # These should match the data source names configured in your Grafana instance
-  datasources:
-    # Prometheus data source name
-    prometheus: "Prometheus"
-    # Loki data source name (for log panels in Security and End-User dashboards)
-    loki: "Loki"
-    # Tempo data source name (for trace correlation in Security dashboard)
-    tempo: "Tempo"
-
   # Enable individual dashboards
   dashboards:
     # Administrator dashboard for Kubernetes operators

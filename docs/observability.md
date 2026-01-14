@@ -502,23 +502,17 @@ For distributed tracing correlation, configure an OTLP-compatible trace backend:
 4. Select the appropriate data sources for each variable
 5. Click **Import**
 
-#### Option 2: Grafana Provisioning (Recommended for GitOps)
+#### Option 2: Helm Chart (Recommended for GitOps)
 
-Add a ConfigMap with the dashboard JSON and configure Grafana's provisioning:
+The inboxfewer Helm chart can create dashboard ConfigMaps automatically:
 
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: inboxfewer-dashboards
-  labels:
-    grafana_dashboard: "1"  # Sidecar label for kube-prometheus-stack
-data:
-  administrator-dashboard.json: |
-    <contents of administrator-dashboard.json>
+```bash
+helm install inboxfewer ./charts/inboxfewer \
+  --set grafanaDashboards.enabled=true \
+  --set grafanaDashboards.namespace=monitoring
 ```
 
-If using kube-prometheus-stack, the sidecar will automatically detect and import dashboards.
+If using kube-prometheus-stack, the Grafana sidecar will automatically detect and import dashboards from ConfigMaps with the `grafana_dashboard: "1"` label.
 
 #### Option 3: Grafana HTTP API
 

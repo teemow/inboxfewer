@@ -3,7 +3,6 @@
 {{- $labels := .Values.grafanaDashboards.labels }}
 {{- $annotations := .Values.grafanaDashboards.annotations }}
 {{- $folder := .Values.grafanaDashboards.folder }}
-{{- $datasources := .Values.grafanaDashboards.datasources }}
 
 {{- if .Values.grafanaDashboards.dashboards.administrator.enabled }}
 ---
