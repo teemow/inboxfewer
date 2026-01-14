@@ -183,6 +183,40 @@ spec:
           - name: MCP_OAUTH_ENABLE_CIMD
             value: {{ .Values.oauthSecurity.enableCIMD | quote }}
           {{- end }}
+          {{- /* Valkey storage configuration (mcp-oauth v0.2.30+) */ -}}
+          {{- if eq ((.Values.oauthSecurity.storage).type | default "memory") "valkey" }}
+          - name: OAUTH_STORAGE_TYPE
+            value: "valkey"
+          - name: VALKEY_URL
+            value: {{ required "oauthSecurity.storage.valkey.url is required when using Valkey storage" .Values.oauthSecurity.storage.valkey.url | quote }}
+          {{- if .Values.oauthSecurity.storage.valkey.tls.enabled }}
+          - name: VALKEY_TLS_ENABLED
+            value: "true"
+          {{- end }}
+          {{- if .Values.oauthSecurity.storage.valkey.keyPrefix }}
+          - name: VALKEY_KEY_PREFIX
+            value: {{ .Values.oauthSecurity.storage.valkey.keyPrefix | quote }}
+          {{- end }}
+          {{- if .Values.oauthSecurity.storage.valkey.db }}
+          - name: VALKEY_DB
+            value: {{ .Values.oauthSecurity.storage.valkey.db | quote }}
+          {{- end }}
+          {{- if or .Values.oauthSecurity.storage.valkey.existingSecret .Values.existingSecret }}
+          - name: VALKEY_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.oauthSecurity.storage.valkey.existingSecret | default .Values.existingSecret | default (include "inboxfewer.fullname" .) }}
+                key: {{ .Values.oauthSecurity.storage.valkey.secretKeyPassword | default "valkey-password" }}
+                optional: true
+          {{- end }}
+          {{- end }}
+          {{- /* TLS configuration */ -}}
+          {{- if .Values.tls.enabled }}
+          - name: TLS_CERT_FILE
+            value: "{{ .Values.tls.mountPath }}/tls.crt"
+          - name: TLS_KEY_FILE
+            value: "{{ .Values.tls.mountPath }}/tls.key"
+          {{- end }}
         {{- end }}
         ports:
           - name: http
@@ -220,14 +254,24 @@ spec:
         {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
-        {{- with .Values.volumeMounts }}
         volumeMounts:
-          {{- toYaml . | nindent 12 }}
-        {{- end }}
-      {{- with .Values.volumes }}
+          {{- with .Values.volumeMounts }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+          {{- if and .Values.tls.enabled .Values.tls.existingSecret }}
+          - name: tls-certs
+            mountPath: {{ .Values.tls.mountPath }}
+            readOnly: true
+          {{- end }}
       volumes:
+        {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
+        {{- if and .Values.tls.enabled .Values.tls.existingSecret }}
+        - name: tls-certs
+          secret:
+            secretName: {{ .Values.tls.existingSecret }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

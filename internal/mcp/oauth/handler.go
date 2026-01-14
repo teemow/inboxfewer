@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	oauthserver "github.com/giantswarm/mcp-oauth/server"
 	"github.com/giantswarm/mcp-oauth/storage"
 	"github.com/giantswarm/mcp-oauth/storage/memory"
+	"github.com/giantswarm/mcp-oauth/storage/valkey"
 
 	inboxgoogle "github.com/teemow/inboxfewer/internal/google"
 )
@@ -62,8 +64,49 @@ type Config struct {
 	// Default: true (enabled for MCP 2025-11-25 compliance)
 	EnableCIMD bool
 
+	// Storage configures the token storage backend
+	// Defaults to in-memory storage if not specified
+	Storage StorageConfig
+
 	// Logger for structured logging (optional, uses default if not provided)
 	Logger *slog.Logger
+}
+
+// StorageType represents the type of token storage backend.
+type StorageType string
+
+const (
+	// StorageTypeMemory uses in-memory storage (default, not recommended for production)
+	StorageTypeMemory StorageType = "memory"
+	// StorageTypeValkey uses Valkey (Redis-compatible) for persistent storage
+	StorageTypeValkey StorageType = "valkey"
+)
+
+// StorageConfig holds configuration for OAuth token storage backend.
+type StorageConfig struct {
+	// Type is the storage backend type: "memory" or "valkey" (default: "memory")
+	Type StorageType
+
+	// Valkey configuration (used when Type is "valkey")
+	Valkey ValkeyConfig
+}
+
+// ValkeyConfig holds configuration for Valkey storage backend.
+type ValkeyConfig struct {
+	// URL is the Valkey server address (e.g., "valkey.namespace.svc:6379")
+	URL string
+
+	// Password is the optional password for Valkey authentication
+	Password string
+
+	// TLSEnabled enables TLS for Valkey connections
+	TLSEnabled bool
+
+	// KeyPrefix is the prefix for all Valkey keys (default: "mcp:")
+	KeyPrefix string
+
+	// DB is the Valkey database number (default: 0)
+	DB int
 }
 
 // InterstitialConfig configures the OAuth success interstitial page branding
@@ -182,12 +225,16 @@ type RedirectURISecurityConfig struct {
 	DisableAuthorizationTimeValidation bool
 }
 
+// valkeyCloser is a function type for closing Valkey connections
+type valkeyCloser func()
+
 // Handler wraps the mcp-oauth library components for integration with inboxfewer
 type Handler struct {
 	server          *oauth.Server
 	handler         *oauth.Handler
 	tokenStore      storage.TokenStore
 	memoryStore     *memory.Store // Only set when using memory storage
+	closeValkey     valkeyCloser  // Function to close Valkey store
 	ipRateLimiter   *security.RateLimiter
 	userRateLimiter *security.RateLimiter
 	clientRegRL     *security.ClientRegistrationRateLimiter
@@ -214,11 +261,79 @@ func NewHandler(config *Config) (*Handler, error) {
 		return nil, fmt.Errorf("failed to create Google provider: %w", err)
 	}
 
-	// Create memory storage (inboxfewer uses memory storage only)
-	memStore := memory.New()
-	var tokenStore storage.TokenStore = memStore
-	var clientStore storage.ClientStore = memStore
-	var flowStore storage.FlowStore = memStore
+	// Create storage backend based on configuration
+	var tokenStore storage.TokenStore
+	var clientStore storage.ClientStore
+	var flowStore storage.FlowStore
+	var memStore *memory.Store
+	var closeValkeyFn valkeyCloser
+
+	switch config.Storage.Type {
+	case StorageTypeValkey:
+		if config.Storage.Valkey.URL == "" {
+			return nil, fmt.Errorf("valkey URL is required when using valkey storage")
+		}
+
+		// Configure Valkey storage
+		valkeyConfig := valkey.Config{
+			Address:   config.Storage.Valkey.URL,
+			Password:  config.Storage.Valkey.Password,
+			DB:        config.Storage.Valkey.DB,
+			KeyPrefix: config.Storage.Valkey.KeyPrefix,
+			Logger:    logger,
+		}
+
+		// Configure TLS if enabled
+		if config.Storage.Valkey.TLSEnabled {
+			valkeyConfig.TLS = &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			}
+		}
+
+		// Set default key prefix if not specified
+		if valkeyConfig.KeyPrefix == "" {
+			valkeyConfig.KeyPrefix = valkey.DefaultKeyPrefix
+		}
+
+		valkeyStore, err := valkey.New(valkeyConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Valkey storage: %w", err)
+		}
+
+		// Set up encryption for Valkey store if key is provided
+		if len(config.Security.EncryptionKey) > 0 {
+			encryptor, err := security.NewEncryptor(config.Security.EncryptionKey)
+			if err != nil {
+				// Close the Valkey store on error to release resources
+				valkeyStore.Close()
+				return nil, fmt.Errorf("failed to create encryptor for Valkey storage: %w", err)
+			}
+			valkeyStore.SetEncryptor(encryptor)
+			logger.Info("Token encryption at rest enabled for Valkey storage (AES-256-GCM)")
+		}
+
+		// Valkey store implements all required interfaces
+		tokenStore = valkeyStore
+		clientStore = valkeyStore
+		flowStore = valkeyStore
+		closeValkeyFn = valkeyStore.Close // Store Close function for cleanup
+		logger.Info("Using Valkey storage backend", "address", config.Storage.Valkey.URL, "tls", config.Storage.Valkey.TLSEnabled)
+
+	case StorageTypeMemory, "":
+		// Use memory storage (default)
+		memStore = memory.New()
+		tokenStore = memStore
+		clientStore = memStore
+		flowStore = memStore
+		if config.Storage.Type == "" {
+			logger.Info("Using in-memory storage backend (default)")
+		} else {
+			logger.Info("Using in-memory storage backend")
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported storage type: %s (supported: memory, valkey)", config.Storage.Type)
+	}
 
 	// Set default refresh token TTL if not specified
 	refreshTokenTTL := config.Security.RefreshTokenTTL
@@ -296,8 +411,8 @@ func NewHandler(config *Config) (*Handler, error) {
 		return nil, fmt.Errorf("failed to create OAuth server: %w", err)
 	}
 
-	// Set up encryption if key provided
-	if len(config.Security.EncryptionKey) > 0 {
+	// Set up encryption if key provided (only for memory storage; Valkey encryption is set above)
+	if len(config.Security.EncryptionKey) > 0 && config.Storage.Type != StorageTypeValkey {
 		encryptor, err := security.NewEncryptor(config.Security.EncryptionKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create encryptor: %w", err)
@@ -361,6 +476,7 @@ func NewHandler(config *Config) (*Handler, error) {
 		handler:         handler,
 		tokenStore:      tokenStore,
 		memoryStore:     memStore,
+		closeValkey:     closeValkeyFn,
 		ipRateLimiter:   ipRateLimiter,
 		userRateLimiter: userRateLimiter,
 		clientRegRL:     clientRegRL,
@@ -395,6 +511,9 @@ func (h *Handler) Stop() {
 	h.stopOnce.Do(func() {
 		if h.memoryStore != nil {
 			h.memoryStore.Stop()
+		}
+		if h.closeValkey != nil {
+			h.closeValkey()
 		}
 		if h.ipRateLimiter != nil {
 			h.ipRateLimiter.Stop()

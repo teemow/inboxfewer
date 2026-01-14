@@ -58,6 +58,40 @@ type OAuthSecurityConfig struct {
 
 	// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
 	EnableCIMD bool
+
+	// TLS/HTTPS support
+	TLSCertFile string
+	TLSKeyFile  string
+
+	// Storage configuration (mcp-oauth v0.2.30+)
+	Storage OAuthStorageConfig
+}
+
+// OAuthStorageConfig holds OAuth token storage backend configuration
+type OAuthStorageConfig struct {
+	// Type is the storage backend type: "memory" or "valkey" (default: "memory")
+	Type string
+
+	// Valkey configuration (used when Type is "valkey")
+	Valkey ValkeyStorageConfig
+}
+
+// ValkeyStorageConfig holds configuration for Valkey storage backend
+type ValkeyStorageConfig struct {
+	// URL is the Valkey server address (e.g., "valkey.namespace.svc:6379")
+	URL string
+
+	// Password is the optional password for Valkey authentication
+	Password string
+
+	// TLSEnabled enables TLS for Valkey connections
+	TLSEnabled bool
+
+	// KeyPrefix is the prefix for all Valkey keys (default: "mcp:")
+	KeyPrefix string
+
+	// DB is the Valkey database number (default: 0)
+	DB int
 }
 
 func newServeCmd() *cobra.Command {
@@ -89,6 +123,16 @@ func newServeCmd() *cobra.Command {
 		disableStrictSchemeMatching      bool
 		// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
 		enableCIMD bool
+		// TLS/HTTPS support
+		tlsCertFile string
+		tlsKeyFile  string
+		// OAuth storage options (mcp-oauth v0.2.30+)
+		oauthStorageType string
+		valkeyURL        string
+		valkeyPassword   string
+		valkeyTLS        bool
+		valkeyKeyPrefix  string
+		valkeyDB         int
 	)
 
 	cmd := &cobra.Command{
@@ -135,6 +179,29 @@ OAuth Configuration:
 				encKeyBytes = decoded
 			}
 
+			// Build storage config from flags/env
+			storageConfig := OAuthStorageConfig{
+				Type: oauthStorageType,
+				Valkey: ValkeyStorageConfig{
+					URL:        valkeyURL,
+					Password:   valkeyPassword,
+					TLSEnabled: valkeyTLS,
+					KeyPrefix:  valkeyKeyPrefix,
+					DB:         valkeyDB,
+				},
+			}
+
+			// Load storage config from environment variables if not set via flags
+			loadOAuthStorageEnvVars(cmd, &storageConfig)
+
+			// Load TLS paths from environment if not provided via flags
+			if tlsCertFile == "" {
+				tlsCertFile = os.Getenv("TLS_CERT_FILE")
+			}
+			if tlsKeyFile == "" {
+				tlsKeyFile = os.Getenv("TLS_KEY_FILE")
+			}
+
 			securityConfig := OAuthSecurityConfig{
 				AllowPublicClientRegistration: allowPublicClientRegistration,
 				RegistrationAccessToken:       registrationAccessToken,
@@ -154,6 +221,11 @@ OAuth Configuration:
 				DisableStrictSchemeMatching:      disableStrictSchemeMatching,
 				// CIMD (mcp-oauth v0.2.30+)
 				EnableCIMD: enableCIMD,
+				// TLS support
+				TLSCertFile: tlsCertFile,
+				TLSKeyFile:  tlsKeyFile,
+				// Storage configuration
+				Storage: storageConfig,
 			}
 			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL, securityConfig)
 		},
@@ -174,6 +246,18 @@ OAuth Configuration:
 	cmd.Flags().StringVar(&encryptionKey, "oauth-encryption-key", "", "AES-256 encryption key for token storage at rest (32 bytes, base64 encoded). REQUIRED for production. Can also use MCP_OAUTH_ENCRYPTION_KEY env var. Generate with: openssl rand -base64 32")
 	cmd.Flags().BoolVar(&allowInsecureAuthWithoutState, "oauth-allow-no-state", false, "WARNING: Allow authorization without state parameter (weakens CSRF protection). Can also use MCP_OAUTH_ALLOW_NO_STATE env var. Default: false (secure)")
 	cmd.Flags().IntVar(&maxClientsPerIP, "oauth-max-clients-per-ip", 10, "Maximum number of clients that can be registered per IP address (prevents DoS). Can also use MCP_OAUTH_MAX_CLIENTS_PER_IP env var. Default: 10")
+
+	// TLS flags for HTTPS support
+	cmd.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "Path to TLS certificate file (PEM format). If provided with --tls-key-file, enables HTTPS. Can also use TLS_CERT_FILE env var.")
+	cmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "Path to TLS private key file (PEM format). If provided with --tls-cert-file, enables HTTPS. Can also use TLS_KEY_FILE env var.")
+
+	// OAuth storage flags
+	cmd.Flags().StringVar(&oauthStorageType, "oauth-storage-type", "memory", "OAuth token storage type: memory or valkey. Can also use OAUTH_STORAGE_TYPE env var.")
+	cmd.Flags().StringVar(&valkeyURL, "valkey-url", "", "Valkey server address (e.g., valkey.namespace.svc:6379). Can also use VALKEY_URL env var.")
+	cmd.Flags().StringVar(&valkeyPassword, "valkey-password", "", "Valkey authentication password. Can also use VALKEY_PASSWORD env var.")
+	cmd.Flags().BoolVar(&valkeyTLS, "valkey-tls", false, "Enable TLS for Valkey connections. Can also use VALKEY_TLS_ENABLED env var.")
+	cmd.Flags().StringVar(&valkeyKeyPrefix, "valkey-key-prefix", "mcp:", "Prefix for all Valkey keys. Can also use VALKEY_KEY_PREFIX env var.")
+	cmd.Flags().IntVar(&valkeyDB, "valkey-db", 0, "Valkey database number. Can also use VALKEY_DB env var.")
 
 	// Redirect URI Security Settings (mcp-oauth v0.2.30+)
 	cmd.Flags().BoolVar(&disableProductionMode, "oauth-disable-production-mode", false, "WARNING: Disable production mode security (allows HTTP, private IPs in redirect URIs). Significantly weakens security.")
@@ -498,6 +582,20 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		DisableStrictSchemeMatching:      securityConfig.DisableStrictSchemeMatching,
 		// CIMD (mcp-oauth v0.2.30+)
 		EnableCIMD: securityConfig.EnableCIMD,
+		// Storage configuration (mcp-oauth v0.2.30+)
+		Storage: oauth.StorageConfig{
+			Type: oauth.StorageType(securityConfig.Storage.Type),
+			Valkey: oauth.ValkeyConfig{
+				URL:        securityConfig.Storage.Valkey.URL,
+				Password:   securityConfig.Storage.Valkey.Password,
+				TLSEnabled: securityConfig.Storage.Valkey.TLSEnabled,
+				KeyPrefix:  securityConfig.Storage.Valkey.KeyPrefix,
+				DB:         securityConfig.Storage.Valkey.DB,
+			},
+		},
+		// TLS configuration
+		TLSCertFile: securityConfig.TLSCertFile,
+		TLSKeyFile:  securityConfig.TLSKeyFile,
 	}
 
 	// Configure interstitial page branding if any env vars are set
@@ -554,7 +652,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	}
 
 	// Create OAuth server with existing handler
-	oauthServer, err := server.NewOAuthHTTPServerWithHandler(mcpSrv, "streamable-http", oauthHandler, disableStreaming)
+	oauthServer, err := server.NewOAuthHTTPServerWithHandlerAndTLS(mcpSrv, "streamable-http", oauthHandler, disableStreaming, securityConfig.TLSCertFile, securityConfig.TLSKeyFile)
 	if err != nil {
 		return fmt.Errorf("failed to create OAuth HTTP server: %w", err)
 	}
@@ -607,4 +705,54 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 
 	fmt.Println("HTTP server gracefully stopped")
 	return nil
+}
+
+// loadOAuthStorageEnvVars loads OAuth storage configuration from environment variables.
+// Environment variables only override flag values when the flag was not explicitly set.
+// The cmd parameter is used to check if flags were explicitly set by the user.
+func loadOAuthStorageEnvVars(cmd *cobra.Command, config *OAuthStorageConfig) {
+	// Storage type - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("oauth-storage-type") {
+		if storageType := os.Getenv("OAUTH_STORAGE_TYPE"); storageType != "" {
+			config.Type = storageType
+		}
+	}
+
+	// Valkey URL - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-url") {
+		if url := os.Getenv("VALKEY_URL"); url != "" && config.Valkey.URL == "" {
+			config.Valkey.URL = url
+		}
+	}
+
+	// Valkey Password - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-password") {
+		if password := os.Getenv("VALKEY_PASSWORD"); password != "" && config.Valkey.Password == "" {
+			config.Valkey.Password = password
+		}
+	}
+
+	// Valkey Key Prefix - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-key-prefix") {
+		if keyPrefix := os.Getenv("VALKEY_KEY_PREFIX"); keyPrefix != "" && config.Valkey.KeyPrefix == "" {
+			config.Valkey.KeyPrefix = keyPrefix
+		}
+	}
+
+	// Valkey TLS - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-tls") {
+		if os.Getenv("VALKEY_TLS_ENABLED") == "true" {
+			config.Valkey.TLSEnabled = true
+		}
+	}
+
+	// Valkey DB - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-db") {
+		if dbStr := os.Getenv("VALKEY_DB"); dbStr != "" {
+			var db int
+			if _, err := fmt.Sscanf(dbStr, "%d", &db); err == nil {
+				config.Valkey.DB = db
+			}
+		}
+	}
 }
