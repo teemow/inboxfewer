@@ -90,6 +90,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -153,6 +155,7 @@
           "mappings": [],
           "max": 100,
           "min": 0,
+          "noValue": "0%",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -207,7 +210,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum(rate(http_requests_total{namespace=~\"$namespace\", status=~\"5..\"}[$__rate_interval])) / sum(rate(http_requests_total{namespace=~\"$namespace\"}[$__rate_interval]))) * 100",
+          "expr": "(sum(rate(http_requests_total{namespace=~\"$namespace\", status=~\"5..\"}[$__rate_interval])) / sum(rate(http_requests_total{namespace=~\"$namespace\"}[$__rate_interval]))) * 100 or vector(0)",
           "legendFormat": "Error Rate",
           "refId": "A"
         }
@@ -226,7 +229,9 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -269,7 +274,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(active_sessions{namespace=~\"$namespace\"})",
+          "expr": "sum(active_sessions{namespace=~\"$namespace\"}) or vector(0)",
           "legendFormat": "Active Sessions",
           "refId": "A"
         }
@@ -289,6 +294,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "0s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -343,7 +349,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le)) or vector(0)",
           "legendFormat": "P95 Latency",
           "refId": "A"
         }
@@ -407,6 +413,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -526,6 +534,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -754,6 +764,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -822,6 +834,7 @@
             "inspect": false
           },
           "mappings": [],
+          "noValue": "0%",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -858,6 +871,7 @@
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
+          "enablePagination": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -878,7 +892,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) / sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval]))) * 100",
+          "expr": "((sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) or (sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval])) * 0)) / clamp_min(sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10)) * 100",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -946,6 +960,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1014,6 +1030,7 @@
             "inspect": false
           },
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1046,6 +1063,7 @@
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
+          "enablePagination": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -1084,8 +1102,8 @@
             "indexByName": {},
             "renameByName": {
               "Value": "P99 Duration",
-              "operation": "Operation",
-              "google_service": "Google Service"
+              "google_service": "Google Service",
+              "operation": "Operation"
             }
           }
         }
@@ -1148,6 +1166,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1211,6 +1231,7 @@
           "mappings": [],
           "max": 100,
           "min": 0,
+          "noValue": "0%",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1265,7 +1286,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) / sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\"}[$__rate_interval]))) * 100",
+          "expr": "((sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10)) * 100 or vector(0)",
           "legendFormat": "Tool Error Rate",
           "refId": "A"
         }
@@ -1316,6 +1337,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1408,6 +1431,7 @@
             }
           },
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1483,6 +1507,7 @@
           "mappings": [],
           "max": 100,
           "min": 0,
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1562,7 +1587,8 @@
               "viz": false
             }
           },
-          "mappings": []
+          "mappings": [],
+          "noValue": "0"
         },
         "overrides": [
           {
@@ -1669,68 +1695,31 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
               }
             ]
           },
-          "unit": "ops"
+          "unit": "short"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "failure"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 6,
@@ -1740,19 +1729,20 @@
       },
       "id": 23,
       "options": {
-        "legend": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
           "calcs": [
-            "mean",
-            "sum"
+            "lastNotNull"
           ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
       "targets": [
         {
@@ -1760,14 +1750,14 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "rate(oauth_token_refresh_total{namespace=~\"$namespace\", result=\"failure\"}[$__rate_interval])",
-          "legendFormat": "{{result}}",
+          "expr": "floor(sum(increase(oauth_token_refresh_total{namespace=~\"$namespace\", result=\"failure\"}[1h])) or vector(0))",
+          "legendFormat": "Token Refresh Failures",
           "refId": "A"
         }
       ],
-      "title": "Token Refresh Failures",
-      "type": "timeseries",
-      "description": "Rate of failed token refreshes over time. Spikes indicate OAuth infrastructure issues."
+      "title": "Token Refresh Failures (1h)",
+      "type": "stat",
+      "description": "Number of failed token refreshes in the last hour. Spikes indicate OAuth infrastructure issues."
     },
     {
       "collapsed": false,
@@ -1809,6 +1799,7 @@
               "type": "value"
             }
           ],
+          "noValue": "Unknown",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1854,14 +1845,14 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "kube_deployment_status_replicas_ready{namespace=~\"$namespace\", deployment=~\".*inboxfewer.*\"} / kube_deployment_status_replicas{namespace=~\"$namespace\", deployment=~\".*inboxfewer.*\"}",
-          "legendFormat": "Pod Status",
+          "expr": "min(kube_deployment_status_replicas_ready{namespace=~\"$namespace\", deployment=~\".*inboxfewer.*\"} / clamp_min(kube_deployment_status_replicas{namespace=~\"$namespace\", deployment=~\".*inboxfewer.*\"}, 1)) or vector(1)",
+          "legendFormat": "Inboxfewer App",
           "refId": "A"
         }
       ],
-      "title": "Pod Status",
+      "title": "MCP Server Status",
       "type": "stat",
-      "description": "Current pod readiness state. Green indicates all replicas are ready."
+      "description": "Inboxfewer MCP server pod readiness status. 'Ready' = all replicas running and healthy. 'Not Ready' = pods are starting, restarting, or failing. Check Pod Restarts panel for issues."
     },
     {
       "datasource": {
@@ -1905,6 +1896,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1947,7 +1940,7 @@
             "uid": "${datasource}"
           },
           "expr": "rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", container=~\"inboxfewer\"}[$__rate_interval])",
-          "legendFormat": "{{pod}}",
+          "legendFormat": "Inboxfewer",
           "refId": "A"
         }
       ],
@@ -1997,6 +1990,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2039,7 +2034,7 @@
             "uid": "${datasource}"
           },
           "expr": "container_memory_working_set_bytes{namespace=~\"$namespace\", container=~\"inboxfewer\"}",
-          "legendFormat": "{{pod}}",
+          "legendFormat": "Inboxfewer",
           "refId": "A"
         }
       ],
@@ -2057,7 +2052,9 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2107,7 +2104,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(kube_pod_container_status_restarts_total{namespace=~\"$namespace\", container=~\"inboxfewer\"})",
+          "expr": "sum(kube_pod_container_status_restarts_total{namespace=~\"$namespace\", container=~\"inboxfewer\"}) or vector(0)",
           "legendFormat": "Restarts",
           "refId": "A"
         }

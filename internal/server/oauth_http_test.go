@@ -116,6 +116,88 @@ func TestResponseWriter(t *testing.T) {
 			t.Errorf("recorder.Code = %d, want %d", recorder.Code, http.StatusCreated)
 		}
 	})
+
+	t.Run("ignores duplicate WriteHeader calls", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		rw := newResponseWriter(recorder)
+
+		// First call should succeed
+		rw.WriteHeader(http.StatusNotFound)
+
+		// Second call should be ignored (no panic/error, preserves first status)
+		rw.WriteHeader(http.StatusInternalServerError)
+
+		// Status code should remain the first value
+		if rw.statusCode != http.StatusNotFound {
+			t.Errorf("statusCode = %d, want %d", rw.statusCode, http.StatusNotFound)
+		}
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("recorder.Code = %d, want %d", recorder.Code, http.StatusNotFound)
+		}
+		if !rw.headerWritten {
+			t.Error("expected headerWritten to be true")
+		}
+	})
+
+	t.Run("Write implicitly calls WriteHeader with default status", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		rw := newResponseWriter(recorder)
+
+		// Write without calling WriteHeader
+		n, err := rw.Write([]byte("hello"))
+
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if n != 5 {
+			t.Errorf("bytes written = %d, want 5", n)
+		}
+		// Should have implicitly called WriteHeader with 200
+		if rw.statusCode != http.StatusOK {
+			t.Errorf("statusCode = %d, want %d", rw.statusCode, http.StatusOK)
+		}
+		if recorder.Code != http.StatusOK {
+			t.Errorf("recorder.Code = %d, want %d", recorder.Code, http.StatusOK)
+		}
+		if !rw.headerWritten {
+			t.Error("expected headerWritten to be true after Write")
+		}
+	})
+
+	t.Run("Write after WriteHeader does not re-call WriteHeader", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		rw := newResponseWriter(recorder)
+
+		// Set a custom status
+		rw.WriteHeader(http.StatusAccepted)
+
+		// Write should not change the status
+		_, err := rw.Write([]byte("data"))
+
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		// Status should remain what we set
+		if rw.statusCode != http.StatusAccepted {
+			t.Errorf("statusCode = %d, want %d", rw.statusCode, http.StatusAccepted)
+		}
+		if recorder.Code != http.StatusAccepted {
+			t.Errorf("recorder.Code = %d, want %d", recorder.Code, http.StatusAccepted)
+		}
+	})
+
+	t.Run("multiple Writes work correctly", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		rw := newResponseWriter(recorder)
+
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write([]byte("part1"))
+		_, _ = rw.Write([]byte("part2"))
+
+		if recorder.Body.String() != "part1part2" {
+			t.Errorf("body = %q, want %q", recorder.Body.String(), "part1part2")
+		}
+	})
 }
 
 func TestInstrumentationMiddleware(t *testing.T) {

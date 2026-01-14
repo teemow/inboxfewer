@@ -58,7 +58,9 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -101,7 +103,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\"}[24h])) or vector(0))",
           "legendFormat": "Total Invocations",
           "refId": "A"
         }
@@ -120,7 +122,9 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -171,7 +175,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", status=\"error\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", status=\"error\"}[24h])) or vector(0))",
           "legendFormat": "Failed Operations",
           "refId": "A"
         }
@@ -190,7 +194,9 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -241,7 +247,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(oauth_auth_total{namespace=~\"$namespace\", result=\"failure\"}[24h]))",
+          "expr": "floor(sum(increase(oauth_auth_total{namespace=~\"$namespace\", result=\"failure\"}[24h])) or vector(0))",
           "legendFormat": "Auth Failures",
           "refId": "A"
         }
@@ -252,15 +258,17 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "${loki_datasource}"
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -300,17 +308,17 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "${loki_datasource}"
+            "type": "prometheus",
+            "uid": "${datasource}"
           },
-          "expr": "count(count by (user_domain) (count_over_time({app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json [24h])))",
+          "expr": "count(count by (account) (mcp_tool_invocations_total{namespace=~\"$namespace\", account!=\"\"})) or vector(0)",
           "legendFormat": "Unique Users",
           "refId": "A"
         }
       ],
-      "title": "Unique User Domains (24h)",
+      "title": "Active User Count",
       "type": "stat",
-      "description": "Number of distinct user email domains active in the last 24 hours."
+      "description": "Number of distinct user accounts with activity. Note: Requires metrics.detailedLabels=true in Helm values. Shows 0 if detailedLabels is disabled."
     },
     {
       "collapsed": false,
@@ -367,6 +375,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -459,6 +469,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -551,6 +563,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -615,8 +629,8 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "${loki_datasource}"
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
       "fieldConfig": {
         "defaults": {
@@ -630,7 +644,8 @@
               "viz": false
             }
           },
-          "mappings": []
+          "mappings": [],
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -671,22 +686,22 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "${loki_datasource}"
+            "type": "prometheus",
+            "uid": "${datasource}"
           },
-          "expr": "sum by (user_domain) (count_over_time({app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json [$__range]))",
-          "legendFormat": "{{user_domain}}",
+          "expr": "sum by (google_service) (increase(google_api_operations_total{namespace=~\"$namespace\"}[$__range]))",
+          "legendFormat": "{{google_service}}",
           "refId": "A"
         }
       ],
-      "title": "Activity by User Domain",
+      "title": "Activity by Service",
       "type": "piechart",
-      "description": "Distribution of activity across user email domains."
+      "description": "Distribution of activity across Google services."
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "${loki_datasource}"
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
       "fieldConfig": {
         "defaults": {
@@ -700,7 +715,9 @@
             },
             "inspect": false
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -724,6 +741,7 @@
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
+          "enablePagination": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -741,39 +759,34 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "${loki_datasource}"
+            "type": "prometheus",
+            "uid": "${datasource}"
           },
-          "expr": "topk(20, sum by (user_domain) (count_over_time({app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json [$__range])))",
+          "expr": "topk(20, sum by (tool) (increase(mcp_tool_invocations_total{namespace=~\"$namespace\"}[$__range])))",
+          "format": "table",
+          "instant": true,
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Top Users by Activity",
+      "title": "Top Tools by Activity",
       "transformations": [
-        {
-          "id": "reduce",
-          "options": {
-            "labelsToFields": true,
-            "reducers": [
-              "sum"
-            ]
-          }
-        },
         {
           "id": "organize",
           "options": {
-            "excludeByName": {},
+            "excludeByName": {
+              "Time": true
+            },
             "indexByName": {},
             "renameByName": {
-              "Field": "User Domain",
-              "Total": "Invocations"
+              "Value": "Invocations",
+              "tool": "Tool"
             }
           }
         }
       ],
       "type": "table",
-      "description": "Most active users by operation count. Useful for identifying unusual activity patterns."
+      "description": "Most used tools by operation count. Useful for identifying unusual activity patterns."
     },
     {
       "datasource": {
@@ -916,6 +929,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1047,6 +1062,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1113,7 +1130,9 @@
             },
             "inspect": false
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1146,6 +1165,7 @@
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
+          "enablePagination": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -1247,6 +1267,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1369,6 +1391,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1492,6 +1516,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1582,7 +1608,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json | line_format \"{{.tool}} - {{.google_service}}/{{.operation}} - {{if .success}}SUCCESS{{else}}FAILED{{end}} ({{.duration}})\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool_(executed|failed)\" | line_format \"{{.tool}} - {{.google_service | default \\\"mcp\\\"}}/{{.operation | default \\\"execute\\\"}} - {{if eq .msg \\\"tool_executed\\\"}}SUCCESS{{else}}FAILED{{end}} ({{.duration}})\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1619,7 +1645,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_failed\" | json",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=\"tool_failed\" | line_format \"{{.tool}}: {{.error | default \\\"operation failed\\\"}}\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1683,6 +1709,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1763,7 +1791,9 @@
             },
             "inspect": false
           },
+          "decimals": 0,
           "mappings": [],
+          "noValue": "No failures",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1787,6 +1817,7 @@
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
+          "enablePagination": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -1850,50 +1881,6 @@
         "type": "loki",
         "uid": "${loki_datasource}"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "trace_id"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": true,
-                    "title": "View Trace",
-                    "url": "/explore?left=[\"now-1h\",\"now\",\"${tempo_datasource}\",{\"query\":\"${__value.text}\",\"queryType\":\"traceql\"}]"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
       "gridPos": {
         "h": 8,
         "w": 24,
@@ -1902,16 +1889,14 @@
       },
       "id": 29,
       "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
       },
       "targets": [
         {
@@ -1919,23 +1904,14 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} |= \"tool_\" | json | line_format \"{{.trace_id}} | {{.tool}} | {{.google_service}} | {{.operation}} | {{if .success}}SUCCESS{{else}}FAILED{{end}}\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool_(executed|failed)\" | trace_id!=\"\" | line_format \"trace={{.trace_id}} tool={{.tool}} service={{.google_service | default \\\"mcp\\\"}} op={{.operation | default \\\"execute\\\"}} {{if eq .msg \\\"tool_executed\\\"}}SUCCESS{{else}}FAILED{{end}}\"",
           "legendFormat": "",
           "refId": "A"
         }
       ],
       "title": "Trace Links from Audit Logs",
-      "transformations": [
-        {
-          "id": "extractFields",
-          "options": {
-            "format": "auto",
-            "replace": false,
-            "source": "Line"
-          }
-        }
-      ],
-      "type": "table"
+      "type": "logs",
+      "description": "Audit logs with trace IDs for correlation with distributed tracing."
     }
   ],
   "refresh": "1m",
