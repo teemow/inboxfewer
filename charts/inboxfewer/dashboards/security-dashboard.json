@@ -311,14 +311,14 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(count by (user_email) (mcp_tool_invocations_total{namespace=~\"$namespace\"})) or vector(0)",
+          "expr": "count(count by (account) (mcp_tool_invocations_total{namespace=~\"$namespace\", account!=\"\"})) or vector(0)",
           "legendFormat": "Unique Users",
           "refId": "A"
         }
       ],
-      "title": "Unique User Domains (24h)",
+      "title": "Unique Users (Active)",
       "type": "stat",
-      "description": "Number of distinct user email domains active in the last 24 hours."
+      "description": "Number of distinct user accounts active. Requires detailedLabels to be enabled."
     },
     {
       "collapsed": false,
@@ -1608,7 +1608,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool_.*\" | line_format \"{{.tool | default \\\"unknown\\\"}} - {{.google_service | default \\\"unknown\\\"}}/{{.operation | default \\\"unknown\\\"}} - {{if eq .success \\\"true\\\"}}SUCCESS{{else}}FAILED{{end}} ({{.duration | default \\\"n/a\\\"}})\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool.*\" | line_format \"{{.tool | default .msg}} - {{.google_service | default \\\"system\\\"}}/{{.operation | default \\\"execute\\\"}} - {{if eq .status \\\"success\\\"}}SUCCESS{{else if eq .status \\\"error\\\"}}FAILED{{else if eq .success \\\"true\\\"}}SUCCESS{{else}}{{.status | default \\\"UNKNOWN\\\"}}{{end}}{{if .duration}} ({{.duration}}){{end}}\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1645,7 +1645,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool_failed.*\" | line_format \"{{.tool | default \\\"unknown\\\"}}: {{.error | default \\\"unknown error\\\"}}\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | status=~\"error|failure\" or error!=\"\" | line_format \"{{.tool | default .msg}}: {{.error | default \\\"operation failed\\\"}}\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1904,7 +1904,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool_.*\" | trace_id!=\"\" | line_format \"trace={{.trace_id}} tool={{.tool | default \\\"unknown\\\"}} service={{.google_service | default \\\"unknown\\\"}} op={{.operation | default \\\"unknown\\\"}} {{if eq .success \\\"true\\\"}}SUCCESS{{else}}FAILED{{end}}\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool.*\" | trace_id!=\"\" | line_format \"trace={{.trace_id}} tool={{.tool | default .msg}} service={{.google_service | default \\\"system\\\"}} op={{.operation | default \\\"execute\\\"}} {{if eq .status \\\"success\\\"}}SUCCESS{{else if eq .status \\\"error\\\"}}FAILED{{else if eq .success \\\"true\\\"}}SUCCESS{{else}}{{.status | default \\\"UNKNOWN\\\"}}{{end}}\"",
           "legendFormat": "",
           "refId": "A"
         }

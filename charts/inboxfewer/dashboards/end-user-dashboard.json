@@ -279,7 +279,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "avg(rate(mcp_tool_duration_seconds_sum{namespace=~\"$namespace\"}[$__rate_interval]) / rate(mcp_tool_duration_seconds_count{namespace=~\"$namespace\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(rate(mcp_tool_duration_seconds_sum{namespace=~\"$namespace\"}[$__rate_interval])) / clamp_min(sum(rate(mcp_tool_duration_seconds_count{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10) or vector(0)",
           "legendFormat": "Average Response Time",
           "refId": "A"
         }
@@ -328,7 +328,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "/^google_service$/",
+          "fields": "",
           "values": false
         },
         "showPercentChange": false,
@@ -341,7 +341,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(1, sum by (google_service) (increase(google_api_operations_total{namespace=~\"$namespace\"}[24h])))",
+          "expr": "label_replace(topk(1, sum by (google_service) (increase(google_api_operations_total{namespace=~\"$namespace\"}[24h]))), \"__name__\", \"$1\", \"google_service\", \"(.*)\")",
           "legendFormat": "{{google_service}}",
           "refId": "A"
         }
@@ -1046,11 +1046,26 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(10, avg by (tool) (rate(mcp_tool_duration_seconds_sum{namespace=~\"$namespace\"}[$__rate_interval]) / rate(mcp_tool_duration_seconds_count{namespace=~\"$namespace\"}[$__rate_interval])))",
-          "format": "time_series",
+          "expr": "topk(10, sum by (tool) (rate(mcp_tool_duration_seconds_sum{namespace=~\"$namespace\"}[$__rate_interval])) / clamp_min(sum by (tool) (rate(mcp_tool_duration_seconds_count{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10))",
+          "format": "table",
           "instant": true,
           "legendFormat": "{{tool}}",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Duration",
+              "tool": "Tool"
+            }
+          }
         }
       ],
       "title": "Action Completion Times",
@@ -1771,7 +1786,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool_.*\" | line_format \"[{{.google_service | default \\\"unknown\\\"}}] {{.tool | default \\\"unknown\\\"}} - {{if eq .success \\\"true\\\"}}OK{{else}}FAILED: {{.error | default \\\"unknown error\\\"}}{{end}} ({{.duration | default \\\"n/a\\\"}})\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool.*\" | line_format \"{{if .google_service}}[{{.google_service}}]{{else}}[system]{{end}} {{.tool | default .msg}} - {{if eq .status \\\"success\\\"}}SUCCESS{{else if eq .status \\\"error\\\"}}FAILED{{else if eq .success \\\"true\\\"}}SUCCESS{{else}}{{.status | default \\\"UNKNOWN\\\"}}{{end}}{{if .error}}: {{.error}}{{end}}{{if .duration}} ({{.duration}}){{end}}\"",
           "legendFormat": "",
           "refId": "A"
         }

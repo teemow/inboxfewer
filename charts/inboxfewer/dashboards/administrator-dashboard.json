@@ -892,7 +892,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) / sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval]))) * 100 or vector(0)",
+          "expr": "(sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) / clamp_min(sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10)) * 100",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -1286,7 +1286,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) / sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\"}[$__rate_interval]))) * 100 or vector(0)",
+          "expr": "(sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) / clamp_min(sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10)) * 100",
           "legendFormat": "Tool Error Rate",
           "refId": "A"
         }
@@ -1845,14 +1845,14 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "kube_deployment_status_replicas_ready{namespace=~\"$namespace\", deployment=~\".*inboxfewer.*\"} / kube_deployment_status_replicas{namespace=~\"$namespace\", deployment=~\".*inboxfewer.*\"}",
-          "legendFormat": "Inboxfewer",
+          "expr": "min(kube_deployment_status_replicas_ready{namespace=~\"$namespace\", deployment=~\".*inboxfewer.*\"} / clamp_min(kube_deployment_status_replicas{namespace=~\"$namespace\", deployment=~\".*inboxfewer.*\"}, 1)) or vector(1)",
+          "legendFormat": "Inboxfewer App",
           "refId": "A"
         }
       ],
-      "title": "Inboxfewer Status",
+      "title": "Inboxfewer App Health",
       "type": "stat",
-      "description": "Current pod readiness state. Green indicates all replicas are ready."
+      "description": "Application pod readiness. 'Ready' = all pods running, 'Not Ready' = pods are starting/failing."
     },
     {
       "datasource": {
