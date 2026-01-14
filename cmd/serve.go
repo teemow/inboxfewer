@@ -483,6 +483,12 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	if err != nil {
 		return fmt.Errorf("failed to create server context: %w", err)
 	}
+
+	// Set metrics and audit logger on server context for tool instrumentation
+	if provider.Enabled() {
+		serverContext.SetMetrics(provider.Metrics())
+		serverContext.SetAuditLogger(instrumentation.NewAuditLogger(nil))
+	}
 	defer func() {
 		// Shutdown metrics server first
 		if metricsServer != nil {
@@ -529,7 +535,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		return runStdioServer(mcpSrv)
 	case "streamable-http":
 		fmt.Printf("Starting inboxfewer MCP server with %s transport...\n", transport)
-		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL, securityConfig, metricsConfig)
+		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL, securityConfig, metricsConfig, provider)
 	default:
 		return fmt.Errorf("unsupported transport type: %s (supported: stdio, streamable-http)", transport)
 	}
@@ -615,7 +621,7 @@ func registerAllTools(mcpSrv *mcpserver.MCPServer, ctx *server.ServerContext, re
 	return nil
 }
 
-func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig, metricsConfig MetricsConfig) error {
+func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig, metricsConfig MetricsConfig, instrProvider *instrumentation.Provider) error {
 	// Create OAuth-enabled HTTP server
 	// Base URL should be the full URL where the server is accessible
 	// For development, use http://localhost:8080
@@ -727,6 +733,12 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 			log.Printf("Error during server context shutdown: %v", err)
 		}
 	}()
+
+	// Set metrics and audit logger on server context for tool instrumentation
+	if instrProvider != nil && instrProvider.Enabled() {
+		serverContext.SetMetrics(instrProvider.Metrics())
+		serverContext.SetAuditLogger(instrumentation.NewAuditLogger(nil))
+	}
 
 	// Re-register all tools with the new context
 	if err := registerAllTools(mcpSrv, serverContext, readOnly); err != nil {
