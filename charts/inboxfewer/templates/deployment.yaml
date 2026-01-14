@@ -217,11 +217,54 @@ spec:
           - name: TLS_KEY_FILE
             value: "{{ .Values.tls.mountPath }}/tls.key"
           {{- end }}
+          {{- /* Metrics server configuration */ -}}
+          {{- if .Values.metrics.enabled }}
+          - name: METRICS_ENABLED
+            value: "true"
+          - name: METRICS_ADDR
+            value: ":{{ .Values.metrics.port }}"
+          {{- end }}
+          {{- /* Instrumentation configuration */ -}}
+          {{- if .Values.instrumentation }}
+          {{- if hasKey .Values.instrumentation "enabled" }}
+          - name: INSTRUMENTATION_ENABLED
+            value: {{ .Values.instrumentation.enabled | quote }}
+          {{- end }}
+          {{- if .Values.instrumentation.metricsExporter }}
+          - name: METRICS_EXPORTER
+            value: {{ .Values.instrumentation.metricsExporter | quote }}
+          {{- end }}
+          {{- if .Values.instrumentation.tracingExporter }}
+          - name: TRACING_EXPORTER
+            value: {{ .Values.instrumentation.tracingExporter | quote }}
+          {{- end }}
+          {{- if .Values.instrumentation.otlpEndpoint }}
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: {{ .Values.instrumentation.otlpEndpoint | quote }}
+          {{- end }}
+          {{- if .Values.instrumentation.otlpInsecure }}
+          - name: OTEL_EXPORTER_OTLP_INSECURE
+            value: "true"
+          {{- end }}
+          {{- if .Values.instrumentation.traceSamplingRate }}
+          - name: OTEL_TRACES_SAMPLER_ARG
+            value: {{ .Values.instrumentation.traceSamplingRate | quote }}
+          {{- end }}
+          {{- if .Values.instrumentation.detailedLabels }}
+          - name: METRICS_DETAILED_LABELS
+            value: "true"
+          {{- end }}
+          {{- end }}
         {{- end }}
         ports:
           - name: http
             containerPort: {{ .Values.service.targetPort }}
             protocol: TCP
+          {{- if .Values.metrics.enabled }}
+          - name: metrics
+            containerPort: {{ .Values.metrics.port }}
+            protocol: TCP
+          {{- end }}
         {{- if .Values.livenessProbe.enabled }}
         livenessProbe:
           {{- if .Values.livenessProbe.httpGet }}

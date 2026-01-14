@@ -402,8 +402,6 @@ networkPolicy:
       - protocol: UDP
         port: 53
 
-
-
 # Cilium Network Policy configuration
 # More advanced network policy for Cilium users
 ciliumNetworkPolicy:
@@ -414,8 +412,52 @@ ciliumNetworkPolicy:
   # Additional annotations to add to the CiliumNetworkPolicy
   annotations: {}
 
+# Metrics server configuration
+# Prometheus metrics are served on a dedicated port (default: 9090) that is separate
+# from the main application port (8080). This follows security best practices by
+# isolating operational metrics from public-facing traffic.
+metrics:
+  # Enable the metrics server
+  enabled: true
+
+  # Port for the metrics server
+  port: 9090
+
+  # Service configuration for metrics
+  service:
+    # Service type for metrics (typically ClusterIP for internal scraping)
+    type: ClusterIP
+    # Service annotations (e.g., for service discovery)
+    annotations: {}
+
+# Instrumentation configuration
+# OpenTelemetry-based observability for metrics and tracing
+instrumentation:
+  # Enable/disable instrumentation
+  enabled: true
+
+  # Metrics exporter type: prometheus, otlp, stdout
+  metricsExporter: prometheus
+
+  # Tracing exporter type: otlp, stdout, none
+  tracingExporter: none
+
+  # OTLP endpoint for traces/metrics (required when using otlp exporter)
+  # Example: "otel-collector.observability:4318"
+  otlpEndpoint: ""
+
+  # Use insecure connection for OTLP (only for development)
+  otlpInsecure: false
+
+  # Trace sampling rate (0.0 to 1.0, default: 0.1 = 10%)
+  traceSamplingRate: "0.1"
+
+  # Include detailed/high-cardinality labels in metrics
+  # WARNING: Can cause cardinality explosion in production
+  detailedLabels: false
+
 # ServiceMonitor for Prometheus Operator
-# Note: Requires metrics endpoint to be enabled (future feature)
+
 serviceMonitor:
   # Enable ServiceMonitor creation (requires Prometheus Operator CRDs)
   enabled: false

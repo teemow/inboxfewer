@@ -1,4 +1,4 @@
-{{- if .Values.serviceMonitor.enabled }}
+{{- if and .Values.serviceMonitor.enabled .Values.metrics.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -16,11 +16,12 @@ spec:
   selector:
     matchLabels:
       {{- include "inboxfewer.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: metrics
   namespaceSelector:
     matchNames:
       - {{ .Release.Namespace }}
   endpoints:
-    - port: http
+    - port: metrics
       path: /metrics
       {{- with .Values.serviceMonitor.interval }}
       interval: {{ . }}

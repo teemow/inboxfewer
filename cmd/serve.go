@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/teemow/inboxfewer/internal/instrumentation"
 	"github.com/teemow/inboxfewer/internal/mcp/oauth"
 	"github.com/teemow/inboxfewer/internal/resources"
 	"github.com/teemow/inboxfewer/internal/server"
@@ -65,6 +67,15 @@ type OAuthSecurityConfig struct {
 
 	// Storage configuration (mcp-oauth v0.2.30+)
 	Storage OAuthStorageConfig
+}
+
+// MetricsConfig holds configuration for the metrics server
+type MetricsConfig struct {
+	// Enabled determines whether to start the metrics server (default: true)
+	Enabled bool
+
+	// Addr is the address for the metrics server (e.g., ":9090")
+	Addr string
 }
 
 // OAuthStorageConfig holds OAuth token storage backend configuration
@@ -133,6 +144,9 @@ func newServeCmd() *cobra.Command {
 		valkeyTLS        bool
 		valkeyKeyPrefix  string
 		valkeyDB         int
+		// Metrics server configuration
+		metricsEnabled bool
+		metricsAddr    string
 	)
 
 	cmd := &cobra.Command{
@@ -227,7 +241,14 @@ OAuth Configuration:
 				// Storage configuration
 				Storage: storageConfig,
 			}
-			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL, securityConfig)
+
+			// Build metrics config
+			metricsConfig := MetricsConfig{
+				Enabled: metricsEnabled,
+				Addr:    metricsAddr,
+			}
+
+			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL, securityConfig, metricsConfig)
 		},
 	}
 
@@ -275,14 +296,67 @@ OAuth Configuration:
 	// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
 	cmd.Flags().BoolVar(&enableCIMD, "oauth-enable-cimd", true, "Enable Client ID Metadata Documents (CIMD) per MCP 2025-11-25. Allows clients to use HTTPS URLs as client identifiers. Can also use MCP_OAUTH_ENABLE_CIMD env var.")
 
+	// Metrics server flags
+	cmd.Flags().BoolVar(&metricsEnabled, "metrics-enabled", true, "Enable the metrics server on a dedicated port. Can also use METRICS_ENABLED env var.")
+	cmd.Flags().StringVar(&metricsAddr, "metrics-addr", ":9090", "Metrics server address. Can also use METRICS_ADDR env var.")
+
 	return cmd
 }
 
-func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig) error {
+func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig, metricsConfig MetricsConfig) error {
 	// Setup graceful shutdown
 	shutdownCtx, cancel := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	// Load metrics config from environment if not set via flags
+	if !metricsConfig.Enabled {
+		if os.Getenv("METRICS_ENABLED") == "true" {
+			metricsConfig.Enabled = true
+		}
+	}
+	if metricsConfig.Addr == "" || metricsConfig.Addr == ":9090" {
+		if addr := os.Getenv("METRICS_ADDR"); addr != "" {
+			metricsConfig.Addr = addr
+		}
+	}
+
+	// Initialize instrumentation provider
+	instrConfig := instrumentation.DefaultConfig()
+	instrConfig.ServiceVersion = version
+
+	provider, err := instrumentation.NewProvider(shutdownCtx, instrConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create instrumentation provider: %w", err)
+	}
+	defer func() {
+		if err := provider.Shutdown(shutdownCtx); err != nil {
+			if transport != "stdio" {
+				log.Printf("Error during instrumentation shutdown: %v", err)
+			}
+		}
+	}()
+
+	// Start metrics server if enabled and not in stdio mode
+	var metricsServer *server.MetricsServer
+	if transport != "stdio" && metricsConfig.Enabled && provider.Enabled() {
+		var err error
+		metricsServer, err = server.NewMetricsServer(server.MetricsServerConfig{
+			Addr:                    metricsConfig.Addr,
+			Enabled:                 true,
+			InstrumentationProvider: provider,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create metrics server: %w", err)
+		}
+
+		go func() {
+			if err := metricsServer.Start(); err != nil && err != http.ErrServerClosed {
+				log.Printf("Metrics server error: %v", err)
+			}
+		}()
+		log.Printf("Metrics server started on %s", metricsConfig.Addr)
+	}
 
 	// Read GitHub config (optional for serve mode - will use empty strings if not available)
 	// Users can authenticate via OAuth for MCP server usage
@@ -410,6 +484,14 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		return fmt.Errorf("failed to create server context: %w", err)
 	}
 	defer func() {
+		// Shutdown metrics server first
+		if metricsServer != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+				log.Printf("Error during metrics server shutdown: %v", err)
+			}
+		}
 		if err := serverContext.Shutdown(); err != nil {
 			if transport != "stdio" {
 				log.Printf("Error during server context shutdown: %v", err)
@@ -447,7 +529,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		return runStdioServer(mcpSrv)
 	case "streamable-http":
 		fmt.Printf("Starting inboxfewer MCP server with %s transport...\n", transport)
-		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL, securityConfig)
+		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL, securityConfig, metricsConfig)
 	default:
 		return fmt.Errorf("unsupported transport type: %s (supported: stdio, streamable-http)", transport)
 	}
@@ -533,7 +615,7 @@ func registerAllTools(mcpSrv *mcpserver.MCPServer, ctx *server.ServerContext, re
 	return nil
 }
 
-func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig) error {
+func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig, metricsConfig MetricsConfig) error {
 	// Create OAuth-enabled HTTP server
 	// Base URL should be the full URL where the server is accessible
 	// For development, use http://localhost:8080
@@ -666,6 +748,9 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	fmt.Printf("  Health endpoints: /healthz, /readyz\n")
 	fmt.Printf("  OAuth metadata: /.well-known/oauth-protected-resource\n")
 	fmt.Printf("  Authorization Server: %s\n", baseURL)
+	if metricsConfig.Enabled {
+		fmt.Printf("  Metrics endpoint: %s/metrics\n", metricsConfig.Addr)
+	}
 
 	if googleClientID != "" && googleClientSecret != "" {
 		fmt.Println("\n✓ Automatic token refresh: ENABLED")
