@@ -11,6 +11,13 @@ on:
       - main
     paths:
       - 'charts/**'
+  # Republish chart when a new Docker image is released (new app version)
+  workflow_run:
+    workflows: ["Build and Push Docker Image (Release)"]
+    types:
+      - completed
+    branches:
+      - main
 
 env:
   REGISTRY: ghcr.io
@@ -19,6 +26,8 @@ env:
 jobs:
   release-chart:
     runs-on: ubuntu-latest
+    # Skip if triggered by workflow_run and the triggering workflow failed
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       packages: write
