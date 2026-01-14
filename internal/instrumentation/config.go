@@ -59,6 +59,27 @@ type Config struct {
 	// When true, additional labels like specific email addresses may be added.
 	// For production, keep detailedLabels disabled to avoid cardinality explosion.
 	DetailedLabels bool
+
+	// AuditLogging configures audit logging behavior.
+	AuditLogging AuditLoggingConfig
+}
+
+// AuditLoggingConfig holds configuration for audit logging.
+type AuditLoggingConfig struct {
+	// Enabled determines if audit logging is active (default: true)
+	// Audit logs contain full PII (user emails) and should be routed to secure storage.
+	Enabled bool
+
+	// IncludePII controls whether to include full email addresses in audit logs.
+	// When false (default), only anonymized user identifiers are logged.
+	// When true, full email addresses are included for compliance/audit purposes.
+	// SECURITY: Ensure audit logs are stored securely with appropriate access controls.
+	IncludePII bool
+
+	// LogLevel sets the slog level for audit log messages (default: INFO).
+	// Options: "debug", "info", "warn", "error"
+	// Note: Audit events are always logged regardless of this level.
+	LogLevel string
 }
 
 // DefaultConfig returns a Config with sensible defaults based on environment variables.
@@ -77,6 +98,11 @@ func DefaultConfig() Config {
 		TraceSamplingRate:  getEnvFloatOrDefault("OTEL_TRACES_SAMPLER_ARG", 0.1),
 		PrometheusEndpoint: getEnvOrDefault("PROMETHEUS_ENDPOINT", "/metrics"),
 		DetailedLabels:     getEnvBoolOrDefault("METRICS_DETAILED_LABELS", false),
+		AuditLogging: AuditLoggingConfig{
+			Enabled:    getEnvBoolOrDefault("AUDIT_LOGGING_ENABLED", true),
+			IncludePII: getEnvBoolOrDefault("AUDIT_LOGGING_INCLUDE_PII", false),
+			LogLevel:   getEnvOrDefault("AUDIT_LOGGING_LEVEL", "info"),
+		},
 	}
 
 	return config

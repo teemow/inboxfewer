@@ -131,6 +131,25 @@ func (p *Provider) initMeterProvider(ctx context.Context, res *resource.Resource
 		}
 
 		if p.config.OTLPInsecure {
+			// Check if endpoint is localhost - less severe warning for local development
+			isLocalhost := isLocalhostEndpoint(p.config.OTLPEndpoint)
+
+			if isLocalhost {
+				slog.Warn("OTLP metrics insecure transport enabled for localhost - acceptable for local development",
+					"component", "instrumentation",
+					"exporter", ExporterOTLP,
+					"endpoint", p.config.OTLPEndpoint,
+				)
+			} else {
+				// SECURITY WARNING: Non-localhost insecure is a serious security risk
+				slog.Error("SECURITY WARNING: OTLP metrics insecure transport enabled for non-localhost endpoint",
+					"component", "instrumentation",
+					"exporter", ExporterOTLP,
+					"endpoint", p.config.OTLPEndpoint,
+					"risk", "Metrics may contain sensitive metadata and will be transmitted unencrypted",
+					"recommendation", "Set OTEL_EXPORTER_OTLP_INSECURE=false and configure TLS for production",
+				)
+			}
 			opts = append(opts, otlpmetrichttp.WithInsecure())
 		}
 
@@ -190,13 +209,25 @@ func (p *Provider) initTracerProvider(ctx context.Context, res *resource.Resourc
 		}
 
 		if p.config.OTLPInsecure {
-			// SECURITY WARNING: Traces may contain sensitive metadata
-			// Only use insecure transport for local development/testing
-			slog.Warn("OTLP insecure transport enabled - traces may contain sensitive metadata, use only for development",
-				"component", "instrumentation",
-				"exporter", ExporterOTLP,
-				"endpoint", p.config.OTLPEndpoint,
-			)
+			// Check if endpoint is localhost - less severe warning for local development
+			isLocalhost := isLocalhostEndpoint(p.config.OTLPEndpoint)
+
+			if isLocalhost {
+				slog.Warn("OTLP insecure transport enabled for localhost - acceptable for local development",
+					"component", "instrumentation",
+					"exporter", ExporterOTLP,
+					"endpoint", p.config.OTLPEndpoint,
+				)
+			} else {
+				// SECURITY WARNING: Non-localhost insecure is a serious security risk
+				slog.Error("SECURITY WARNING: OTLP insecure transport enabled for non-localhost endpoint",
+					"component", "instrumentation",
+					"exporter", ExporterOTLP,
+					"endpoint", p.config.OTLPEndpoint,
+					"risk", "Traces may contain sensitive metadata (user IDs, request details) and will be transmitted unencrypted",
+					"recommendation", "Set OTEL_EXPORTER_OTLP_INSECURE=false and configure TLS for production",
+				)
+			}
 			opts = append(opts, otlptracehttp.WithInsecure())
 		}
 		// If not insecure, the exporter will use TLS by default
@@ -289,4 +320,34 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 // Enabled returns true if instrumentation is enabled.
 func (p *Provider) Enabled() bool {
 	return p.enabled
+}
+
+// isLocalhostEndpoint checks if an endpoint refers to localhost.
+// This is used to provide appropriate security warnings for insecure transport.
+func isLocalhostEndpoint(endpoint string) bool {
+	// Handle common localhost patterns
+	// Endpoints are typically in the form "host:port" or just "host"
+	if endpoint == "" {
+		return false
+	}
+
+	// Check for localhost, 127.0.0.1, [::1], or 0.0.0.0
+	localhostPrefixes := []string{
+		"localhost:",
+		"localhost",
+		"127.0.0.1:",
+		"127.0.0.1",
+		"[::1]:",
+		"[::1]",
+		"0.0.0.0:",
+		"0.0.0.0",
+	}
+
+	for _, prefix := range localhostPrefixes {
+		if len(endpoint) >= len(prefix) && endpoint[:len(prefix)] == prefix {
+			return true
+		}
+	}
+
+	return false
 }

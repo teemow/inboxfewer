@@ -2,8 +2,10 @@ package oauth
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -101,6 +103,11 @@ type ValkeyConfig struct {
 
 	// TLSEnabled enables TLS for Valkey connections
 	TLSEnabled bool
+
+	// TLSCAFile is the path to a custom CA certificate file for TLS verification.
+	// Use this when Valkey uses certificates signed by a private CA.
+	// If empty, the system CA pool is used.
+	TLSCAFile string
 
 	// KeyPrefix is the prefix for all Valkey keys (default: "mcp:")
 	KeyPrefix string
@@ -285,9 +292,27 @@ func NewHandler(config *Config) (*Handler, error) {
 
 		// Configure TLS if enabled
 		if config.Storage.Valkey.TLSEnabled {
-			valkeyConfig.TLS = &tls.Config{
+			tlsConfig := &tls.Config{
 				MinVersion: tls.VersionTLS12,
 			}
+
+			// Load custom CA certificate if provided
+			if config.Storage.Valkey.TLSCAFile != "" {
+				caCert, err := os.ReadFile(config.Storage.Valkey.TLSCAFile)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read Valkey TLS CA certificate: %w", err)
+				}
+
+				caCertPool := x509.NewCertPool()
+				if !caCertPool.AppendCertsFromPEM(caCert) {
+					return nil, fmt.Errorf("failed to parse Valkey TLS CA certificate")
+				}
+
+				tlsConfig.RootCAs = caCertPool
+				logger.Info("Using custom CA certificate for Valkey TLS", "caFile", config.Storage.Valkey.TLSCAFile)
+			}
+
+			valkeyConfig.TLS = tlsConfig
 		}
 
 		// Set default key prefix if not specified

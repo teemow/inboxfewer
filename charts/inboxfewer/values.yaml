@@ -268,6 +268,13 @@ oauthSecurity:
   #   - Session persistence across pod restarts
   #   - Horizontal scaling with shared session state
   #   - Rolling updates without user session loss
+  #
+  # PRODUCTION REQUIREMENTS:
+  #   1. Use Valkey (not memory) storage for production
+  #   2. Enable TLS for Valkey connections (tls.enabled: true)
+  #   3. Always use authentication (existingSecret is mandatory)
+  #   4. Set up token encryption (see oauthSecurity.encryptionKeySecret)
+  #   5. Configure network policies to restrict Valkey access
   storage:
     # Storage backend type: "memory" or "valkey"
     # Default: "memory" (NOT recommended for production)
@@ -281,9 +288,16 @@ oauthSecurity:
       url: ""
 
       # Enable TLS for Valkey connections
-      # Recommended for production
+      # MANDATORY for production - tokens contain sensitive OAuth credentials
       tls:
         enabled: false
+
+        # Custom CA certificate for Valkey TLS (optional)
+        # Use when Valkey uses certificates signed by a private CA
+        # Reference a secret containing the CA certificate
+        caSecretName: ""
+        # Key in the secret containing the CA certificate (default: ca.crt)
+        caSecretKey: "ca.crt"
 
       # Key prefix for all Valkey keys
       # Useful for multi-tenant deployments sharing a Valkey instance
@@ -293,6 +307,7 @@ oauthSecurity:
       db: 0
 
       # Use an existing secret for Valkey password
+      # MANDATORY for production - unauthenticated Valkey is a security risk
       # The secret should contain key: valkey-password
       existingSecret: ""
 
@@ -416,6 +431,13 @@ ciliumNetworkPolicy:
 # Prometheus metrics are served on a dedicated port (default: 9090) that is separate
 # from the main application port (8080). This follows security best practices by
 # isolating operational metrics from public-facing traffic.
+#
+# SECURITY WARNING: The metrics endpoint should NEVER be exposed externally.
+#   - Metrics may contain operational data useful for reconnaissance
+#   - Keep service type as ClusterIP (never LoadBalancer or NodePort)
+#   - Do NOT create an Ingress for the metrics service
+#   - Only allow in-cluster Prometheus to scrape metrics
+#   - The CiliumNetworkPolicy/NetworkPolicy templates restrict metrics access to cluster-internal traffic
 metrics:
   # Enable the metrics server
   enabled: true
@@ -425,7 +447,8 @@ metrics:
 
   # Service configuration for metrics
   service:
-    # Service type for metrics (typically ClusterIP for internal scraping)
+    # Service type for metrics
+    # SECURITY: Keep as ClusterIP - never expose metrics externally
     type: ClusterIP
     # Service annotations (e.g., for service discovery)
     annotations: {}
@@ -446,7 +469,12 @@ instrumentation:
   # Example: "otel-collector.observability:4318"
   otlpEndpoint: ""
 
-  # Use insecure connection for OTLP (only for development)
+  # Use insecure connection for OTLP
+  # SECURITY WARNING: NEVER enable in production!
+  #   - Traces contain sensitive metadata (user IDs, request details, tool invocations)
+  #   - Metrics may reveal operational patterns useful for reconnaissance
+  #   - Only acceptable for localhost development (127.0.0.1, localhost)
+  #   - The application logs a SECURITY WARNING if enabled for non-localhost endpoints
   otlpInsecure: false
 
   # Trace sampling rate (0.0 to 1.0, default: 0.1 = 10%)
@@ -454,7 +482,24 @@ instrumentation:
 
   # Include detailed/high-cardinality labels in metrics
   # WARNING: Can cause cardinality explosion in production
+  # This may include user-identifying information in metric labels
   detailedLabels: false
+
+  # Audit logging configuration
+  # Audit logs track all MCP tool invocations for security and compliance purposes.
+  auditLogging:
+    # Enable/disable audit logging
+    enabled: true
+
+    # Include full email addresses (PII) in audit logs
+    # SECURITY: When enabled, audit logs contain PII and MUST be:
+    #   - Stored securely with appropriate access controls
+    #   - Routed to a separate log destination if possible
+    #   - Retained according to your data retention policy
+    # When disabled (default), only anonymized domain-based identifiers are logged.
+    # Tip: Use log filtering/routing rules to separate audit events by the
+    # "tool_executed" and "tool_audit" log messages.
+    includePII: false
 
 # ServiceMonitor for Prometheus Operator
 

@@ -99,6 +99,10 @@ type ValkeyStorageConfig struct {
 	// TLSEnabled enables TLS for Valkey connections
 	TLSEnabled bool
 
+	// TLSCAFile is the path to a custom CA certificate file for TLS verification.
+	// Use this when Valkey uses certificates signed by a private CA.
+	TLSCAFile string
+
 	// KeyPrefix is the prefix for all Valkey keys (default: "mcp:")
 	KeyPrefix string
 
@@ -500,7 +504,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	// Set metrics and audit logger on server context for tool instrumentation
 	if provider.Enabled() {
 		serverContext.SetMetrics(provider.Metrics())
-		serverContext.SetAuditLogger(instrumentation.NewAuditLogger(nil))
+		serverContext.SetAuditLogger(instrumentation.NewAuditLoggerWithConfig(nil, instrConfig.AuditLogging))
 	}
 	defer func() {
 		// Shutdown metrics server first
@@ -690,6 +694,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 				URL:        securityConfig.Storage.Valkey.URL,
 				Password:   securityConfig.Storage.Valkey.Password,
 				TLSEnabled: securityConfig.Storage.Valkey.TLSEnabled,
+				TLSCAFile:  securityConfig.Storage.Valkey.TLSCAFile,
 				KeyPrefix:  securityConfig.Storage.Valkey.KeyPrefix,
 				DB:         securityConfig.Storage.Valkey.DB,
 			},
@@ -755,7 +760,12 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	// Set metrics and audit logger on server context for tool instrumentation
 	if instrProvider != nil && instrProvider.Enabled() {
 		serverContext.SetMetrics(instrProvider.Metrics())
-		serverContext.SetAuditLogger(instrumentation.NewAuditLogger(nil))
+		// Load audit logging config from environment
+		auditConfig := instrumentation.AuditLoggingConfig{
+			Enabled:    true,
+			IncludePII: os.Getenv("AUDIT_LOGGING_INCLUDE_PII") == "true",
+		}
+		serverContext.SetAuditLogger(instrumentation.NewAuditLoggerWithConfig(nil, auditConfig))
 	}
 
 	// Re-register all tools with the new context
@@ -858,6 +868,13 @@ func loadOAuthStorageEnvVars(cmd *cobra.Command, config *OAuthStorageConfig) {
 	if !cmd.Flags().Changed("valkey-tls") {
 		if os.Getenv("VALKEY_TLS_ENABLED") == "true" {
 			config.Valkey.TLSEnabled = true
+		}
+	}
+
+	// Valkey TLS CA File - env var only applies if not already set
+	if config.Valkey.TLSCAFile == "" {
+		if caFile := os.Getenv("VALKEY_TLS_CA_FILE"); caFile != "" {
+			config.Valkey.TLSCAFile = caFile
 		}
 	}
 

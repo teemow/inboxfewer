@@ -190,21 +190,63 @@ func (ti *ToolInvocation) CompleteSuccess() *ToolInvocation {
 // AuditLogger provides structured audit logging for tool invocations.
 // It wraps slog.Logger with convenience methods for logging tool operations.
 type AuditLogger struct {
-	logger *slog.Logger
+	logger     *slog.Logger
+	includePII bool
+	enabled    bool
 }
 
 // NewAuditLogger creates a new AuditLogger with the given slog.Logger.
+// By default, PII is not included in logs (anonymized identifiers are used instead).
 func NewAuditLogger(logger *slog.Logger) *AuditLogger {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &AuditLogger{logger: logger}
+	return &AuditLogger{
+		logger:     logger,
+		includePII: false,
+		enabled:    true,
+	}
+}
+
+// NewAuditLoggerWithConfig creates a new AuditLogger with the given configuration.
+func NewAuditLoggerWithConfig(logger *slog.Logger, config AuditLoggingConfig) *AuditLogger {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &AuditLogger{
+		logger:     logger,
+		includePII: config.IncludePII,
+		enabled:    config.Enabled,
+	}
+}
+
+// SetIncludePII sets whether to include full email addresses in audit logs.
+func (al *AuditLogger) SetIncludePII(include bool) {
+	al.includePII = include
+}
+
+// SetEnabled sets whether audit logging is enabled.
+func (al *AuditLogger) SetEnabled(enabled bool) {
+	al.enabled = enabled
 }
 
 // LogToolInvocation logs a tool invocation using the standard log attributes.
 // This is suitable for general operational logging with cardinality controls.
+// If the logger is configured with IncludePII, full user emails are logged;
+// otherwise, only domain-based anonymized identifiers are used.
 func (al *AuditLogger) LogToolInvocation(ti *ToolInvocation) {
-	attrs := ti.LogAttrs()
+	if !al.enabled {
+		return
+	}
+
+	// Choose between PII and anonymized logging based on configuration
+	var attrs []slog.Attr
+	if al.includePII {
+		attrs = ti.LogAuditAttrs()
+	} else {
+		attrs = ti.LogAttrs()
+	}
+
 	args := make([]any, len(attrs))
 	for i, attr := range attrs {
 		args[i] = attr
@@ -218,8 +260,17 @@ func (al *AuditLogger) LogToolInvocation(ti *ToolInvocation) {
 }
 
 // LogToolAudit logs a tool invocation with full audit details.
-// This includes PII and should be sent to secure audit streams.
+// This includes PII (full email addresses) for compliance/audit purposes.
+// SECURITY: Ensure audit logs are routed to secure storage with appropriate access controls.
+//
+// Note: This method respects the enabled flag but always includes PII when called,
+// regardless of the IncludePII configuration. Use LogToolInvocation for
+// configuration-aware logging.
 func (al *AuditLogger) LogToolAudit(ti *ToolInvocation) {
+	if !al.enabled {
+		return
+	}
+
 	attrs := ti.LogAuditAttrs()
 	args := make([]any, len(attrs))
 	for i, attr := range attrs {

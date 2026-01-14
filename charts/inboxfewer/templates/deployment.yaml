@@ -192,6 +192,10 @@ spec:
           {{- if .Values.oauthSecurity.storage.valkey.tls.enabled }}
           - name: VALKEY_TLS_ENABLED
             value: "true"
+          {{- if .Values.oauthSecurity.storage.valkey.tls.caSecretName }}
+          - name: VALKEY_TLS_CA_FILE
+            value: "/etc/valkey-tls/{{ .Values.oauthSecurity.storage.valkey.tls.caSecretKey | default "ca.crt" }}"
+          {{- end }}
           {{- end }}
           {{- if .Values.oauthSecurity.storage.valkey.keyPrefix }}
           - name: VALKEY_KEY_PREFIX
@@ -254,6 +258,16 @@ spec:
           - name: METRICS_DETAILED_LABELS
             value: "true"
           {{- end }}
+          {{- if .Values.instrumentation.auditLogging }}
+          {{- if hasKey .Values.instrumentation.auditLogging "enabled" }}
+          - name: AUDIT_LOGGING_ENABLED
+            value: {{ .Values.instrumentation.auditLogging.enabled | quote }}
+          {{- end }}
+          {{- if .Values.instrumentation.auditLogging.includePII }}
+          - name: AUDIT_LOGGING_INCLUDE_PII
+            value: "true"
+          {{- end }}
+          {{- end }}
           {{- end }}
         {{- end }}
         ports:
@@ -306,6 +320,11 @@ spec:
             mountPath: {{ .Values.tls.mountPath }}
             readOnly: true
           {{- end }}
+          {{- if and (eq ((.Values.oauthSecurity.storage).type | default "memory") "valkey") .Values.oauthSecurity.storage.valkey.tls.enabled .Values.oauthSecurity.storage.valkey.tls.caSecretName }}
+          - name: valkey-tls-ca
+            mountPath: /etc/valkey-tls
+            readOnly: true
+          {{- end }}
       volumes:
         {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
@@ -314,6 +333,11 @@ spec:
         - name: tls-certs
           secret:
             secretName: {{ .Values.tls.existingSecret }}
+        {{- end }}
+        {{- if and (eq ((.Values.oauthSecurity.storage).type | default "memory") "valkey") .Values.oauthSecurity.storage.valkey.tls.enabled .Values.oauthSecurity.storage.valkey.tls.caSecretName }}
+        - name: valkey-tls-ca
+          secret:
+            secretName: {{ .Values.oauthSecurity.storage.valkey.tls.caSecretName }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
