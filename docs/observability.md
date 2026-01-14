@@ -541,7 +541,7 @@ All dashboards use template variables for flexible filtering:
 | `$loki_datasource` | Loki data source | Security, End-User |
 | `$tempo_datasource` | Tempo data source | Security |
 | `$namespace` | Kubernetes namespace filter | All |
-| `$service` | Google service filter (gmail, calendar, etc.) | All |
+| `$service` | Google service filter (gmail, calendar, etc.) | Security |
 | `$tool` | MCP tool filter | Administrator |
 
 ### Dashboard Details

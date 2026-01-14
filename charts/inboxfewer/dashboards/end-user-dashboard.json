@@ -20,7 +20,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [
+        "inboxfewer"
+      ],
+      "targetBlank": false,
+      "title": "Inboxfewer Dashboards",
+      "type": "dashboards"
+    }
+  ],
   "panels": [
     {
       "collapsed": false,
@@ -72,7 +85,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -92,7 +107,8 @@
         }
       ],
       "title": "Total Operations Today",
-      "type": "stat"
+      "type": "stat",
+      "description": "Total number of actions performed by AI agents on your behalf today."
     },
     {
       "datasource": {
@@ -154,16 +170,23 @@
       },
       "id": 3,
       "options": {
-        "displayLabels": ["percent"],
+        "displayLabels": [
+          "percent"
+        ],
         "legend": {
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "values": ["value", "percent"]
+          "values": [
+            "value",
+            "percent"
+          ]
         },
         "pieType": "donut",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -184,7 +207,8 @@
         }
       ],
       "title": "Operations by Result",
-      "type": "piechart"
+      "type": "piechart",
+      "description": "Breakdown of successful vs failed actions today."
     },
     {
       "datasource": {
@@ -235,7 +259,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["mean"],
+          "calcs": [
+            "mean"
+          ],
           "fields": "",
           "values": false
         },
@@ -255,7 +281,8 @@
         }
       ],
       "title": "Average Response Time",
-      "type": "stat"
+      "type": "stat",
+      "description": "How quickly AI agent actions typically complete."
     },
     {
       "datasource": {
@@ -293,7 +320,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -313,7 +342,8 @@
         }
       ],
       "title": "Most Used Service",
-      "type": "stat"
+      "type": "stat",
+      "description": "The Google service your AI agents use most frequently."
     },
     {
       "collapsed": false,
@@ -366,7 +396,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -386,7 +418,8 @@
         }
       ],
       "title": "Gmail Operations",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of Gmail-related actions (reading, sending, organizing emails)."
     },
     {
       "datasource": {
@@ -426,7 +459,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -446,7 +481,8 @@
         }
       ],
       "title": "Calendar Operations",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of Calendar-related actions (viewing, creating, managing events)."
     },
     {
       "datasource": {
@@ -486,7 +522,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -506,7 +544,8 @@
         }
       ],
       "title": "Drive Operations",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of Drive-related actions (accessing, organizing files)."
     },
     {
       "datasource": {
@@ -546,7 +585,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -566,7 +607,8 @@
         }
       ],
       "title": "Docs Operations",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of Google Docs-related actions."
     },
     {
       "datasource": {
@@ -606,7 +648,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -626,7 +670,8 @@
         }
       ],
       "title": "Meet Operations",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of Google Meet-related actions."
     },
     {
       "datasource": {
@@ -666,7 +711,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -686,7 +733,8 @@
         }
       ],
       "title": "Tasks Operations",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of Google Tasks-related actions."
     },
     {
       "collapsed": false,
@@ -698,7 +746,7 @@
       },
       "id": 13,
       "panels": [],
-      "title": "Tool Activity",
+      "title": "Agent Activity",
       "type": "row"
     },
     {
@@ -730,16 +778,24 @@
       },
       "id": 14,
       "options": {
-        "displayLabels": ["name", "percent"],
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
         "legend": {
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "values": ["value", "percent"]
+          "values": [
+            "value",
+            "percent"
+          ]
         },
         "pieType": "donut",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -759,7 +815,7 @@
           "refId": "A"
         }
       ],
-      "title": "Tool Usage Distribution",
+      "title": "Actions by Type",
       "type": "piechart"
     },
     {
@@ -844,7 +900,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -868,7 +926,7 @@
           "refId": "A"
         }
       ],
-      "title": "Recent Tool Invocations (1h)",
+      "title": "Recent Agent Activity (1h)",
       "transformations": [
         {
           "id": "organize",
@@ -974,7 +1032,7 @@
           "refId": "A"
         }
       ],
-      "title": "Tool Performance (Avg Duration)",
+      "title": "Action Completion Times",
       "type": "barchart"
     },
     {
@@ -1028,7 +1086,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1048,7 +1108,8 @@
         }
       ],
       "title": "Emails Read",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of emails read by AI agents on your behalf."
     },
     {
       "datasource": {
@@ -1088,7 +1149,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1108,7 +1171,8 @@
         }
       ],
       "title": "Emails Sent",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of emails sent by AI agents on your behalf."
     },
     {
       "datasource": {
@@ -1148,7 +1212,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1168,7 +1234,8 @@
         }
       ],
       "title": "Filters Created",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of email filters created by AI agents."
     },
     {
       "datasource": {
@@ -1208,7 +1275,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1228,7 +1297,8 @@
         }
       ],
       "title": "Unsubscribe Actions",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of unsubscribe actions performed by AI agents."
     },
     {
       "collapsed": false,
@@ -1281,7 +1351,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1301,7 +1373,8 @@
         }
       ],
       "title": "Events Viewed",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of calendar events viewed by AI agents."
     },
     {
       "datasource": {
@@ -1341,7 +1414,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1361,7 +1436,8 @@
         }
       ],
       "title": "Events Created",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of calendar events created by AI agents."
     },
     {
       "datasource": {
@@ -1401,7 +1477,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1421,7 +1499,8 @@
         }
       ],
       "title": "Scheduling Checks",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of availability checks for scheduling."
     },
     {
       "collapsed": false,
@@ -1500,7 +1579,9 @@
       "id": 27,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1566,7 +1647,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -1655,12 +1738,18 @@
         }
       ],
       "title": "Activity Log",
-      "type": "logs"
+      "type": "logs",
+      "description": "Human-readable log of recent AI agent activity."
     }
   ],
   "refresh": "1m",
   "schemaVersion": 39,
-  "tags": ["inboxfewer", "end-user", "mcp", "ai-agent"],
+  "tags": [
+    "inboxfewer",
+    "end-user",
+    "mcp",
+    "ai-agent"
+  ],
   "templating": {
     "list": [
       {

@@ -20,7 +20,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [
+        "inboxfewer"
+      ],
+      "targetBlank": false,
+      "title": "Inboxfewer Dashboards",
+      "type": "dashboards"
+    }
+  ],
   "panels": [
     {
       "collapsed": false,
@@ -99,7 +112,10 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -121,7 +137,8 @@
         }
       ],
       "title": "Request Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "HTTP requests per second across all endpoints. Monitor for unusual spikes or drops that may indicate issues."
     },
     {
       "datasource": {
@@ -174,7 +191,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -194,7 +213,8 @@
         }
       ],
       "title": "Error Rate (%)",
-      "type": "stat"
+      "type": "stat",
+      "description": "Percentage of HTTP requests returning 5xx errors. Values above 5% warrant investigation."
     },
     {
       "datasource": {
@@ -233,7 +253,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -253,7 +275,8 @@
         }
       ],
       "title": "Active Sessions",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of currently active OAuth sessions. High values may indicate resource pressure."
     },
     {
       "datasource": {
@@ -304,7 +327,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -324,7 +349,8 @@
         }
       ],
       "title": "P95 Latency",
-      "type": "stat"
+      "type": "stat",
+      "description": "95th percentile response time. 95% of requests complete faster than this value."
     },
     {
       "collapsed": false,
@@ -403,7 +429,10 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -452,7 +481,8 @@
         }
       ],
       "title": "Latency Percentiles",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Response time distribution showing P50, P90, P95, and P99 percentiles over time."
     },
     {
       "datasource": {
@@ -564,7 +594,9 @@
       "id": 8,
       "options": {
         "legend": {
-          "calcs": ["mean"],
+          "calcs": [
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -586,7 +618,8 @@
         }
       ],
       "title": "Request Rate by Status",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "HTTP request rate broken down by status code. Red indicates server errors (5xx), orange indicates client errors (4xx)."
     },
     {
       "datasource": {
@@ -631,7 +664,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1e-09
         },
         "legend": {
           "show": true
@@ -663,7 +696,8 @@
         }
       ],
       "title": "Request Duration Heatmap",
-      "type": "heatmap"
+      "type": "heatmap",
+      "description": "Distribution of request durations. Darker colors indicate more requests at that latency."
     },
     {
       "collapsed": false,
@@ -742,7 +776,10 @@
       "id": 11,
       "options": {
         "legend": {
-          "calcs": ["mean", "sum"],
+          "calcs": [
+            "mean",
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -764,7 +801,8 @@
         }
       ],
       "title": "API Operations by Service",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Google API calls broken down by service (Gmail, Calendar, Drive, etc.)."
     },
     {
       "datasource": {
@@ -821,7 +859,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -861,7 +901,8 @@
           }
         }
       ],
-      "type": "table"
+      "type": "table",
+      "description": "Error rates for each Google service. High error rates may indicate API quota issues or configuration problems."
     },
     {
       "datasource": {
@@ -927,7 +968,10 @@
       "id": 13,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -949,7 +993,8 @@
         }
       ],
       "title": "API Latency by Service (P95)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "95th percentile latency for Google API calls by service."
     },
     {
       "datasource": {
@@ -1002,7 +1047,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -1043,7 +1090,8 @@
           }
         }
       ],
-      "type": "table"
+      "type": "table",
+      "description": "Top 10 slowest Google API operations. Useful for identifying performance bottlenecks."
     },
     {
       "collapsed": false,
@@ -1122,7 +1170,10 @@
       "id": 16,
       "options": {
         "legend": {
-          "calcs": ["mean", "sum"],
+          "calcs": [
+            "mean",
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1144,7 +1195,8 @@
         }
       ],
       "title": "Tool Invocation Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Rate of MCP tool calls from AI agents."
     },
     {
       "datasource": {
@@ -1197,7 +1249,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1217,7 +1271,8 @@
         }
       ],
       "title": "Tool Error Rate (%)",
-      "type": "stat"
+      "type": "stat",
+      "description": "Percentage of MCP tool invocations that failed. Investigate if consistently above 1%."
     },
     {
       "datasource": {
@@ -1283,7 +1338,10 @@
       "id": 18,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1305,7 +1363,8 @@
         }
       ],
       "title": "Tool Duration P95",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "95th percentile execution time for MCP tools."
     },
     {
       "datasource": {
@@ -1395,7 +1454,8 @@
         }
       ],
       "title": "Top 10 Tools by Usage (1h)",
-      "type": "barchart"
+      "type": "barchart",
+      "description": "Most frequently used MCP tools in the last hour."
     },
     {
       "collapsed": false,
@@ -1460,7 +1520,9 @@
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1480,7 +1542,8 @@
         }
       ],
       "title": "Auth Success Rate",
-      "type": "gauge"
+      "type": "gauge",
+      "description": "OAuth authentication success rate. Values below 99% indicate authentication issues."
     },
     {
       "datasource": {
@@ -1557,16 +1620,24 @@
       },
       "id": 22,
       "options": {
-        "displayLabels": ["name", "percent"],
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
         "legend": {
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "values": ["value", "percent"]
+          "values": [
+            "value",
+            "percent"
+          ]
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1587,7 +1658,8 @@
         }
       ],
       "title": "Token Refresh Status (1h)",
-      "type": "piechart"
+      "type": "piechart",
+      "description": "Distribution of OAuth token refresh results. Failures may cause user re-authentication."
     },
     {
       "datasource": {
@@ -1669,7 +1741,10 @@
       "id": 23,
       "options": {
         "legend": {
-          "calcs": ["mean", "sum"],
+          "calcs": [
+            "mean",
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1691,7 +1766,8 @@
         }
       ],
       "title": "Token Refresh Failures",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Rate of failed token refreshes over time. Spikes indicate OAuth infrastructure issues."
     },
     {
       "collapsed": false,
@@ -1762,7 +1838,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1782,7 +1860,8 @@
         }
       ],
       "title": "Pod Status",
-      "type": "stat"
+      "type": "stat",
+      "description": "Current pod readiness state. Green indicates all replicas are ready."
     },
     {
       "datasource": {
@@ -1848,7 +1927,10 @@
       "id": 26,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1870,7 +1952,8 @@
         }
       ],
       "title": "CPU Usage",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Container CPU consumption over time."
     },
     {
       "datasource": {
@@ -1936,7 +2019,10 @@
       "id": 27,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1958,7 +2044,8 @@
         }
       ],
       "title": "Memory Usage",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Container memory working set over time."
     },
     {
       "datasource": {
@@ -2004,7 +2091,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -2024,12 +2113,18 @@
         }
       ],
       "title": "Pod Restarts",
-      "type": "stat"
+      "type": "stat",
+      "description": "Total container restart count. Increasing values indicate stability issues."
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["inboxfewer", "kubernetes", "mcp", "administrator"],
+  "tags": [
+    "inboxfewer",
+    "kubernetes",
+    "mcp",
+    "administrator"
+  ],
   "templating": {
     "list": [
       {
@@ -2040,7 +2135,7 @@
         },
         "hide": 0,
         "includeAll": false,
-        "label": "Data Source",
+        "label": "Prometheus",
         "multi": false,
         "name": "datasource",
         "options": [],

@@ -20,7 +20,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [
+        "inboxfewer"
+      ],
+      "targetBlank": false,
+      "title": "Inboxfewer Dashboards",
+      "type": "dashboards"
+    }
+  ],
   "panels": [
     {
       "collapsed": false,
@@ -72,7 +85,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -92,7 +107,8 @@
         }
       ],
       "title": "Total Tool Invocations (24h)",
-      "type": "stat"
+      "type": "stat",
+      "description": "Total number of MCP tool operations in the last 24 hours across all users."
     },
     {
       "datasource": {
@@ -139,7 +155,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -159,7 +177,8 @@
         }
       ],
       "title": "Failed Operations (24h)",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of tool operations that failed in the last 24 hours. High values may indicate security issues."
     },
     {
       "datasource": {
@@ -206,7 +225,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -226,7 +247,8 @@
         }
       ],
       "title": "Auth Failures (24h)",
-      "type": "stat"
+      "type": "stat",
+      "description": "Authentication failures in the last 24 hours. Spikes may indicate brute force attempts."
     },
     {
       "datasource": {
@@ -265,7 +287,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -285,7 +309,8 @@
         }
       ],
       "title": "Unique User Domains (24h)",
-      "type": "stat"
+      "type": "stat",
+      "description": "Number of distinct user email domains active in the last 24 hours."
     },
     {
       "collapsed": false,
@@ -364,7 +389,9 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -386,7 +413,8 @@
         }
       ],
       "title": "Operations Timeline by Service",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Activity volume over time broken down by Google service."
     },
     {
       "datasource": {
@@ -453,7 +481,9 @@
       "id": 8,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -475,7 +505,8 @@
         }
       ],
       "title": "Write Operations Timeline",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Timeline of write operations (create, update, delete) across all services."
     },
     {
       "datasource": {
@@ -542,7 +573,9 @@
       "id": 9,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -564,7 +597,8 @@
         }
       ],
       "title": "Failed Operations Timeline",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Timeline of failed operations. Correlate with other anomalies for incident investigation."
     },
     {
       "collapsed": false,
@@ -608,16 +642,24 @@
       },
       "id": 11,
       "options": {
-        "displayLabels": ["name", "percent"],
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
         "legend": {
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "values": ["value", "percent"]
+          "values": [
+            "value",
+            "percent"
+          ]
         },
         "pieType": "donut",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -638,7 +680,8 @@
         }
       ],
       "title": "Activity by User Domain",
-      "type": "piechart"
+      "type": "piechart",
+      "description": "Distribution of activity across user email domains."
     },
     {
       "datasource": {
@@ -682,7 +725,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -710,7 +755,9 @@
           "id": "reduce",
           "options": {
             "labelsToFields": true,
-            "reducers": ["sum"]
+            "reducers": [
+              "sum"
+            ]
           }
         },
         {
@@ -725,7 +772,8 @@
           }
         }
       ],
-      "type": "table"
+      "type": "table",
+      "description": "Most active users by operation count. Useful for identifying unusual activity patterns."
     },
     {
       "datasource": {
@@ -780,7 +828,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1e-09
         },
         "legend": {
           "show": true
@@ -810,7 +858,8 @@
         }
       ],
       "title": "Activity Heatmap by Hour",
-      "type": "heatmap"
+      "type": "heatmap",
+      "description": "Activity distribution by hour of day. Identifies unusual off-hours activity."
     },
     {
       "collapsed": false,
@@ -920,7 +969,9 @@
       "id": 15,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -951,7 +1002,8 @@
         }
       ],
       "title": "Tool Usage by Type (Read vs Write)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Comparison of read-only vs write operations over time."
     },
     {
       "datasource": {
@@ -1017,7 +1069,9 @@
       "id": 16,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1039,7 +1093,8 @@
         }
       ],
       "title": "Service Access Patterns",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Service access patterns over time for identifying unusual access."
     },
     {
       "datasource": {
@@ -1092,7 +1147,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -1132,7 +1189,8 @@
           }
         }
       ],
-      "type": "table"
+      "type": "table",
+      "description": "High-risk operations including email sending, file deletion, and sharing changes."
     },
     {
       "collapsed": false,
@@ -1242,7 +1300,9 @@
       "id": 19,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1264,7 +1324,8 @@
         }
       ],
       "title": "Auth Events by Result",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Authentication events broken down by success/failure over time."
     },
     {
       "datasource": {
@@ -1361,7 +1422,9 @@
       "id": 20,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1383,7 +1446,8 @@
         }
       ],
       "title": "Token Refresh by Result",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "OAuth token refresh results over time."
     },
     {
       "datasource": {
@@ -1450,7 +1514,9 @@
       "id": 21,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1472,7 +1538,8 @@
         }
       ],
       "title": "Expired Token Retrievals",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Attempts to use expired tokens. High values indicate configuration issues."
     },
     {
       "collapsed": false,
@@ -1521,7 +1588,8 @@
         }
       ],
       "title": "Audit Logs",
-      "type": "logs"
+      "type": "logs",
+      "description": "Real-time audit log stream from Loki. Contains detailed operation records."
     },
     {
       "datasource": {
@@ -1557,7 +1625,8 @@
         }
       ],
       "title": "Error Details",
-      "type": "logs"
+      "type": "logs",
+      "description": "Detailed error messages from failed operations."
     },
     {
       "collapsed": false,
@@ -1640,7 +1709,10 @@
       "id": 26,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1671,7 +1743,8 @@
         }
       ],
       "title": "Burst Activity Detection",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Identifies sudden spikes in activity that may indicate compromised accounts."
     },
     {
       "datasource": {
@@ -1715,7 +1788,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -1831,7 +1906,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true
@@ -1863,7 +1940,12 @@
   ],
   "refresh": "1m",
   "schemaVersion": 39,
-  "tags": ["inboxfewer", "security", "audit", "mcp"],
+  "tags": [
+    "inboxfewer",
+    "security",
+    "audit",
+    "mcp"
+  ],
   "templating": {
     "list": [
       {

@@ -318,19 +318,17 @@ Enable automatic dashboard provisioning for Grafana (requires kube-prometheus-st
 ```bash
 helm install inboxfewer ./charts/inboxfewer \
   --set grafanaDashboards.enabled=true \
-  --set grafanaDashboards.namespace=monitoring
+  --set grafanaDashboards.namespace=monitoring \
+  --set grafanaDashboards.datasources.prometheus="Prometheus" \
+  --set grafanaDashboards.datasources.loki="Loki"
 ```
 
-Custom data source names:
+This creates ConfigMaps containing three dashboards:
+- **Administrator** - Service health, performance, and Kubernetes resources
+- **Security Operations** - Audit trails, anomaly detection, and incident investigation
+- **End-User** - AI agent activity visibility and tool usage transparency
 
-```bash
-helm install inboxfewer ./charts/inboxfewer \
-  --set grafanaDashboards.enabled=true \
-  --set grafanaDashboards.datasources.prometheus="prometheus-kube-prom" \
-  --set grafanaDashboards.datasources.loki="loki-stack"
-```
-
-**Note:** The Grafana sidecar must be configured to watch the namespace where dashboards are created. By default, kube-prometheus-stack watches all namespaces for ConfigMaps with the `grafana_dashboard: "1"` label.
+**Note:** The Grafana sidecar must be configured to watch the namespace where dashboards are created. By default, kube-prometheus-stack watches all namespaces for ConfigMaps with the `grafana_dashboard: "1"` label. Adjust `grafanaDashboards.datasources.*` to match your configured data source names.
 
 ### With Persistent OAuth Token Storage
 
