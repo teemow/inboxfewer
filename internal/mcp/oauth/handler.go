@@ -1,8 +1,11 @@
 package oauth
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -10,7 +13,9 @@ import (
 	"github.com/giantswarm/mcp-oauth/providers/google"
 	"github.com/giantswarm/mcp-oauth/security"
 	oauthserver "github.com/giantswarm/mcp-oauth/server"
+	"github.com/giantswarm/mcp-oauth/storage"
 	"github.com/giantswarm/mcp-oauth/storage/memory"
+	"github.com/giantswarm/mcp-oauth/storage/valkey"
 
 	inboxgoogle "github.com/teemow/inboxfewer/internal/google"
 )
@@ -43,8 +48,72 @@ type Config struct {
 	// If nil, uses the default mcp-oauth interstitial page
 	Interstitial *InterstitialConfig
 
+	// RedirectURISecurity configures security validation for redirect URIs
+	// All options default to secure values in mcp-oauth
+	RedirectURISecurity RedirectURISecurityConfig
+
+	// TrustedPublicRegistrationSchemes lists URI schemes allowed for unauthenticated
+	// client registration. Enables Cursor/VSCode without registration tokens.
+	// Best suited for internal/development deployments due to platform-specific
+	// limitations in custom URI scheme security. Schemes must conform to RFC 3986.
+	TrustedPublicRegistrationSchemes []string
+
+	// DisableStrictSchemeMatching allows mixed scheme clients to register without token
+	DisableStrictSchemeMatching bool
+
+	// EnableCIMD enables Client ID Metadata Documents per MCP 2025-11-25.
+	// When enabled, clients can use HTTPS URLs as client identifiers.
+	// Default: true (enabled for MCP 2025-11-25 compliance)
+	EnableCIMD bool
+
+	// Storage configures the token storage backend
+	// Defaults to in-memory storage if not specified
+	Storage StorageConfig
+
 	// Logger for structured logging (optional, uses default if not provided)
 	Logger *slog.Logger
+}
+
+// StorageType represents the type of token storage backend.
+type StorageType string
+
+const (
+	// StorageTypeMemory uses in-memory storage (default, not recommended for production)
+	StorageTypeMemory StorageType = "memory"
+	// StorageTypeValkey uses Valkey (Redis-compatible) for persistent storage
+	StorageTypeValkey StorageType = "valkey"
+)
+
+// StorageConfig holds configuration for OAuth token storage backend.
+type StorageConfig struct {
+	// Type is the storage backend type: "memory" or "valkey" (default: "memory")
+	Type StorageType
+
+	// Valkey configuration (used when Type is "valkey")
+	Valkey ValkeyConfig
+}
+
+// ValkeyConfig holds configuration for Valkey storage backend.
+type ValkeyConfig struct {
+	// URL is the Valkey server address (e.g., "valkey.namespace.svc:6379")
+	URL string
+
+	// Password is the optional password for Valkey authentication
+	Password string
+
+	// TLSEnabled enables TLS for Valkey connections
+	TLSEnabled bool
+
+	// TLSCAFile is the path to a custom CA certificate file for TLS verification.
+	// Use this when Valkey uses certificates signed by a private CA.
+	// If empty, the system CA pool is used.
+	TLSCAFile string
+
+	// KeyPrefix is the prefix for all Valkey keys (default: "mcp:")
+	KeyPrefix string
+
+	// DB is the Valkey database number (default: 0)
+	DB int
 }
 
 // InterstitialConfig configures the OAuth success interstitial page branding
@@ -138,11 +207,41 @@ type RateLimitConfig struct {
 	TrustProxy bool
 }
 
+// RedirectURISecurityConfig holds configuration for redirect URI security validation.
+// All options default to secure values in mcp-oauth. Use Disable* flags to opt-out.
+type RedirectURISecurityConfig struct {
+	// DisableProductionMode disables strict HTTPS/private IP enforcement
+	DisableProductionMode bool
+
+	// AllowLocalhostRedirectURIs allows http://localhost for native apps (RFC 8252)
+	AllowLocalhostRedirectURIs bool
+
+	// AllowPrivateIPRedirectURIs allows private IP addresses in redirect URIs
+	AllowPrivateIPRedirectURIs bool
+
+	// AllowLinkLocalRedirectURIs allows link-local addresses (169.254.x.x)
+	AllowLinkLocalRedirectURIs bool
+
+	// DisableDNSValidation disables hostname resolution checks
+	DisableDNSValidation bool
+
+	// DisableDNSValidationStrict disables fail-closed DNS validation
+	DisableDNSValidationStrict bool
+
+	// DisableAuthorizationTimeValidation disables redirect URI checks at auth time
+	DisableAuthorizationTimeValidation bool
+}
+
+// valkeyCloser is a function type for closing Valkey connections
+type valkeyCloser func()
+
 // Handler wraps the mcp-oauth library components for integration with inboxfewer
 type Handler struct {
 	server          *oauth.Server
 	handler         *oauth.Handler
-	store           *memory.Store
+	tokenStore      storage.TokenStore
+	memoryStore     *memory.Store // Only set when using memory storage
+	closeValkey     valkeyCloser  // Function to close Valkey store
 	ipRateLimiter   *security.RateLimiter
 	userRateLimiter *security.RateLimiter
 	clientRegRL     *security.ClientRegistrationRateLimiter
@@ -169,8 +268,97 @@ func NewHandler(config *Config) (*Handler, error) {
 		return nil, fmt.Errorf("failed to create Google provider: %w", err)
 	}
 
-	// Create memory storage
-	store := memory.New()
+	// Create storage backend based on configuration
+	var tokenStore storage.TokenStore
+	var clientStore storage.ClientStore
+	var flowStore storage.FlowStore
+	var memStore *memory.Store
+	var closeValkeyFn valkeyCloser
+
+	switch config.Storage.Type {
+	case StorageTypeValkey:
+		if config.Storage.Valkey.URL == "" {
+			return nil, fmt.Errorf("valkey URL is required when using valkey storage")
+		}
+
+		// Configure Valkey storage
+		valkeyConfig := valkey.Config{
+			Address:   config.Storage.Valkey.URL,
+			Password:  config.Storage.Valkey.Password,
+			DB:        config.Storage.Valkey.DB,
+			KeyPrefix: config.Storage.Valkey.KeyPrefix,
+			Logger:    logger,
+		}
+
+		// Configure TLS if enabled
+		if config.Storage.Valkey.TLSEnabled {
+			tlsConfig := &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			}
+
+			// Load custom CA certificate if provided
+			if config.Storage.Valkey.TLSCAFile != "" {
+				caCert, err := os.ReadFile(config.Storage.Valkey.TLSCAFile)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read Valkey TLS CA certificate: %w", err)
+				}
+
+				caCertPool := x509.NewCertPool()
+				if !caCertPool.AppendCertsFromPEM(caCert) {
+					return nil, fmt.Errorf("failed to parse Valkey TLS CA certificate")
+				}
+
+				tlsConfig.RootCAs = caCertPool
+				logger.Info("Using custom CA certificate for Valkey TLS", "caFile", config.Storage.Valkey.TLSCAFile)
+			}
+
+			valkeyConfig.TLS = tlsConfig
+		}
+
+		// Set default key prefix if not specified
+		if valkeyConfig.KeyPrefix == "" {
+			valkeyConfig.KeyPrefix = valkey.DefaultKeyPrefix
+		}
+
+		valkeyStore, err := valkey.New(valkeyConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Valkey storage: %w", err)
+		}
+
+		// Set up encryption for Valkey store if key is provided
+		if len(config.Security.EncryptionKey) > 0 {
+			encryptor, err := security.NewEncryptor(config.Security.EncryptionKey)
+			if err != nil {
+				// Close the Valkey store on error to release resources
+				valkeyStore.Close()
+				return nil, fmt.Errorf("failed to create encryptor for Valkey storage: %w", err)
+			}
+			valkeyStore.SetEncryptor(encryptor)
+			logger.Info("Token encryption at rest enabled for Valkey storage (AES-256-GCM)")
+		}
+
+		// Valkey store implements all required interfaces
+		tokenStore = valkeyStore
+		clientStore = valkeyStore
+		flowStore = valkeyStore
+		closeValkeyFn = valkeyStore.Close // Store Close function for cleanup
+		logger.Info("Using Valkey storage backend", "address", config.Storage.Valkey.URL, "tls", config.Storage.Valkey.TLSEnabled)
+
+	case StorageTypeMemory, "":
+		// Use memory storage (default)
+		memStore = memory.New()
+		tokenStore = memStore
+		clientStore = memStore
+		flowStore = memStore
+		if config.Storage.Type == "" {
+			logger.Info("Using in-memory storage backend (default)")
+		} else {
+			logger.Info("Using in-memory storage backend")
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported storage type: %s (supported: memory, valkey)", config.Storage.Type)
+	}
 
 	// Set default refresh token TTL if not specified
 	refreshTokenTTL := config.Security.RefreshTokenTTL
@@ -185,7 +373,7 @@ func NewHandler(config *Config) (*Handler, error) {
 	}
 
 	// Create server configuration
-	serverConfig := &oauth.ServerConfig{
+	serverConfig := &oauthserver.Config{
 		Issuer:                        config.BaseURL,
 		RefreshTokenTTL:               int64(refreshTokenTTL.Seconds()),
 		AllowRefreshTokenRotation:     true,  // OAuth 2.1 best practice
@@ -198,6 +386,25 @@ func NewHandler(config *Config) (*Handler, error) {
 		TrustProxy:                    config.RateLimit.TrustProxy,
 		TokenRefreshThreshold:         300, // 5 minutes proactive refresh
 		ClockSkewGracePeriod:          5,   // 5 seconds clock skew tolerance
+
+		// Enable Client ID Metadata Documents (CIMD) per MCP 2025-11-25
+		// Allows clients to use HTTPS URLs as client identifiers
+		EnableClientIDMetadataDocuments: config.EnableCIMD,
+
+		// Trusted scheme registration for Cursor/VSCode compatibility
+		// Allows unauthenticated registration for clients using these schemes only
+		TrustedPublicRegistrationSchemes: config.TrustedPublicRegistrationSchemes,
+		DisableStrictSchemeMatching:      config.DisableStrictSchemeMatching,
+
+		// Redirect URI Security Configuration
+		// mcp-oauth defaults to secure values; we pass explicit disable flags
+		DisableProductionMode:              config.RedirectURISecurity.DisableProductionMode,
+		AllowLocalhostRedirectURIs:         config.RedirectURISecurity.AllowLocalhostRedirectURIs,
+		AllowPrivateIPRedirectURIs:         config.RedirectURISecurity.AllowPrivateIPRedirectURIs,
+		AllowLinkLocalRedirectURIs:         config.RedirectURISecurity.AllowLinkLocalRedirectURIs,
+		DisableDNSValidation:               config.RedirectURISecurity.DisableDNSValidation,
+		DisableDNSValidationStrict:         config.RedirectURISecurity.DisableDNSValidationStrict,
+		DisableAuthorizationTimeValidation: config.RedirectURISecurity.DisableAuthorizationTimeValidation,
 	}
 
 	// Configure interstitial page branding if provided
@@ -219,9 +426,9 @@ func NewHandler(config *Config) (*Handler, error) {
 	// Create OAuth server
 	server, err := oauth.NewServer(
 		provider,
-		store, // TokenStore
-		store, // ClientStore
-		store, // FlowStore
+		tokenStore,  // TokenStore
+		clientStore, // ClientStore
+		flowStore,   // FlowStore
 		serverConfig,
 		logger,
 	)
@@ -229,8 +436,8 @@ func NewHandler(config *Config) (*Handler, error) {
 		return nil, fmt.Errorf("failed to create OAuth server: %w", err)
 	}
 
-	// Set up encryption if key provided
-	if len(config.Security.EncryptionKey) > 0 {
+	// Set up encryption if key provided (only for memory storage; Valkey encryption is set above)
+	if len(config.Security.EncryptionKey) > 0 && config.Storage.Type != StorageTypeValkey {
 		encryptor, err := security.NewEncryptor(config.Security.EncryptionKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create encryptor: %w", err)
@@ -274,9 +481,17 @@ func NewHandler(config *Config) (*Handler, error) {
 			"burst", burst)
 	}
 
-	// Set up client registration rate limiting
-	clientRegRL := security.NewClientRegistrationRateLimiter(logger)
+	// Set up client registration rate limiting with configured maxClientsPerIP
+	clientRegRL := security.NewClientRegistrationRateLimiterWithConfig(
+		maxClientsPerIP,
+		security.DefaultRegistrationWindow,
+		security.DefaultMaxRegistrationEntries,
+		logger,
+	)
 	server.SetClientRegistrationRateLimiter(clientRegRL)
+	logger.Info("Client registration rate limiting enabled",
+		"maxClientsPerIP", maxClientsPerIP,
+		"window", security.DefaultRegistrationWindow)
 
 	// Create HTTP handler
 	handler := oauth.NewHandler(server, logger)
@@ -284,7 +499,9 @@ func NewHandler(config *Config) (*Handler, error) {
 	return &Handler{
 		server:          server,
 		handler:         handler,
-		store:           store,
+		tokenStore:      tokenStore,
+		memoryStore:     memStore,
+		closeValkey:     closeValkeyFn,
 		ipRateLimiter:   ipRateLimiter,
 		userRateLimiter: userRateLimiter,
 		clientRegRL:     clientRegRL,
@@ -297,8 +514,8 @@ func (h *Handler) GetHandler() *oauth.Handler {
 }
 
 // GetStore returns the underlying storage for token provider integration
-func (h *Handler) GetStore() *memory.Store {
-	return h.store
+func (h *Handler) GetStore() storage.TokenStore {
+	return h.tokenStore
 }
 
 // GetServer returns the underlying OAuth server
@@ -317,8 +534,11 @@ func (h *Handler) CanRefreshTokens() bool {
 // This method is idempotent and safe to call concurrently from multiple goroutines.
 func (h *Handler) Stop() {
 	h.stopOnce.Do(func() {
-		if h.store != nil {
-			h.store.Stop()
+		if h.memoryStore != nil {
+			h.memoryStore.Stop()
+		}
+		if h.closeValkey != nil {
+			h.closeValkey()
 		}
 		if h.ipRateLimiter != nil {
 			h.ipRateLimiter.Stop()

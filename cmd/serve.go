@@ -5,8 +5,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/teemow/inboxfewer/internal/instrumentation"
 	"github.com/teemow/inboxfewer/internal/mcp/oauth"
 	"github.com/teemow/inboxfewer/internal/resources"
 	"github.com/teemow/inboxfewer/internal/server"
@@ -41,6 +45,69 @@ type OAuthSecurityConfig struct {
 	InterstitialButtonText         string
 	InterstitialPrimaryColor       string
 	InterstitialBackgroundGradient string
+
+	// Redirect URI Security (mcp-oauth v0.2.30+)
+	DisableProductionMode              bool
+	AllowLocalhostRedirectURIs         bool
+	AllowPrivateIPRedirectURIs         bool
+	AllowLinkLocalRedirectURIs         bool
+	DisableDNSValidation               bool
+	DisableDNSValidationStrict         bool
+	DisableAuthorizationTimeValidation bool
+
+	// Trusted scheme registration for Cursor/VSCode compatibility (mcp-oauth v0.2.30+)
+	TrustedPublicRegistrationSchemes []string
+	DisableStrictSchemeMatching      bool
+
+	// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
+	EnableCIMD bool
+
+	// TLS/HTTPS support
+	TLSCertFile string
+	TLSKeyFile  string
+
+	// Storage configuration (mcp-oauth v0.2.30+)
+	Storage OAuthStorageConfig
+}
+
+// MetricsConfig holds configuration for the metrics server
+type MetricsConfig struct {
+	// Enabled determines whether to start the metrics server (default: true)
+	Enabled bool
+
+	// Addr is the address for the metrics server (e.g., ":9090")
+	Addr string
+}
+
+// OAuthStorageConfig holds OAuth token storage backend configuration
+type OAuthStorageConfig struct {
+	// Type is the storage backend type: "memory" or "valkey" (default: "memory")
+	Type string
+
+	// Valkey configuration (used when Type is "valkey")
+	Valkey ValkeyStorageConfig
+}
+
+// ValkeyStorageConfig holds configuration for Valkey storage backend
+type ValkeyStorageConfig struct {
+	// URL is the Valkey server address (e.g., "valkey.namespace.svc:6379")
+	URL string
+
+	// Password is the optional password for Valkey authentication
+	Password string
+
+	// TLSEnabled enables TLS for Valkey connections
+	TLSEnabled bool
+
+	// TLSCAFile is the path to a custom CA certificate file for TLS verification.
+	// Use this when Valkey uses certificates signed by a private CA.
+	TLSCAFile string
+
+	// KeyPrefix is the prefix for all Valkey keys (default: "mcp:")
+	KeyPrefix string
+
+	// DB is the Valkey database number (default: 0)
+	DB int
 }
 
 func newServeCmd() *cobra.Command {
@@ -59,6 +126,32 @@ func newServeCmd() *cobra.Command {
 		allowInsecureAuthWithoutState bool
 		maxClientsPerIP               int
 		encryptionKey                 string
+		// Redirect URI Security Settings (mcp-oauth v0.2.30+)
+		disableProductionMode              bool
+		allowLocalhostRedirectURIs         bool
+		allowPrivateIPRedirectURIs         bool
+		allowLinkLocalRedirectURIs         bool
+		disableDNSValidation               bool
+		disableDNSValidationStrict         bool
+		disableAuthorizationTimeValidation bool
+		// Trusted scheme registration for Cursor/VSCode (mcp-oauth v0.2.30+)
+		trustedPublicRegistrationSchemes []string
+		disableStrictSchemeMatching      bool
+		// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
+		enableCIMD bool
+		// TLS/HTTPS support
+		tlsCertFile string
+		tlsKeyFile  string
+		// OAuth storage options (mcp-oauth v0.2.30+)
+		oauthStorageType string
+		valkeyURL        string
+		valkeyPassword   string
+		valkeyTLS        bool
+		valkeyKeyPrefix  string
+		valkeyDB         int
+		// Metrics server configuration
+		metricsEnabled bool
+		metricsAddr    string
 	)
 
 	cmd := &cobra.Command{
@@ -105,14 +198,62 @@ OAuth Configuration:
 				encKeyBytes = decoded
 			}
 
+			// Build storage config from flags/env
+			storageConfig := OAuthStorageConfig{
+				Type: oauthStorageType,
+				Valkey: ValkeyStorageConfig{
+					URL:        valkeyURL,
+					Password:   valkeyPassword,
+					TLSEnabled: valkeyTLS,
+					KeyPrefix:  valkeyKeyPrefix,
+					DB:         valkeyDB,
+				},
+			}
+
+			// Load storage config from environment variables if not set via flags
+			loadOAuthStorageEnvVars(cmd, &storageConfig)
+
+			// Load TLS paths from environment if not provided via flags
+			if tlsCertFile == "" {
+				tlsCertFile = os.Getenv("TLS_CERT_FILE")
+			}
+			if tlsKeyFile == "" {
+				tlsKeyFile = os.Getenv("TLS_KEY_FILE")
+			}
+
 			securityConfig := OAuthSecurityConfig{
 				AllowPublicClientRegistration: allowPublicClientRegistration,
 				RegistrationAccessToken:       registrationAccessToken,
 				AllowInsecureAuthWithoutState: allowInsecureAuthWithoutState,
 				MaxClientsPerIP:               maxClientsPerIP,
 				EncryptionKey:                 encKeyBytes,
+				// Redirect URI Security (mcp-oauth v0.2.30+)
+				DisableProductionMode:              disableProductionMode,
+				AllowLocalhostRedirectURIs:         allowLocalhostRedirectURIs,
+				AllowPrivateIPRedirectURIs:         allowPrivateIPRedirectURIs,
+				AllowLinkLocalRedirectURIs:         allowLinkLocalRedirectURIs,
+				DisableDNSValidation:               disableDNSValidation,
+				DisableDNSValidationStrict:         disableDNSValidationStrict,
+				DisableAuthorizationTimeValidation: disableAuthorizationTimeValidation,
+				// Trusted scheme registration (mcp-oauth v0.2.30+)
+				TrustedPublicRegistrationSchemes: trustedPublicRegistrationSchemes,
+				DisableStrictSchemeMatching:      disableStrictSchemeMatching,
+				// CIMD (mcp-oauth v0.2.30+)
+				EnableCIMD: enableCIMD,
+				// TLS support
+				TLSCertFile: tlsCertFile,
+				TLSKeyFile:  tlsKeyFile,
+				// Storage configuration
+				Storage: storageConfig,
 			}
-			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL, securityConfig)
+
+			// Build metrics config
+			metricsConfig := MetricsConfig{
+				Enabled: metricsEnabled,
+				Addr:    metricsAddr,
+			}
+
+			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL, securityConfig, metricsConfig)
 		},
 	}
 
@@ -132,14 +273,108 @@ OAuth Configuration:
 	cmd.Flags().BoolVar(&allowInsecureAuthWithoutState, "oauth-allow-no-state", false, "WARNING: Allow authorization without state parameter (weakens CSRF protection). Can also use MCP_OAUTH_ALLOW_NO_STATE env var. Default: false (secure)")
 	cmd.Flags().IntVar(&maxClientsPerIP, "oauth-max-clients-per-ip", 10, "Maximum number of clients that can be registered per IP address (prevents DoS). Can also use MCP_OAUTH_MAX_CLIENTS_PER_IP env var. Default: 10")
 
+	// TLS flags for HTTPS support
+	cmd.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "Path to TLS certificate file (PEM format). If provided with --tls-key-file, enables HTTPS. Can also use TLS_CERT_FILE env var.")
+	cmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "Path to TLS private key file (PEM format). If provided with --tls-cert-file, enables HTTPS. Can also use TLS_KEY_FILE env var.")
+
+	// OAuth storage flags
+	cmd.Flags().StringVar(&oauthStorageType, "oauth-storage-type", string(oauth.StorageTypeMemory), "OAuth token storage type: memory or valkey. Can also use OAUTH_STORAGE_TYPE env var.")
+	cmd.Flags().StringVar(&valkeyURL, "valkey-url", "", "Valkey server address (e.g., valkey.namespace.svc:6379). Can also use VALKEY_URL env var.")
+	cmd.Flags().StringVar(&valkeyPassword, "valkey-password", "", "Valkey authentication password. Can also use VALKEY_PASSWORD env var.")
+	cmd.Flags().BoolVar(&valkeyTLS, "valkey-tls", false, "Enable TLS for Valkey connections. Can also use VALKEY_TLS_ENABLED env var.")
+	cmd.Flags().StringVar(&valkeyKeyPrefix, "valkey-key-prefix", "mcp:", "Prefix for all Valkey keys. Can also use VALKEY_KEY_PREFIX env var.")
+	cmd.Flags().IntVar(&valkeyDB, "valkey-db", 0, "Valkey database number. Can also use VALKEY_DB env var.")
+
+	// Redirect URI Security Settings (mcp-oauth v0.2.30+)
+	cmd.Flags().BoolVar(&disableProductionMode, "oauth-disable-production-mode", false, "WARNING: Disable production mode security (allows HTTP, private IPs in redirect URIs). Significantly weakens security.")
+	cmd.Flags().BoolVar(&allowLocalhostRedirectURIs, "oauth-allow-localhost-redirect-uris", false, "Allow http://localhost redirect URIs for native apps (RFC 8252)")
+	cmd.Flags().BoolVar(&allowPrivateIPRedirectURIs, "oauth-allow-private-ip-redirect-uris", false, "WARNING: Allow private IP addresses (10.x, 172.16.x, 192.168.x) in redirect URIs. SSRF risk.")
+	cmd.Flags().BoolVar(&allowLinkLocalRedirectURIs, "oauth-allow-link-local-redirect-uris", false, "WARNING: Allow link-local addresses (169.254.x.x) in redirect URIs. Cloud metadata SSRF risk.")
+	cmd.Flags().BoolVar(&disableDNSValidation, "oauth-disable-dns-validation", false, "WARNING: Disable DNS validation of redirect URI hostnames. Allows DNS rebinding attacks.")
+	cmd.Flags().BoolVar(&disableDNSValidationStrict, "oauth-disable-dns-validation-strict", false, "WARNING: Disable fail-closed DNS validation (allow registration on DNS failures).")
+	cmd.Flags().BoolVar(&disableAuthorizationTimeValidation, "oauth-disable-authorization-time-validation", false, "WARNING: Disable redirect URI validation at authorization time. Allows TOCTOU attacks.")
+
+	// Trusted scheme registration for Cursor/VSCode compatibility (mcp-oauth v0.2.30+)
+	cmd.Flags().StringSliceVar(&trustedPublicRegistrationSchemes, "oauth-trusted-schemes", nil, "URI schemes allowed for unauthenticated client registration (e.g., cursor,vscode). Best for internal/dev deployments.")
+	cmd.Flags().BoolVar(&disableStrictSchemeMatching, "oauth-disable-strict-scheme-matching", false, "WARNING: Allow mixed redirect URI schemes with trusted scheme registration. Reduces security.")
+
+	// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
+	cmd.Flags().BoolVar(&enableCIMD, "oauth-enable-cimd", true, "Enable Client ID Metadata Documents (CIMD) per MCP 2025-11-25. Allows clients to use HTTPS URLs as client identifiers. Can also use MCP_OAUTH_ENABLE_CIMD env var.")
+
+	// Metrics server flags
+	cmd.Flags().BoolVar(&metricsEnabled, "metrics-enabled", true, "Enable the metrics server on a dedicated port. Can also use METRICS_ENABLED env var.")
+	cmd.Flags().StringVar(&metricsAddr, "metrics-addr", ":9090", "Metrics server address. Can also use METRICS_ADDR env var.")
+
 	return cmd
 }
 
-func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig) error {
+func runServe(transport string, debugMode bool, httpAddr string, yolo bool, googleClientID, googleClientSecret string, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig, metricsConfig MetricsConfig) error {
 	// Setup graceful shutdown
 	shutdownCtx, cancel := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	// Load metrics config from environment if not set via flags
+	if !metricsConfig.Enabled {
+		if os.Getenv("METRICS_ENABLED") == "true" {
+			metricsConfig.Enabled = true
+		}
+	}
+	if metricsConfig.Addr == "" || metricsConfig.Addr == ":9090" {
+		if addr := os.Getenv("METRICS_ADDR"); addr != "" {
+			metricsConfig.Addr = addr
+		}
+	}
+
+	// Initialize instrumentation provider
+	instrConfig := instrumentation.DefaultConfig()
+	instrConfig.ServiceVersion = version
+
+	provider, err := instrumentation.NewProvider(shutdownCtx, instrConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create instrumentation provider: %w", err)
+	}
+	defer func() {
+		if err := provider.Shutdown(shutdownCtx); err != nil {
+			if transport != "stdio" {
+				log.Printf("Error during instrumentation shutdown: %v", err)
+			}
+		}
+	}()
+
+	// Start metrics server if enabled and not in stdio mode
+	var metricsServer *server.MetricsServer
+	if transport != "stdio" && metricsConfig.Enabled && provider.Enabled() {
+		var err error
+		metricsServer, err = server.NewMetricsServer(server.MetricsServerConfig{
+			Addr:                    metricsConfig.Addr,
+			Enabled:                 true,
+			InstrumentationProvider: provider,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create metrics server: %w", err)
+		}
+
+		// Use ready channel to confirm metrics server started successfully
+		metricsReady := make(chan struct{})
+		metricsErr := make(chan error, 1)
+		go func() {
+			if err := metricsServer.StartWithReadySignal(metricsReady); err != nil && err != http.ErrServerClosed {
+				metricsErr <- err
+			}
+			close(metricsErr)
+		}()
+
+		// Wait for metrics server to be ready or fail
+		select {
+		case <-metricsReady:
+			log.Printf("Metrics server started on %s", metricsServer.Addr())
+		case err := <-metricsErr:
+			return fmt.Errorf("metrics server failed to start: %w", err)
+		case <-time.After(5 * time.Second):
+			return fmt.Errorf("metrics server startup timed out")
+		}
+	}
 
 	// Read GitHub config (optional for serve mode - will use empty strings if not available)
 	// Users can authenticate via OAuth for MCP server usage
@@ -185,14 +420,55 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	}
 	if securityConfig.MaxClientsPerIP == 0 {
 		if envMax := os.Getenv("MCP_OAUTH_MAX_CLIENTS_PER_IP"); envMax != "" {
-			var maxClients int
-			if _, err := fmt.Sscanf(envMax, "%d", &maxClients); err == nil && maxClients > 0 {
+			if maxClients, err := strconv.Atoi(envMax); err == nil && maxClients > 0 {
 				securityConfig.MaxClientsPerIP = maxClients
 			}
 		}
 		// If still 0, use default of 10
 		if securityConfig.MaxClientsPerIP == 0 {
 			securityConfig.MaxClientsPerIP = 10
+		}
+	}
+
+	// Parse redirect URI security settings from environment variables (mcp-oauth v0.2.30+)
+	if !securityConfig.DisableProductionMode && os.Getenv("MCP_OAUTH_DISABLE_PRODUCTION_MODE") == "true" {
+		securityConfig.DisableProductionMode = true
+	}
+	if !securityConfig.AllowLocalhostRedirectURIs && os.Getenv("MCP_OAUTH_ALLOW_LOCALHOST_REDIRECT_URIS") == "true" {
+		securityConfig.AllowLocalhostRedirectURIs = true
+	}
+	if !securityConfig.AllowPrivateIPRedirectURIs && os.Getenv("MCP_OAUTH_ALLOW_PRIVATE_IP_REDIRECT_URIS") == "true" {
+		securityConfig.AllowPrivateIPRedirectURIs = true
+	}
+	if !securityConfig.AllowLinkLocalRedirectURIs && os.Getenv("MCP_OAUTH_ALLOW_LINK_LOCAL_REDIRECT_URIS") == "true" {
+		securityConfig.AllowLinkLocalRedirectURIs = true
+	}
+	if !securityConfig.DisableDNSValidation && os.Getenv("MCP_OAUTH_DISABLE_DNS_VALIDATION") == "true" {
+		securityConfig.DisableDNSValidation = true
+	}
+	if !securityConfig.DisableDNSValidationStrict && os.Getenv("MCP_OAUTH_DISABLE_DNS_VALIDATION_STRICT") == "true" {
+		securityConfig.DisableDNSValidationStrict = true
+	}
+	if !securityConfig.DisableAuthorizationTimeValidation && os.Getenv("MCP_OAUTH_DISABLE_AUTHORIZATION_TIME_VALIDATION") == "true" {
+		securityConfig.DisableAuthorizationTimeValidation = true
+	}
+
+	// Parse trusted scheme registration settings from environment variables (mcp-oauth v0.2.30+)
+	if len(securityConfig.TrustedPublicRegistrationSchemes) == 0 {
+		if schemes := os.Getenv("MCP_OAUTH_TRUSTED_SCHEMES"); schemes != "" {
+			securityConfig.TrustedPublicRegistrationSchemes = strings.Split(schemes, ",")
+		}
+	}
+	if !securityConfig.DisableStrictSchemeMatching && os.Getenv("MCP_OAUTH_DISABLE_STRICT_SCHEME_MATCHING") == "true" {
+		securityConfig.DisableStrictSchemeMatching = true
+	}
+
+	// Parse CIMD setting from environment variable (mcp-oauth v0.2.30+)
+	// Default to true (enabled) per MCP 2025-11-25 specification
+	if !securityConfig.EnableCIMD {
+		if os.Getenv("MCP_OAUTH_ENABLE_CIMD") != "false" {
+			// Default to true if not explicitly disabled
+			securityConfig.EnableCIMD = true
 		}
 	}
 
@@ -224,7 +500,21 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	if err != nil {
 		return fmt.Errorf("failed to create server context: %w", err)
 	}
+
+	// Set metrics and audit logger on server context for tool instrumentation
+	if provider.Enabled() {
+		serverContext.SetMetrics(provider.Metrics())
+		serverContext.SetAuditLogger(instrumentation.NewAuditLoggerWithConfig(nil, instrConfig.AuditLogging))
+	}
 	defer func() {
+		// Shutdown metrics server first
+		if metricsServer != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+				log.Printf("Error during metrics server shutdown: %v", err)
+			}
+		}
 		if err := serverContext.Shutdown(); err != nil {
 			if transport != "stdio" {
 				log.Printf("Error during server context shutdown: %v", err)
@@ -262,7 +552,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		return runStdioServer(mcpSrv)
 	case "streamable-http":
 		fmt.Printf("Starting inboxfewer MCP server with %s transport...\n", transport)
-		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL, securityConfig)
+		return runStreamableHTTPServer(mcpSrv, serverContext, httpAddr, shutdownCtx, debugMode, googleClientID, googleClientSecret, readOnly, disableStreaming, baseURL, securityConfig, metricsConfig, provider)
 	default:
 		return fmt.Errorf("unsupported transport type: %s (supported: stdio, streamable-http)", transport)
 	}
@@ -348,7 +638,7 @@ func registerAllTools(mcpSrv *mcpserver.MCPServer, ctx *server.ServerContext, re
 	return nil
 }
 
-func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig) error {
+func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *server.ServerContext, addr string, ctx context.Context, debugMode bool, googleClientID, googleClientSecret string, readOnly bool, disableStreaming bool, baseURL string, securityConfig OAuthSecurityConfig, metricsConfig MetricsConfig, instrProvider *instrumentation.Provider) error {
 	// Create OAuth-enabled HTTP server
 	// Base URL should be the full URL where the server is accessible
 	// For development, use http://localhost:8080
@@ -382,6 +672,36 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		AllowInsecureAuthWithoutState: securityConfig.AllowInsecureAuthWithoutState,
 		MaxClientsPerIP:               securityConfig.MaxClientsPerIP,
 		EncryptionKey:                 securityConfig.EncryptionKey,
+		// Redirect URI Security (mcp-oauth v0.2.30+)
+		RedirectURISecurity: oauth.RedirectURISecurityConfig{
+			DisableProductionMode:              securityConfig.DisableProductionMode,
+			AllowLocalhostRedirectURIs:         securityConfig.AllowLocalhostRedirectURIs,
+			AllowPrivateIPRedirectURIs:         securityConfig.AllowPrivateIPRedirectURIs,
+			AllowLinkLocalRedirectURIs:         securityConfig.AllowLinkLocalRedirectURIs,
+			DisableDNSValidation:               securityConfig.DisableDNSValidation,
+			DisableDNSValidationStrict:         securityConfig.DisableDNSValidationStrict,
+			DisableAuthorizationTimeValidation: securityConfig.DisableAuthorizationTimeValidation,
+		},
+		// Trusted scheme registration (mcp-oauth v0.2.30+)
+		TrustedPublicRegistrationSchemes: securityConfig.TrustedPublicRegistrationSchemes,
+		DisableStrictSchemeMatching:      securityConfig.DisableStrictSchemeMatching,
+		// CIMD (mcp-oauth v0.2.30+)
+		EnableCIMD: securityConfig.EnableCIMD,
+		// Storage configuration (mcp-oauth v0.2.30+)
+		Storage: oauth.StorageConfig{
+			Type: oauth.StorageType(securityConfig.Storage.Type),
+			Valkey: oauth.ValkeyConfig{
+				URL:        securityConfig.Storage.Valkey.URL,
+				Password:   securityConfig.Storage.Valkey.Password,
+				TLSEnabled: securityConfig.Storage.Valkey.TLSEnabled,
+				TLSCAFile:  securityConfig.Storage.Valkey.TLSCAFile,
+				KeyPrefix:  securityConfig.Storage.Valkey.KeyPrefix,
+				DB:         securityConfig.Storage.Valkey.DB,
+			},
+		},
+		// TLS configuration
+		TLSCertFile: securityConfig.TLSCertFile,
+		TLSKeyFile:  securityConfig.TLSKeyFile,
 	}
 
 	// Configure interstitial page branding if any env vars are set
@@ -409,8 +729,13 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	}
 	defer oauthHandler.Stop() // Ensure cleanup
 
-	// Create token provider from OAuth store
-	tokenProvider := oauth.NewTokenProvider(oauthHandler.GetStore())
+	// Create token provider from OAuth store with metrics for observability
+	var tokenProvider *oauth.TokenProvider
+	if instrProvider != nil && instrProvider.Enabled() {
+		tokenProvider = oauth.NewTokenProviderWithMetrics(oauthHandler.GetStore(), instrProvider.Metrics())
+	} else {
+		tokenProvider = oauth.NewTokenProvider(oauthHandler.GetStore())
+	}
 
 	// Recreate server context with OAuth token provider
 	// This ensures Google API clients use tokens from OAuth authentication
@@ -432,21 +757,40 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		}
 	}()
 
+	// Set metrics and audit logger on server context for tool instrumentation
+	if instrProvider != nil && instrProvider.Enabled() {
+		serverContext.SetMetrics(instrProvider.Metrics())
+		// Load audit logging config from environment
+		auditConfig := instrumentation.AuditLoggingConfig{
+			Enabled:    true,
+			IncludePII: os.Getenv("AUDIT_LOGGING_INCLUDE_PII") == "true",
+		}
+		serverContext.SetAuditLogger(instrumentation.NewAuditLoggerWithConfig(nil, auditConfig))
+	}
+
 	// Re-register all tools with the new context
 	if err := registerAllTools(mcpSrv, serverContext, readOnly); err != nil {
 		return err
 	}
 
 	// Create OAuth server with existing handler
-	oauthServer, err := server.NewOAuthHTTPServerWithHandler(mcpSrv, "streamable-http", oauthHandler, disableStreaming)
+	oauthServer, err := server.NewOAuthHTTPServerWithHandlerAndTLS(mcpSrv, "streamable-http", oauthHandler, disableStreaming, securityConfig.TLSCertFile, securityConfig.TLSKeyFile)
 	if err != nil {
 		return fmt.Errorf("failed to create OAuth HTTP server: %w", err)
 	}
 
+	// Set up health checker for health check endpoints
+	healthChecker := server.NewHealthChecker(serverContext)
+	oauthServer.SetHealthChecker(healthChecker)
+
 	fmt.Printf("Streamable HTTP server with Google OAuth authentication starting on %s\n", addr)
 	fmt.Printf("  HTTP endpoint: /mcp\n")
+	fmt.Printf("  Health endpoints: /healthz, /readyz\n")
 	fmt.Printf("  OAuth metadata: /.well-known/oauth-protected-resource\n")
 	fmt.Printf("  Authorization Server: %s\n", baseURL)
+	if metricsConfig.Enabled {
+		fmt.Printf("  Metrics endpoint: %s/metrics\n", metricsConfig.Addr)
+	}
 
 	if googleClientID != "" && googleClientSecret != "" {
 		fmt.Println("\n✓ Automatic token refresh: ENABLED")
@@ -486,4 +830,60 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 
 	fmt.Println("HTTP server gracefully stopped")
 	return nil
+}
+
+// loadOAuthStorageEnvVars loads OAuth storage configuration from environment variables.
+// Environment variables only override flag values when the flag was not explicitly set.
+// The cmd parameter is used to check if flags were explicitly set by the user.
+func loadOAuthStorageEnvVars(cmd *cobra.Command, config *OAuthStorageConfig) {
+	// Storage type - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("oauth-storage-type") {
+		if storageType := os.Getenv("OAUTH_STORAGE_TYPE"); storageType != "" {
+			config.Type = storageType
+		}
+	}
+
+	// Valkey URL - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-url") {
+		if url := os.Getenv("VALKEY_URL"); url != "" && config.Valkey.URL == "" {
+			config.Valkey.URL = url
+		}
+	}
+
+	// Valkey Password - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-password") {
+		if password := os.Getenv("VALKEY_PASSWORD"); password != "" && config.Valkey.Password == "" {
+			config.Valkey.Password = password
+		}
+	}
+
+	// Valkey Key Prefix - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-key-prefix") {
+		if keyPrefix := os.Getenv("VALKEY_KEY_PREFIX"); keyPrefix != "" && config.Valkey.KeyPrefix == "" {
+			config.Valkey.KeyPrefix = keyPrefix
+		}
+	}
+
+	// Valkey TLS - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-tls") {
+		if os.Getenv("VALKEY_TLS_ENABLED") == "true" {
+			config.Valkey.TLSEnabled = true
+		}
+	}
+
+	// Valkey TLS CA File - env var only applies if not already set
+	if config.Valkey.TLSCAFile == "" {
+		if caFile := os.Getenv("VALKEY_TLS_CA_FILE"); caFile != "" {
+			config.Valkey.TLSCAFile = caFile
+		}
+	}
+
+	// Valkey DB - env var only applies if flag was not explicitly set
+	if !cmd.Flags().Changed("valkey-db") {
+		if dbStr := os.Getenv("VALKEY_DB"); dbStr != "" {
+			if db, err := strconv.Atoi(dbStr); err == nil {
+				config.Valkey.DB = db
+			}
+		}
+	}
 }

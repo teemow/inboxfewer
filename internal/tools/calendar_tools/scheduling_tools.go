@@ -35,9 +35,11 @@ func RegisterSchedulingTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 		),
 	)
 
-	s.AddTool(queryFreeBusyTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleQueryFreeBusy(ctx, request, sc)
-	})
+	s.AddTool(queryFreeBusyTool, common.InstrumentedToolHandlerWithService(
+		"calendar_query_freebusy", "calendar", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleQueryFreeBusy(ctx, request, sc)
+		}))
 
 	// Find available time tool
 	findAvailableTimeTool := mcp.NewTool("calendar_find_available_time",
@@ -66,9 +68,11 @@ func RegisterSchedulingTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 		),
 	)
 
-	s.AddTool(findAvailableTimeTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleFindAvailableTime(ctx, request, sc)
-	})
+	s.AddTool(findAvailableTimeTool, common.InstrumentedToolHandlerWithService(
+		"calendar_find_available_time", "calendar", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleFindAvailableTime(ctx, request, sc)
+		}))
 
 	return nil
 }

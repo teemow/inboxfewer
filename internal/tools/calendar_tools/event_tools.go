@@ -40,9 +40,11 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(listEventsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleListEvents(ctx, request, sc)
-	})
+	s.AddTool(listEventsTool, common.InstrumentedToolHandlerWithService(
+		"calendar_list_events", "calendar", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleListEvents(ctx, request, sc)
+		}))
 
 	// Get events tool
 	getEventsTool := mcp.NewTool("calendar_get_events",
@@ -59,9 +61,11 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(getEventsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetEvents(ctx, request, sc)
-	})
+	s.AddTool(getEventsTool, common.InstrumentedToolHandlerWithService(
+		"calendar_get_events", "calendar", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetEvents(ctx, request, sc)
+		}))
 
 	// Create event tool
 	createEventTool := mcp.NewTool("calendar_create_event",
@@ -119,9 +123,11 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(createEventTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleCreateEvent(ctx, request, sc)
-	})
+	s.AddTool(createEventTool, common.InstrumentedToolHandlerWithService(
+		"calendar_create_event", "calendar", "create", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleCreateEvent(ctx, request, sc)
+		}))
 
 	// Register update/delete tools only if not in read-only mode
 	if !readOnly {
@@ -176,9 +182,11 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 			),
 		)
 
-		s.AddTool(updateEventTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return handleUpdateEvent(ctx, request, sc)
-		})
+		s.AddTool(updateEventTool, common.InstrumentedToolHandlerWithService(
+			"calendar_update_event", "calendar", "update", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return handleUpdateEvent(ctx, request, sc)
+			}))
 
 		// Delete events tool
 		deleteEventsTool := mcp.NewTool("calendar_delete_events",
@@ -195,9 +203,11 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 			),
 		)
 
-		s.AddTool(deleteEventsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return handleDeleteEvents(ctx, request, sc)
-		})
+		s.AddTool(deleteEventsTool, common.InstrumentedToolHandlerWithService(
+			"calendar_delete_events", "calendar", "delete", sc,
+			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return handleDeleteEvents(ctx, request, sc)
+			}))
 	}
 
 	// Extract docs links tool (read-only, always available)
@@ -215,9 +225,11 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(extractDocsLinksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleExtractDocsLinks(ctx, request, sc)
-	})
+	s.AddTool(extractDocsLinksTool, common.InstrumentedToolHandlerWithService(
+		"calendar_extract_docs_links", "calendar", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleExtractDocsLinks(ctx, request, sc)
+		}))
 
 	// Get Meet links tool
 	getMeetLinksTool := mcp.NewTool("calendar_get_meet_links",
@@ -234,9 +246,11 @@ func RegisterEventTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(getMeetLinksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetMeetLinks(ctx, request, sc)
-	})
+	s.AddTool(getMeetLinksTool, common.InstrumentedToolHandlerWithService(
+		"calendar_get_meet_links", "calendar", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetMeetLinks(ctx, request, sc)
+		}))
 
 	return nil
 }

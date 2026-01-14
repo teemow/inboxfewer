@@ -34,6 +34,34 @@ type OAuthConfig struct {
 	// Interstitial page branding configuration
 	// If nil, uses the default mcp-oauth interstitial page
 	Interstitial *oauth.InterstitialConfig
+
+	// RedirectURISecurity configures security validation for redirect URIs
+	// All options default to secure values in mcp-oauth
+	RedirectURISecurity oauth.RedirectURISecurityConfig
+
+	// TrustedPublicRegistrationSchemes lists URI schemes allowed for unauthenticated
+	// client registration. Enables Cursor/VSCode without registration tokens.
+	TrustedPublicRegistrationSchemes []string
+
+	// DisableStrictSchemeMatching allows mixed scheme clients to register without token
+	DisableStrictSchemeMatching bool
+
+	// EnableCIMD enables Client ID Metadata Documents per MCP 2025-11-25.
+	// When enabled, clients can use HTTPS URLs as client identifiers.
+	// Default: true (enabled for MCP 2025-11-25 compliance)
+	EnableCIMD bool
+
+	// Storage configures the token storage backend
+	// Defaults to in-memory storage if not specified
+	Storage oauth.StorageConfig
+
+	// TLSCertFile is the path to the TLS certificate file (PEM format)
+	// If both TLSCertFile and TLSKeyFile are provided, the server will use HTTPS
+	TLSCertFile string
+
+	// TLSKeyFile is the path to the TLS private key file (PEM format)
+	// If both TLSCertFile and TLSKeyFile are provided, the server will use HTTPS
+	TLSKeyFile string
 }
 
 // OAuthHTTPServer wraps an MCP server with OAuth 2.1 authentication
@@ -43,6 +71,9 @@ type OAuthHTTPServer struct {
 	httpServer       *http.Server
 	serverType       string // "streamable-http"
 	disableStreaming bool
+	healthChecker    *HealthChecker
+	tlsCertFile      string
+	tlsKeyFile       string
 }
 
 // buildOAuthConfig converts OAuthConfig to oauth.Config
@@ -80,6 +111,13 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 			UserRate:  100, // 100 req/sec per authenticated user
 			UserBurst: 200, // Allow burst of 200
 		},
+		// New mcp-oauth v0.2.30+ features
+		RedirectURISecurity:              config.RedirectURISecurity,
+		TrustedPublicRegistrationSchemes: config.TrustedPublicRegistrationSchemes,
+		DisableStrictSchemeMatching:      config.DisableStrictSchemeMatching,
+		EnableCIMD:                       config.EnableCIMD,
+		// Storage configuration
+		Storage: config.Storage,
 	}
 
 	// Pass through interstitial config if provided
@@ -102,6 +140,8 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, confi
 		oauthHandler:     oauthHandler,
 		serverType:       serverType,
 		disableStreaming: config.DisableStreaming,
+		tlsCertFile:      config.TLSCertFile,
+		tlsKeyFile:       config.TLSKeyFile,
 	}, nil
 }
 
@@ -118,6 +158,18 @@ func NewOAuthHTTPServerWithHandler(mcpServer *mcpserver.MCPServer, serverType st
 		oauthHandler:     oauthHandler,
 		serverType:       serverType,
 		disableStreaming: disableStreaming,
+	}, nil
+}
+
+// NewOAuthHTTPServerWithHandlerAndTLS creates a new OAuth-enabled HTTP server with an existing handler and TLS config
+func NewOAuthHTTPServerWithHandlerAndTLS(mcpServer *mcpserver.MCPServer, serverType string, oauthHandler *oauth.Handler, disableStreaming bool, tlsCertFile, tlsKeyFile string) (*OAuthHTTPServer, error) {
+	return &OAuthHTTPServer{
+		mcpServer:        mcpServer,
+		oauthHandler:     oauthHandler,
+		serverType:       serverType,
+		disableStreaming: disableStreaming,
+		tlsCertFile:      tlsCertFile,
+		tlsKeyFile:       tlsKeyFile,
 	}, nil
 }
 
@@ -253,6 +305,13 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 		return fmt.Errorf("unsupported server type: %s", s.serverType)
 	}
 
+	// ========== Health Check Endpoints ==========
+
+	// Register health check endpoints
+	if s.healthChecker != nil {
+		s.healthChecker.RegisterHealthEndpoints(mux)
+	}
+
 	// Create HTTP server with security and CORS middleware
 	handler := securityHeadersMiddleware(corsMiddleware(mux))
 
@@ -264,7 +323,12 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	// Start server
+	// Start server with TLS if certificates are provided
+	if s.tlsCertFile != "" && s.tlsKeyFile != "" {
+		return s.httpServer.ListenAndServeTLS(s.tlsCertFile, s.tlsKeyFile)
+	}
+
+	// Start server without TLS
 	return s.httpServer.ListenAndServe()
 }
 
@@ -285,6 +349,11 @@ func (s *OAuthHTTPServer) Shutdown(ctx context.Context) error {
 // GetOAuthHandler returns the OAuth handler for testing or direct access
 func (s *OAuthHTTPServer) GetOAuthHandler() *oauth.Handler {
 	return s.oauthHandler
+}
+
+// SetHealthChecker sets the health checker for health check endpoints.
+func (s *OAuthHTTPServer) SetHealthChecker(hc *HealthChecker) {
+	s.healthChecker = hc
 }
 
 // validateHTTPSRequirement ensures OAuth 2.1 HTTPS compliance

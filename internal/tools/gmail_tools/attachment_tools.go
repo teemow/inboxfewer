@@ -32,9 +32,11 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 		),
 	)
 
-	s.AddTool(listAttachmentsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleListAttachments(ctx, request, sc)
-	})
+	s.AddTool(listAttachmentsTool, common.InstrumentedToolHandlerWithService(
+		"gmail_list_attachments", "gmail", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleListAttachments(ctx, request, sc)
+		}))
 
 	// Get attachment tool
 	getAttachmentTool := mcp.NewTool("gmail_get_attachment",
@@ -55,9 +57,11 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 		),
 	)
 
-	s.AddTool(getAttachmentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetAttachment(ctx, request, sc)
-	})
+	s.AddTool(getAttachmentTool, common.InstrumentedToolHandlerWithService(
+		"gmail_get_attachment", "gmail", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetAttachment(ctx, request, sc)
+		}))
 
 	// Get message bodies tool
 	getMessageBodiesTool := mcp.NewTool("gmail_get_message_bodies",
@@ -74,9 +78,11 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 		),
 	)
 
-	s.AddTool(getMessageBodiesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetMessageBodies(ctx, request, sc)
-	})
+	s.AddTool(getMessageBodiesTool, common.InstrumentedToolHandlerWithService(
+		"gmail_get_message_bodies", "gmail", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetMessageBodies(ctx, request, sc)
+		}))
 
 	// Extract doc links tool
 	extractDocLinksTool := mcp.NewTool("gmail_extract_doc_links",
@@ -93,9 +99,11 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 		),
 	)
 
-	s.AddTool(extractDocLinksTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleExtractDocLinks(ctx, request, sc)
-	})
+	s.AddTool(extractDocLinksTool, common.InstrumentedToolHandlerWithService(
+		"gmail_extract_doc_links", "gmail", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleExtractDocLinks(ctx, request, sc)
+		}))
 
 	// Transfer attachments to Drive tool
 	transferAttachmentsTool := mcp.NewTool("gmail_transfer_attachments_to_drive",
@@ -119,9 +127,11 @@ func RegisterAttachmentTools(s *mcpserver.MCPServer, sc *server.ServerContext) e
 		),
 	)
 
-	s.AddTool(transferAttachmentsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleTransferAttachmentsToDrive(ctx, request, sc)
-	})
+	s.AddTool(transferAttachmentsTool, common.InstrumentedToolHandlerWithService(
+		"gmail_transfer_attachments_to_drive", "gmail", "create", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleTransferAttachmentsToDrive(ctx, request, sc)
+		}))
 
 	return nil
 }

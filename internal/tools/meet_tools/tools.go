@@ -50,9 +50,11 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(getConferenceTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetConference(ctx, request, sc)
-	})
+	s.AddTool(getConferenceTool, common.InstrumentedToolHandlerWithService(
+		"meet_get_conference", "meet", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetConference(ctx, request, sc)
+		}))
 
 	// List recordings
 	listRecordingsTool := mcp.NewTool("meet_list_recordings",
@@ -66,9 +68,11 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(listRecordingsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleListRecordings(ctx, request, sc)
-	})
+	s.AddTool(listRecordingsTool, common.InstrumentedToolHandlerWithService(
+		"meet_list_recordings", "meet", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleListRecordings(ctx, request, sc)
+		}))
 
 	// Get recording
 	getRecordingTool := mcp.NewTool("meet_get_recording",
@@ -82,9 +86,11 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(getRecordingTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetRecording(ctx, request, sc)
-	})
+	s.AddTool(getRecordingTool, common.InstrumentedToolHandlerWithService(
+		"meet_get_recording", "meet", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetRecording(ctx, request, sc)
+		}))
 
 	// List transcripts
 	listTranscriptsTool := mcp.NewTool("meet_list_transcripts",
@@ -98,9 +104,11 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(listTranscriptsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleListTranscripts(ctx, request, sc)
-	})
+	s.AddTool(listTranscriptsTool, common.InstrumentedToolHandlerWithService(
+		"meet_list_transcripts", "meet", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleListTranscripts(ctx, request, sc)
+		}))
 
 	// Get transcript
 	getTranscriptTool := mcp.NewTool("meet_get_transcript",
@@ -114,9 +122,11 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(getTranscriptTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetTranscript(ctx, request, sc)
-	})
+	s.AddTool(getTranscriptTool, common.InstrumentedToolHandlerWithService(
+		"meet_get_transcript", "meet", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetTranscript(ctx, request, sc)
+		}))
 
 	// Get transcript text
 	getTranscriptTextTool := mcp.NewTool("meet_get_transcript_text",
@@ -130,9 +140,11 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(getTranscriptTextTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetTranscriptText(ctx, request, sc)
-	})
+	s.AddTool(getTranscriptTextTool, common.InstrumentedToolHandlerWithService(
+		"meet_get_transcript_text", "meet", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetTranscriptText(ctx, request, sc)
+		}))
 
 	// Meet space configuration tools (safe operations)
 	// Create space
@@ -155,9 +167,11 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(createSpaceTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleCreateSpace(ctx, request, sc)
-	})
+	s.AddTool(createSpaceTool, common.InstrumentedToolHandlerWithService(
+		"meet_create_space", "meet", "create", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleCreateSpace(ctx, request, sc)
+		}))
 
 	// Get space (read-only, always available)
 	getSpaceTool := mcp.NewTool("meet_get_space",
@@ -171,9 +185,11 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(getSpaceTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetSpace(ctx, request, sc)
-	})
+	s.AddTool(getSpaceTool, common.InstrumentedToolHandlerWithService(
+		"meet_get_space", "meet", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetSpace(ctx, request, sc)
+		}))
 
 	// Update space configuration (safe operation)
 	updateSpaceConfigTool := mcp.NewTool("meet_update_space_config",
@@ -199,9 +215,11 @@ func RegisterMeetTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 		),
 	)
 
-	s.AddTool(updateSpaceConfigTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleUpdateSpaceConfig(ctx, request, sc)
-	})
+	s.AddTool(updateSpaceConfigTool, common.InstrumentedToolHandlerWithService(
+		"meet_update_space_config", "meet", "update", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleUpdateSpaceConfig(ctx, request, sc)
+		}))
 
 	return nil
 }

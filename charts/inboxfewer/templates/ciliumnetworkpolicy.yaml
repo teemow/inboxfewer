@@ -1,0 +1,50 @@
+{{- if .Values.ciliumNetworkPolicy.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "inboxfewer.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "inboxfewer.labels" . | nindent 4 }}
+    {{- with .Values.ciliumNetworkPolicy.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.ciliumNetworkPolicy.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "inboxfewer.selectorLabels" . | nindent 6 }}
+  ingress:
+  - fromEntities:
+    - cluster
+  egress:
+  # Allow HTTPS to external APIs (Google OAuth, Gmail, Drive, etc.)
+  - toEntities:
+    - world
+    toPorts:
+    - ports:
+      - port: "443"
+        protocol: TCP
+  # Allow DNS resolution
+  - toEntities:
+    - cluster
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: UDP
+      - port: "53"
+        protocol: TCP
+  {{- if eq .Values.oauthSecurity.storage.type "valkey" }}
+  # Allow connection to Valkey for token storage
+  - toEndpoints:
+    - matchLabels:
+        io.kubernetes.pod.namespace: {{ .Release.Namespace }}
+    toPorts:
+    - ports:
+      - port: "6379"
+        protocol: TCP
+  {{- end }}
+{{- end }}

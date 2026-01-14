@@ -50,9 +50,11 @@ func RegisterEmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(sendEmailTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleSendEmail(ctx, request, sc)
-	})
+	s.AddTool(sendEmailTool, common.InstrumentedToolHandlerWithService(
+		"gmail_send_email", "gmail", "send", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleSendEmail(ctx, request, sc)
+		}))
 
 	// Reply to email tool
 	replyToEmailTool := mcp.NewTool("gmail_reply_to_email",
@@ -83,9 +85,11 @@ func RegisterEmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(replyToEmailTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleReplyToEmail(ctx, request, sc)
-	})
+	s.AddTool(replyToEmailTool, common.InstrumentedToolHandlerWithService(
+		"gmail_reply_to_email", "gmail", "send", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleReplyToEmail(ctx, request, sc)
+		}))
 
 	// Forward email tool
 	forwardEmailTool := mcp.NewTool("gmail_forward_email",
@@ -115,9 +119,11 @@ func RegisterEmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(forwardEmailTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleForwardEmail(ctx, request, sc)
-	})
+	s.AddTool(forwardEmailTool, common.InstrumentedToolHandlerWithService(
+		"gmail_forward_email", "gmail", "send", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleForwardEmail(ctx, request, sc)
+		}))
 
 	return nil
 }

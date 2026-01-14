@@ -11,6 +11,7 @@ import (
 	"github.com/teemow/inboxfewer/internal/drive"
 	"github.com/teemow/inboxfewer/internal/gmail"
 	"github.com/teemow/inboxfewer/internal/google"
+	"github.com/teemow/inboxfewer/internal/instrumentation"
 	"github.com/teemow/inboxfewer/internal/meet"
 	"github.com/teemow/inboxfewer/internal/tasks"
 )
@@ -83,6 +84,8 @@ type ServerContext struct {
 	githubToken   string
 	tokenProvider google.TokenProvider // Token provider for Google API authentication
 	logger        *slog.Logger
+	metrics       *instrumentation.Metrics     // Metrics recorder for observability
+	auditLogger   *instrumentation.AuditLogger // Audit logger for tool invocations
 	mu            sync.RWMutex
 	shutdown      bool
 }
@@ -300,4 +303,39 @@ func (sc *ServerContext) Shutdown() error {
 	sc.shutdown = true
 	sc.cancel()
 	return nil
+}
+
+// Metrics returns the metrics recorder for observability.
+// Returns nil if metrics are not configured.
+func (sc *ServerContext) Metrics() *instrumentation.Metrics {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.metrics
+}
+
+// SetMetrics sets the metrics recorder for the server context.
+func (sc *ServerContext) SetMetrics(metrics *instrumentation.Metrics) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.metrics = metrics
+}
+
+// AuditLogger returns the audit logger for tool invocations.
+// Returns nil if audit logging is not configured.
+func (sc *ServerContext) AuditLogger() *instrumentation.AuditLogger {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.auditLogger
+}
+
+// SetAuditLogger sets the audit logger for the server context.
+func (sc *ServerContext) SetAuditLogger(logger *instrumentation.AuditLogger) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.auditLogger = logger
+}
+
+// Logger returns the slog logger.
+func (sc *ServerContext) Logger() *slog.Logger {
+	return sc.logger
 }

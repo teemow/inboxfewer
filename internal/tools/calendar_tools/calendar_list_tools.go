@@ -21,9 +21,11 @@ func RegisterCalendarListTools(s *mcpserver.MCPServer, sc *server.ServerContext)
 		),
 	)
 
-	s.AddTool(listCalendarsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleListCalendars(ctx, request, sc)
-	})
+	s.AddTool(listCalendarsTool, common.InstrumentedToolHandlerWithService(
+		"calendar_list_calendars", "calendar", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleListCalendars(ctx, request, sc)
+		}))
 
 	// Get calendar tool
 	getCalendarTool := mcp.NewTool("calendar_get_calendar",
@@ -37,9 +39,11 @@ func RegisterCalendarListTools(s *mcpserver.MCPServer, sc *server.ServerContext)
 		),
 	)
 
-	s.AddTool(getCalendarTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetCalendar(ctx, request, sc)
-	})
+	s.AddTool(getCalendarTool, common.InstrumentedToolHandlerWithService(
+		"calendar_get_calendar", "calendar", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetCalendar(ctx, request, sc)
+		}))
 
 	return nil
 }

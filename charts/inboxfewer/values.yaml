@@ -71,20 +71,22 @@ resources:
 
 livenessProbe:
   enabled: true
-  tcpSocket:
+  httpGet:
+    path: /healthz
     port: http
-  initialDelaySeconds: 15
-  periodSeconds: 20
+  initialDelaySeconds: 5
+  periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
 
 readinessProbe:
   enabled: true
-  tcpSocket:
+  httpGet:
+    path: /readyz
     port: http
   initialDelaySeconds: 5
   periodSeconds: 10
-  timeoutSeconds: 3
+  timeoutSeconds: 5
   failureThreshold: 3
 
 autoscaling:
@@ -181,6 +183,155 @@ oauthSecurity:
   # Default: 10
   maxClientsPerIP: 10
 
+  # Redirect URI Security Configuration (mcp-oauth v0.2.30+)
+  # All settings default to secure values. Use disable* to opt-out.
+  redirectURISecurity:
+    # Disable production mode security validation
+    # Production mode enforces: HTTPS required, private IPs blocked, dangerous schemes blocked
+    # WARNING: Significantly weakens redirect URI security. Only disable for development.
+    # Default: false (production mode is enabled)
+    disableProductionMode: false
+
+    # Allow http://localhost and http://127.0.0.1 redirect URIs
+    # Required for native apps per RFC 8252 Section 7.3
+    # Default: false (operators must explicitly enable for native app support)
+    allowLocalhostRedirectURIs: false
+
+    # Allow private IP addresses (10.x, 172.16.x, 192.168.x) in redirect URIs
+    # WARNING: Enables SSRF attacks to internal networks if not properly secured.
+    # Only enable for internal/VPN deployments where clients use private IPs.
+    # Default: false (blocked for security)
+    allowPrivateIPRedirectURIs: false
+
+    # Allow link-local addresses (169.254.x.x, fe80::/10) in redirect URIs
+    # WARNING: Could enable access to cloud metadata services (169.254.169.254).
+    # This is a significant security risk in AWS, GCP, Azure environments.
+    # Default: false (blocked for security)
+    allowLinkLocalRedirectURIs: false
+
+    # Disable DNS validation of redirect URI hostnames
+    # DNS validation checks if hostnames resolve to private/internal IPs.
+    # WARNING: Disabling allows potential DNS rebinding attacks.
+    # Default: false (DNS validation is enabled)
+    disableDNSValidation: false
+
+    # Disable fail-closed DNS validation
+    # When strict mode is enabled, DNS resolution failures block client registration.
+    # When disabled, DNS failures are logged but registration proceeds (fail-open).
+    # WARNING: Disabling allows potential DNS validation bypass via intentional failures.
+    # Default: false (strict mode is enabled)
+    disableDNSValidationStrict: false
+
+    # Disable redirect URI validation at authorization time
+    # By default, redirect URIs are re-validated during authorization requests,
+    # not just at registration time. This protects against TOCTOU attacks.
+    # WARNING: Disabling allows DNS rebinding attacks between registration and use.
+    # Default: false (authorization-time validation is enabled)
+    disableAuthorizationTimeValidation: false
+
+  # Trusted Scheme Registration for Cursor/VSCode Compatibility (mcp-oauth v0.2.30+)
+  # This feature allows unauthenticated client registration for clients using
+  # specific custom URI schemes (e.g., cursor://, vscode://), while requiring
+  # registration tokens for all other clients.
+  #
+  # Security Model:
+  # Custom URI schemes can only be intercepted by the application that registered
+  # the scheme with the OS. An attacker cannot register a malicious OAuth client
+  # with cursor:// because they cannot receive the authorization callback.
+  #
+  # Example: ["cursor", "vscode", "vscode-insiders", "windsurf"]
+  # Default: [] (all registrations require a token)
+  trustedPublicRegistrationSchemes: []
+
+  # Disable strict scheme matching for trusted scheme registration
+  # When strict matching is enabled (default), ALL redirect URIs in a registration
+  # request must use schemes from trustedPublicRegistrationSchemes.
+  # When disabled, if ANY redirect URI uses a trusted scheme, registration is allowed.
+  # WARNING: Reduces security by allowing untrusted redirect URIs alongside trusted ones.
+  # Default: false (strict matching is enabled)
+  disableStrictSchemeMatching: false
+
+  # Client ID Metadata Documents (CIMD) - MCP 2025-11-25 (mcp-oauth v0.2.30+)
+  # When enabled, clients can use HTTPS URLs as client identifiers (e.g.,
+  # https://myapp.example.com/.well-known/oauth-client). The authorization server
+  # fetches client metadata from that URL, enabling decentralized client registration.
+  #
+  # Security: CIMD requires the server to make outbound HTTPS requests. The mcp-oauth
+  # library implements comprehensive SSRF protection (blocks private IPs, DNS rebinding).
+  #
+  # Default: true (enabled per MCP 2025-11-25 specification)
+  enableCIMD: true
+
+  # Token storage configuration (mcp-oauth v0.2.30+)
+  # In-memory storage is default but NOT recommended for production
+  # Use Valkey for production deployments to enable:
+  #   - Session persistence across pod restarts
+  #   - Horizontal scaling with shared session state
+  #   - Rolling updates without user session loss
+  #
+  # PRODUCTION REQUIREMENTS:
+  #   1. Use Valkey (not memory) storage for production
+  #   2. Enable TLS for Valkey connections (tls.enabled: true)
+  #   3. Always use authentication (existingSecret is mandatory)
+  #   4. Set up token encryption (see oauthSecurity.encryptionKeySecret)
+  #   5. Configure network policies to restrict Valkey access
+  storage:
+    # Storage backend type: "memory" or "valkey"
+    # Default: "memory" (NOT recommended for production)
+    type: "memory"
+
+    # Valkey (Redis-compatible) storage configuration
+    # Required when storage.type is "valkey"
+    valkey:
+      # Valkey server URL (e.g., "valkey.namespace.svc:6379")
+      # Required when using Valkey storage
+      url: ""
+
+      # Enable TLS for Valkey connections
+      # MANDATORY for production - tokens contain sensitive OAuth credentials
+      tls:
+        enabled: false
+
+        # Custom CA certificate for Valkey TLS (optional)
+        # Use when Valkey uses certificates signed by a private CA
+        # Reference a secret containing the CA certificate
+        caSecretName: ""
+        # Key in the secret containing the CA certificate (default: ca.crt)
+        caSecretKey: "ca.crt"
+
+      # Key prefix for all Valkey keys
+      # Useful for multi-tenant deployments sharing a Valkey instance
+      keyPrefix: "mcp:"
+
+      # Valkey database number (0-15)
+      db: 0
+
+      # Use an existing secret for Valkey password
+      # MANDATORY for production - unauthenticated Valkey is a security risk
+      # The secret should contain key: valkey-password
+      existingSecret: ""
+
+      # Key in the secret containing the Valkey password
+      secretKeyPassword: "valkey-password"
+
+# TLS/HTTPS Configuration
+# Native HTTPS support without reverse proxy
+tls:
+  # Enable native TLS/HTTPS
+  enabled: false
+
+  # TLS certificate and key can be provided via:
+  # 1. Existing secret reference (recommended for production)
+  # 2. Inline values (not recommended, use secrets instead)
+
+  # Existing secret containing TLS certificate and key
+  # The secret should contain keys: tls.crt, tls.key
+  existingSecret: ""
+
+  # Path where TLS files will be mounted (if using existingSecret)
+  # Default: /etc/tls
+  mountPath: "/etc/tls"
+
 # OAuth Interstitial Page Branding
 # Customize the success page shown after OAuth authentication for custom URL schemes
 # (cursor://, vscode://, etc.). If not set, uses the mcp-oauth default styling.
@@ -266,4 +417,104 @@ networkPolicy:
       - protocol: UDP
         port: 53
 
+# Cilium Network Policy configuration
+# More advanced network policy for Cilium users
+ciliumNetworkPolicy:
+  # Enable CiliumNetworkPolicy for enhanced network control
+  enabled: false
+  # Additional labels to add to the CiliumNetworkPolicy
+  labels: {}
+  # Additional annotations to add to the CiliumNetworkPolicy
+  annotations: {}
 
+# Metrics server configuration
+# Prometheus metrics are served on a dedicated port (default: 9090) that is separate
+# from the main application port (8080). This follows security best practices by
+# isolating operational metrics from public-facing traffic.
+#
+# SECURITY WARNING: The metrics endpoint should NEVER be exposed externally.
+#   - Metrics may contain operational data useful for reconnaissance
+#   - Keep service type as ClusterIP (never LoadBalancer or NodePort)
+#   - Do NOT create an Ingress for the metrics service
+#   - Only allow in-cluster Prometheus to scrape metrics
+#   - The CiliumNetworkPolicy/NetworkPolicy templates restrict metrics access to cluster-internal traffic
+metrics:
+  # Enable the metrics server
+  enabled: true
+
+  # Port for the metrics server
+  port: 9090
+
+  # Service configuration for metrics
+  service:
+    # Service type for metrics
+    # SECURITY: Keep as ClusterIP - never expose metrics externally
+    type: ClusterIP
+    # Service annotations (e.g., for service discovery)
+    annotations: {}
+
+# Instrumentation configuration
+# OpenTelemetry-based observability for metrics and tracing
+instrumentation:
+  # Enable/disable instrumentation
+  enabled: true
+
+  # Metrics exporter type: prometheus, otlp, stdout
+  metricsExporter: prometheus
+
+  # Tracing exporter type: otlp, stdout, none
+  tracingExporter: none
+
+  # OTLP endpoint for traces/metrics (required when using otlp exporter)
+  # Example: "otel-collector.observability:4318"
+  otlpEndpoint: ""
+
+  # Use insecure connection for OTLP
+  # SECURITY WARNING: NEVER enable in production!
+  #   - Traces contain sensitive metadata (user IDs, request details, tool invocations)
+  #   - Metrics may reveal operational patterns useful for reconnaissance
+  #   - Only acceptable for localhost development (127.0.0.1, localhost)
+  #   - The application logs a SECURITY WARNING if enabled for non-localhost endpoints
+  otlpInsecure: false
+
+  # Trace sampling rate (0.0 to 1.0, default: 0.1 = 10%)
+  traceSamplingRate: "0.1"
+
+  # Include detailed/high-cardinality labels in metrics
+  # WARNING: Can cause cardinality explosion in production
+  # This may include user-identifying information in metric labels
+  detailedLabels: false
+
+  # Audit logging configuration
+  # Audit logs track all MCP tool invocations for security and compliance purposes.
+  auditLogging:
+    # Enable/disable audit logging
+    enabled: true
+
+    # Include full email addresses (PII) in audit logs
+    # SECURITY: When enabled, audit logs contain PII and MUST be:
+    #   - Stored securely with appropriate access controls
+    #   - Routed to a separate log destination if possible
+    #   - Retained according to your data retention policy
+    # When disabled (default), only anonymized domain-based identifiers are logged.
+    # Tip: Use log filtering/routing rules to separate audit events by the
+    # "tool_executed" and "tool_audit" log messages.
+    includePII: false
+
+# ServiceMonitor for Prometheus Operator
+
+serviceMonitor:
+  # Enable ServiceMonitor creation (requires Prometheus Operator CRDs)
+  enabled: false
+  # Additional labels for the ServiceMonitor (e.g., for Prometheus selection)
+  labels: {}
+  # Additional annotations for the ServiceMonitor
+  annotations: {}
+  # Scrape interval (default: Prometheus default)
+  interval: ""
+  # Scrape timeout (default: Prometheus default)
+  scrapeTimeout: ""
+  # Relabelings for the ServiceMonitor
+  relabelings: []
+  # Metric relabelings for the ServiceMonitor
+  metricRelabelings: []

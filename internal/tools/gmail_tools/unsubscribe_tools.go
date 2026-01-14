@@ -28,9 +28,11 @@ func RegisterUnsubscribeTools(s *mcpserver.MCPServer, sc *server.ServerContext, 
 		),
 	)
 
-	s.AddTool(getUnsubscribeInfoTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetUnsubscribeInfo(ctx, request, sc)
-	})
+	s.AddTool(getUnsubscribeInfoTool, common.InstrumentedToolHandlerWithService(
+		"gmail_get_unsubscribe_info", "gmail", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetUnsubscribeInfo(ctx, request, sc)
+		}))
 
 	// Unsubscribe via HTTP tool (safe operation, always available)
 	unsubscribeViaHTTPTool := mcp.NewTool("gmail_unsubscribe_via_http",
@@ -44,9 +46,11 @@ func RegisterUnsubscribeTools(s *mcpserver.MCPServer, sc *server.ServerContext, 
 		),
 	)
 
-	s.AddTool(unsubscribeViaHTTPTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleUnsubscribeViaHTTP(ctx, request, sc)
-	})
+	s.AddTool(unsubscribeViaHTTPTool, common.InstrumentedToolHandlerWithService(
+		"gmail_unsubscribe_via_http", "gmail", "update", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleUnsubscribeViaHTTP(ctx, request, sc)
+		}))
 
 	return nil
 }

@@ -32,9 +32,11 @@ func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 		),
 	)
 
-	s.AddTool(getDocumentsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetDocuments(ctx, request, sc)
-	})
+	s.AddTool(getDocumentsTool, common.InstrumentedToolHandlerWithService(
+		"docs_get_documents", "docs", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetDocuments(ctx, request, sc)
+		}))
 
 	// Get document metadata tool
 	getMetadataTool := mcp.NewTool("docs_get_documents_metadata",
@@ -48,9 +50,11 @@ func RegisterDocsTools(s *mcpserver.MCPServer, sc *server.ServerContext) error {
 		),
 	)
 
-	s.AddTool(getMetadataTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleGetDocumentsMetadata(ctx, request, sc)
-	})
+	s.AddTool(getMetadataTool, common.InstrumentedToolHandlerWithService(
+		"docs_get_documents_metadata", "docs", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleGetDocumentsMetadata(ctx, request, sc)
+		}))
 
 	return nil
 }

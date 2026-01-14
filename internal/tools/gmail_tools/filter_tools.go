@@ -66,9 +66,11 @@ func RegisterFilterTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 		),
 	)
 
-	s.AddTool(createFilterTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleCreateFilter(ctx, request, sc)
-	})
+	s.AddTool(createFilterTool, common.InstrumentedToolHandlerWithService(
+		"gmail_create_filter", "gmail", "create", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleCreateFilter(ctx, request, sc)
+		}))
 
 	// Delete filter tool
 	deleteFilterTool := mcp.NewTool("gmail_delete_filter",
@@ -82,9 +84,11 @@ func RegisterFilterTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 		),
 	)
 
-	s.AddTool(deleteFilterTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleDeleteFilter(ctx, request, sc)
-	})
+	s.AddTool(deleteFilterTool, common.InstrumentedToolHandlerWithService(
+		"gmail_delete_filter", "gmail", "delete", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleDeleteFilter(ctx, request, sc)
+		}))
 
 	// List filters tool (always available, even in read-only mode)
 	listFiltersTool := mcp.NewTool("gmail_list_filters",
@@ -94,9 +98,11 @@ func RegisterFilterTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 		),
 	)
 
-	s.AddTool(listFiltersTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleListFilters(ctx, request, sc)
-	})
+	s.AddTool(listFiltersTool, common.InstrumentedToolHandlerWithService(
+		"gmail_list_filters", "gmail", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleListFilters(ctx, request, sc)
+		}))
 
 	// List labels tool (always available, even in read-only mode)
 	listLabelsTool := mcp.NewTool("gmail_list_labels",
@@ -106,9 +112,11 @@ func RegisterFilterTools(s *mcpserver.MCPServer, sc *server.ServerContext, readO
 		),
 	)
 
-	s.AddTool(listLabelsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleListLabels(ctx, request, sc)
-	})
+	s.AddTool(listLabelsTool, common.InstrumentedToolHandlerWithService(
+		"gmail_list_labels", "gmail", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleListLabels(ctx, request, sc)
+		}))
 
 	return nil
 }

@@ -57,9 +57,11 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(listThreadsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleListThreads(ctx, request, sc)
-	})
+	s.AddTool(listThreadsTool, common.InstrumentedToolHandlerWithService(
+		"gmail_list_threads", "gmail", "list", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleListThreads(ctx, request, sc)
+		}))
 
 	// Archive threads tool (supports single or multiple threads)
 	archiveThreadsTool := mcp.NewTool("gmail_archive_threads",
@@ -73,9 +75,11 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(archiveThreadsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleArchiveThreads(ctx, request, sc)
-	})
+	s.AddTool(archiveThreadsTool, common.InstrumentedToolHandlerWithService(
+		"gmail_archive_threads", "gmail", "update", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleArchiveThreads(ctx, request, sc)
+		}))
 
 	// Unarchive threads tool (supports single or multiple threads)
 	unarchiveThreadsTool := mcp.NewTool("gmail_unarchive_threads",
@@ -89,9 +93,11 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(unarchiveThreadsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleUnarchiveThreads(ctx, request, sc)
-	})
+	s.AddTool(unarchiveThreadsTool, common.InstrumentedToolHandlerWithService(
+		"gmail_unarchive_threads", "gmail", "update", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleUnarchiveThreads(ctx, request, sc)
+		}))
 
 	// Mark threads as spam tool (supports single or multiple threads)
 	markThreadsAsSpamTool := mcp.NewTool("gmail_mark_threads_as_spam",
@@ -105,9 +111,11 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(markThreadsAsSpamTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleMarkThreadsAsSpam(ctx, request, sc)
-	})
+	s.AddTool(markThreadsAsSpamTool, common.InstrumentedToolHandlerWithService(
+		"gmail_mark_threads_as_spam", "gmail", "update", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleMarkThreadsAsSpam(ctx, request, sc)
+		}))
 
 	// Unmark threads as spam tool (supports single or multiple threads)
 	unmarkThreadsAsSpamTool := mcp.NewTool("gmail_unmark_threads_as_spam",
@@ -121,9 +129,11 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(unmarkThreadsAsSpamTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleUnmarkThreadsAsSpam(ctx, request, sc)
-	})
+	s.AddTool(unmarkThreadsAsSpamTool, common.InstrumentedToolHandlerWithService(
+		"gmail_unmark_threads_as_spam", "gmail", "update", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleUnmarkThreadsAsSpam(ctx, request, sc)
+		}))
 
 	// Classify thread tool
 	classifyThreadTool := mcp.NewTool("gmail_classify_thread",
@@ -137,9 +147,11 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(classifyThreadTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleClassifyThread(ctx, request, sc)
-	})
+	s.AddTool(classifyThreadTool, common.InstrumentedToolHandlerWithService(
+		"gmail_classify_thread", "gmail", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleClassifyThread(ctx, request, sc)
+		}))
 
 	// Check stale tool
 	checkStaleTool := mcp.NewTool("gmail_check_stale",
@@ -153,9 +165,11 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(checkStaleTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleCheckStale(ctx, request, sc)
-	})
+	s.AddTool(checkStaleTool, common.InstrumentedToolHandlerWithService(
+		"gmail_check_stale", "gmail", "get", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleCheckStale(ctx, request, sc)
+		}))
 
 	// Archive stale threads tool
 	archiveStaleTool := mcp.NewTool("gmail_archive_stale_threads",
@@ -168,9 +182,11 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		),
 	)
 
-	s.AddTool(archiveStaleTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return handleArchiveStaleThreads(ctx, request, sc)
-	})
+	s.AddTool(archiveStaleTool, common.InstrumentedToolHandlerWithService(
+		"gmail_archive_stale_threads", "gmail", "update", sc,
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return handleArchiveStaleThreads(ctx, request, sc)
+		}))
 
 	return nil
 }
