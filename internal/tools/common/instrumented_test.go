@@ -554,3 +554,61 @@ func TestInstrumentedToolHandler_SpanContextPassedToHandler(t *testing.T) {
 		t.Errorf("expected span ID %q, got %q", span.SpanContext.SpanID().String(), spanID)
 	}
 }
+
+func TestInstrumentedToolHandler_SpanRecordsErrorResultStatus(t *testing.T) {
+	exporter, cleanup := setupTestTracer()
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a server context
+	sc, err := server.NewServerContext(ctx, "", "")
+	if err != nil {
+		t.Fatalf("failed to create server context: %v", err)
+	}
+	defer sc.Shutdown()
+
+	// Create a handler that returns an error result (not Go error)
+	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultError("error message"), nil
+	}
+
+	// Wrap with instrumentation
+	wrapped := InstrumentedToolHandler("test_tool", sc, handler)
+
+	// Call the wrapped handler
+	req := mcp.CallToolRequest{}
+	_, err = wrapped(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify span was created with error status
+	spans := exporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+
+	span := spans[0]
+
+	// Verify span has error status (even though no Go error was returned)
+	if span.Status.Code != codes.Error {
+		t.Errorf("expected span status Error, got %v", span.Status.Code)
+	}
+
+	// Verify status message
+	expectedMsg := "tool returned error result"
+	if span.Status.Description != expectedMsg {
+		t.Errorf("expected status description %q, got %q", expectedMsg, span.Status.Description)
+	}
+
+	// Verify mcp.status attribute is set
+	attrMap := make(map[string]string)
+	for _, attr := range span.Attributes {
+		attrMap[string(attr.Key)] = attr.Value.AsString()
+	}
+
+	if attrMap[instrumentation.SpanAttrStatus] != "error" {
+		t.Errorf("expected mcp.status='error', got %v", attrMap[instrumentation.SpanAttrStatus])
+	}
+}
