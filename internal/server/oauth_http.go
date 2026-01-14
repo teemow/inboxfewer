@@ -367,9 +367,11 @@ func (s *OAuthHTTPServer) SetMetrics(m *instrumentation.Metrics) {
 }
 
 // responseWriter wraps http.ResponseWriter to capture the status code
+// and prevent duplicate WriteHeader calls.
 type responseWriter struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode    int
+	headerWritten bool
 }
 
 // newResponseWriter creates a responseWriter with a default 200 status code
@@ -377,10 +379,24 @@ func newResponseWriter(w http.ResponseWriter) *responseWriter {
 	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 }
 
-// WriteHeader captures the status code before calling the underlying WriteHeader
+// WriteHeader captures the status code and forwards to the underlying writer.
+// Subsequent calls are ignored to prevent "superfluous response.WriteHeader" errors.
 func (rw *responseWriter) WriteHeader(code int) {
+	if rw.headerWritten {
+		return
+	}
+	rw.headerWritten = true
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// Write writes the response body. If WriteHeader has not been called,
+// it implicitly calls WriteHeader with the default status code (200 OK).
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if !rw.headerWritten {
+		rw.WriteHeader(rw.statusCode)
+	}
+	return rw.ResponseWriter.Write(b)
 }
 
 // instrumentationMiddleware records HTTP request metrics for all requests
