@@ -316,9 +316,9 @@
           "refId": "A"
         }
       ],
-      "title": "Unique Users (Active)",
+      "title": "Active User Count",
       "type": "stat",
-      "description": "Number of distinct user accounts active. Requires detailedLabels to be enabled."
+      "description": "Number of distinct user accounts with activity. Note: Requires metrics.detailedLabels=true in Helm values. Shows 0 if detailedLabels is disabled."
     },
     {
       "collapsed": false,
@@ -1608,7 +1608,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool.*\" | line_format \"{{.tool | default .msg}} - {{.google_service | default \\\"system\\\"}}/{{.operation | default \\\"execute\\\"}} - {{if eq .status \\\"success\\\"}}SUCCESS{{else if eq .status \\\"error\\\"}}FAILED{{else if eq .success \\\"true\\\"}}SUCCESS{{else}}{{.status | default \\\"UNKNOWN\\\"}}{{end}}{{if .duration}} ({{.duration}}){{end}}\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool_(executed|failed)\" | line_format \"{{.tool}} - {{.google_service | default \\\"mcp\\\"}}/{{.operation | default \\\"execute\\\"}} - {{if eq .msg \\\"tool_executed\\\"}}SUCCESS{{else}}FAILED{{end}} ({{.duration}})\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1645,7 +1645,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | status=~\"error|failure\" or error!=\"\" | line_format \"{{.tool | default .msg}}: {{.error | default \\\"operation failed\\\"}}\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=\"tool_failed\" | line_format \"{{.tool}}: {{.error | default \\\"operation failed\\\"}}\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1904,7 +1904,7 @@
             "type": "loki",
             "uid": "${loki_datasource}"
           },
-          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool.*\" | trace_id!=\"\" | line_format \"trace={{.trace_id}} tool={{.tool | default .msg}} service={{.google_service | default \\\"system\\\"}} op={{.operation | default \\\"execute\\\"}} {{if eq .status \\\"success\\\"}}SUCCESS{{else if eq .status \\\"error\\\"}}FAILED{{else if eq .success \\\"true\\\"}}SUCCESS{{else}}{{.status | default \\\"UNKNOWN\\\"}}{{end}}\"",
+          "expr": "{app=\"inboxfewer\", namespace=~\"$namespace\"} | json | msg=~\"tool_(executed|failed)\" | trace_id!=\"\" | line_format \"trace={{.trace_id}} tool={{.tool}} service={{.google_service | default \\\"mcp\\\"}} op={{.operation | default \\\"execute\\\"}} {{if eq .msg \\\"tool_executed\\\"}}SUCCESS{{else}}FAILED{{end}}\"",
           "legendFormat": "",
           "refId": "A"
         }

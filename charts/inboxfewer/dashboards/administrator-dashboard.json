@@ -892,7 +892,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) / clamp_min(sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10)) * 100",
+          "expr": "((sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) or (sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval])) * 0)) / clamp_min(sum by (google_service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10)) * 100",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -1286,7 +1286,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) / clamp_min(sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10)) * 100",
+          "expr": "((sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(mcp_tool_invocations_total{namespace=~\"$namespace\"}[$__rate_interval])), 1e-10)) * 100 or vector(0)",
           "legendFormat": "Tool Error Rate",
           "refId": "A"
         }
@@ -1850,9 +1850,9 @@
           "refId": "A"
         }
       ],
-      "title": "Inboxfewer App Health",
+      "title": "MCP Server Status",
       "type": "stat",
-      "description": "Application pod readiness. 'Ready' = all pods running, 'Not Ready' = pods are starting/failing."
+      "description": "Inboxfewer MCP server pod readiness status. 'Ready' = all replicas running and healthy. 'Not Ready' = pods are starting, restarting, or failing. Check Pod Restarts panel for issues."
     },
     {
       "datasource": {
