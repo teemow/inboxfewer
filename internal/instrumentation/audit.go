@@ -73,7 +73,7 @@ func (ti *ToolInvocation) LogAttrs() []slog.Attr {
 		attrs = append(attrs, slog.String("account", ti.Account))
 	}
 	if ti.ServiceName != "" {
-		attrs = append(attrs, slog.String("service", ti.ServiceName))
+		attrs = append(attrs, slog.String("google_service", ti.ServiceName))
 	}
 	if ti.Operation != "" {
 		attrs = append(attrs, slog.String("operation", ti.Operation))
@@ -110,7 +110,7 @@ func (ti *ToolInvocation) LogAuditAttrs() []slog.Attr {
 		attrs = append(attrs, slog.String("account", ti.Account))
 	}
 	if ti.ServiceName != "" {
-		attrs = append(attrs, slog.String("service", ti.ServiceName))
+		attrs = append(attrs, slog.String("google_service", ti.ServiceName))
 	}
 	if ti.Operation != "" {
 		attrs = append(attrs, slog.String("operation", ti.Operation))

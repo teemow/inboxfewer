@@ -104,28 +104,28 @@ rate(http_request_duration_seconds_sum{path="/mcp"}[5m])
 Counter of Google API operations.
 
 **Labels:**
-- `service`: Google service name (gmail, calendar, drive, docs, meet, tasks)
+- `google_service`: Google service name (gmail, calendar, drive, docs, meet, tasks)
 - `operation`: Operation type (list, get, create, update, delete, send, etc.)
 - `status`: Operation result (success, error)
 
 **Example:**
 ```promql
 # Total Gmail operations
-google_api_operations_total{service="gmail"}
+google_api_operations_total{google_service="gmail"}
 
 # Error rate for Calendar API
-rate(google_api_operations_total{service="calendar", status="error"}[5m])
-/ rate(google_api_operations_total{service="calendar"}[5m])
+rate(google_api_operations_total{google_service="calendar", status="error"}[5m])
+/ rate(google_api_operations_total{google_service="calendar"}[5m])
 
 # Operations by service
-sum by (service) (rate(google_api_operations_total[1m]))
+sum by (google_service) (rate(google_api_operations_total[1m]))
 ```
 
 #### `google_api_operation_duration_seconds`
 Histogram of Google API operation durations.
 
 **Labels:**
-- `service`: Google service name
+- `google_service`: Google service name
 - `operation`: Operation type
 - `status`: Operation result
 
@@ -135,7 +135,7 @@ Histogram of Google API operation durations.
 ```promql
 # 99th percentile Gmail API duration
 histogram_quantile(0.99, 
-  rate(google_api_operation_duration_seconds_bucket{service="gmail"}[5m])
+  rate(google_api_operation_duration_seconds_bucket{google_service="gmail"}[5m])
 )
 
 # Slow operations (>2s)
@@ -714,7 +714,7 @@ Audit logs automatically include trace context when available:
   "level": "info",
   "msg": "tool_executed",
   "tool": "gmail_send_email",
-  "service": "gmail",
+  "google_service": "gmail",
   "operation": "send",
   "trace_id": "abc123def456...",
   "span_id": "789xyz..."
@@ -786,7 +786,7 @@ Every tool invocation produces a structured log entry:
   "level": "info",
   "msg": "tool_invocation",
   "tool": "gmail_send_email",
-  "service": "gmail",
+  "google_service": "gmail",
   "operation": "send",
   "account": "user@example.com",
   "duration_ms": 523,
@@ -798,7 +798,7 @@ Every tool invocation produces a structured log entry:
 
 **Standard fields (cardinality-controlled):**
 - `tool`: MCP tool name
-- `service`: Google service name
+- `google_service`: Google service name
 - `operation`: Operation type
 - `duration_ms`: Execution duration in milliseconds
 - `success`: Boolean success indicator

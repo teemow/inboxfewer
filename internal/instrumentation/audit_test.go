@@ -143,8 +143,8 @@ func TestToolInvocation_LogAttrs(t *testing.T) {
 	}
 
 	// Check service-related attributes
-	if service := attrMap["service"].Value.String(); service != ServiceDrive {
-		t.Errorf("service = %q, want %q", service, ServiceDrive)
+	if service := attrMap["google_service"].Value.String(); service != ServiceDrive {
+		t.Errorf("google_service = %q, want %q", service, ServiceDrive)
 	}
 	if operation := attrMap["operation"].Value.String(); operation != OperationList {
 		t.Errorf("operation = %q, want %q", operation, OperationList)
@@ -186,8 +186,8 @@ func TestToolInvocation_LogAttrs_MinimalFields(t *testing.T) {
 	}
 
 	// These should NOT be present when not set
-	if _, ok := attrMap["service"]; ok {
-		t.Error("service should not be present when empty")
+	if _, ok := attrMap["google_service"]; ok {
+		t.Error("google_service should not be present when empty")
 	}
 	if _, ok := attrMap["operation"]; ok {
 		t.Error("operation should not be present when empty")
@@ -279,8 +279,8 @@ func TestToolInvocation_LogAuditAttrs_MinimalFields(t *testing.T) {
 	}
 
 	// These should NOT be present when not set
-	if _, ok := attrMap["service"]; ok {
-		t.Error("service should not be present when empty")
+	if _, ok := attrMap["google_service"]; ok {
+		t.Error("google_service should not be present when empty")
 	}
 	if _, ok := attrMap["operation"]; ok {
 		t.Error("operation should not be present when empty")
