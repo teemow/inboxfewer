@@ -13,6 +13,9 @@
 
 set -euo pipefail
 
+# Fetch all tags from origin to ensure we have the latest
+git fetch origin --tags --force >/dev/null 2>&1 || true
+
 # Get the latest tag sorted by version
 LATEST_TAG=$(git tag --sort=-version:refname | head -n1 || true)
 
