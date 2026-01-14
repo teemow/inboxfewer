@@ -34,6 +34,22 @@ type OAuthConfig struct {
 	// Interstitial page branding configuration
 	// If nil, uses the default mcp-oauth interstitial page
 	Interstitial *oauth.InterstitialConfig
+
+	// RedirectURISecurity configures security validation for redirect URIs
+	// All options default to secure values in mcp-oauth
+	RedirectURISecurity oauth.RedirectURISecurityConfig
+
+	// TrustedPublicRegistrationSchemes lists URI schemes allowed for unauthenticated
+	// client registration. Enables Cursor/VSCode without registration tokens.
+	TrustedPublicRegistrationSchemes []string
+
+	// DisableStrictSchemeMatching allows mixed scheme clients to register without token
+	DisableStrictSchemeMatching bool
+
+	// EnableCIMD enables Client ID Metadata Documents per MCP 2025-11-25.
+	// When enabled, clients can use HTTPS URLs as client identifiers.
+	// Default: true (enabled for MCP 2025-11-25 compliance)
+	EnableCIMD bool
 }
 
 // OAuthHTTPServer wraps an MCP server with OAuth 2.1 authentication
@@ -43,6 +59,7 @@ type OAuthHTTPServer struct {
 	httpServer       *http.Server
 	serverType       string // "streamable-http"
 	disableStreaming bool
+	healthChecker    *HealthChecker
 }
 
 // buildOAuthConfig converts OAuthConfig to oauth.Config
@@ -80,6 +97,11 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 			UserRate:  100, // 100 req/sec per authenticated user
 			UserBurst: 200, // Allow burst of 200
 		},
+		// New mcp-oauth v0.2.30+ features
+		RedirectURISecurity:              config.RedirectURISecurity,
+		TrustedPublicRegistrationSchemes: config.TrustedPublicRegistrationSchemes,
+		DisableStrictSchemeMatching:      config.DisableStrictSchemeMatching,
+		EnableCIMD:                       config.EnableCIMD,
 	}
 
 	// Pass through interstitial config if provided
@@ -253,6 +275,13 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 		return fmt.Errorf("unsupported server type: %s", s.serverType)
 	}
 
+	// ========== Health Check Endpoints ==========
+
+	// Register health check endpoints
+	if s.healthChecker != nil {
+		s.healthChecker.RegisterHealthEndpoints(mux)
+	}
+
 	// Create HTTP server with security and CORS middleware
 	handler := securityHeadersMiddleware(corsMiddleware(mux))
 
@@ -285,6 +314,11 @@ func (s *OAuthHTTPServer) Shutdown(ctx context.Context) error {
 // GetOAuthHandler returns the OAuth handler for testing or direct access
 func (s *OAuthHTTPServer) GetOAuthHandler() *oauth.Handler {
 	return s.oauthHandler
+}
+
+// SetHealthChecker sets the health checker for health check endpoints.
+func (s *OAuthHTTPServer) SetHealthChecker(hc *HealthChecker) {
+	s.healthChecker = hc
 }
 
 // validateHTTPSRequirement ensures OAuth 2.1 HTTPS compliance

@@ -71,20 +71,22 @@ resources:
 
 livenessProbe:
   enabled: true
-  tcpSocket:
+  httpGet:
+    path: /healthz
     port: http
-  initialDelaySeconds: 15
-  periodSeconds: 20
+  initialDelaySeconds: 5
+  periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
 
 readinessProbe:
   enabled: true
-  tcpSocket:
+  httpGet:
+    path: /readyz
     port: http
   initialDelaySeconds: 5
   periodSeconds: 10
-  timeoutSeconds: 3
+  timeoutSeconds: 5
   failureThreshold: 3
 
 autoscaling:
@@ -180,6 +182,85 @@ oauthSecurity:
   # Prevents DoS attacks via mass client registration
   # Default: 10
   maxClientsPerIP: 10
+
+  # Redirect URI Security Configuration (mcp-oauth v0.2.30+)
+  # All settings default to secure values. Use disable* to opt-out.
+  redirectURISecurity:
+    # Disable production mode security validation
+    # Production mode enforces: HTTPS required, private IPs blocked, dangerous schemes blocked
+    # WARNING: Significantly weakens redirect URI security. Only disable for development.
+    # Default: false (production mode is enabled)
+    disableProductionMode: false
+
+    # Allow http://localhost and http://127.0.0.1 redirect URIs
+    # Required for native apps per RFC 8252 Section 7.3
+    # Default: false (operators must explicitly enable for native app support)
+    allowLocalhostRedirectURIs: false
+
+    # Allow private IP addresses (10.x, 172.16.x, 192.168.x) in redirect URIs
+    # WARNING: Enables SSRF attacks to internal networks if not properly secured.
+    # Only enable for internal/VPN deployments where clients use private IPs.
+    # Default: false (blocked for security)
+    allowPrivateIPRedirectURIs: false
+
+    # Allow link-local addresses (169.254.x.x, fe80::/10) in redirect URIs
+    # WARNING: Could enable access to cloud metadata services (169.254.169.254).
+    # This is a significant security risk in AWS, GCP, Azure environments.
+    # Default: false (blocked for security)
+    allowLinkLocalRedirectURIs: false
+
+    # Disable DNS validation of redirect URI hostnames
+    # DNS validation checks if hostnames resolve to private/internal IPs.
+    # WARNING: Disabling allows potential DNS rebinding attacks.
+    # Default: false (DNS validation is enabled)
+    disableDNSValidation: false
+
+    # Disable fail-closed DNS validation
+    # When strict mode is enabled, DNS resolution failures block client registration.
+    # When disabled, DNS failures are logged but registration proceeds (fail-open).
+    # WARNING: Disabling allows potential DNS validation bypass via intentional failures.
+    # Default: false (strict mode is enabled)
+    disableDNSValidationStrict: false
+
+    # Disable redirect URI validation at authorization time
+    # By default, redirect URIs are re-validated during authorization requests,
+    # not just at registration time. This protects against TOCTOU attacks.
+    # WARNING: Disabling allows DNS rebinding attacks between registration and use.
+    # Default: false (authorization-time validation is enabled)
+    disableAuthorizationTimeValidation: false
+
+  # Trusted Scheme Registration for Cursor/VSCode Compatibility (mcp-oauth v0.2.30+)
+  # This feature allows unauthenticated client registration for clients using
+  # specific custom URI schemes (e.g., cursor://, vscode://), while requiring
+  # registration tokens for all other clients.
+  #
+  # Security Model:
+  # Custom URI schemes can only be intercepted by the application that registered
+  # the scheme with the OS. An attacker cannot register a malicious OAuth client
+  # with cursor:// because they cannot receive the authorization callback.
+  #
+  # Example: ["cursor", "vscode", "vscode-insiders", "windsurf"]
+  # Default: [] (all registrations require a token)
+  trustedPublicRegistrationSchemes: []
+
+  # Disable strict scheme matching for trusted scheme registration
+  # When strict matching is enabled (default), ALL redirect URIs in a registration
+  # request must use schemes from trustedPublicRegistrationSchemes.
+  # When disabled, if ANY redirect URI uses a trusted scheme, registration is allowed.
+  # WARNING: Reduces security by allowing untrusted redirect URIs alongside trusted ones.
+  # Default: false (strict matching is enabled)
+  disableStrictSchemeMatching: false
+
+  # Client ID Metadata Documents (CIMD) - MCP 2025-11-25 (mcp-oauth v0.2.30+)
+  # When enabled, clients can use HTTPS URLs as client identifiers (e.g.,
+  # https://myapp.example.com/.well-known/oauth-client). The authorization server
+  # fetches client metadata from that URL, enabling decentralized client registration.
+  #
+  # Security: CIMD requires the server to make outbound HTTPS requests. The mcp-oauth
+  # library implements comprehensive SSRF protection (blocks private IPs, DNS rebinding).
+  #
+  # Default: true (enabled per MCP 2025-11-25 specification)
+  enableCIMD: true
 
 # OAuth Interstitial Page Branding
 # Customize the success page shown after OAuth authentication for custom URL schemes

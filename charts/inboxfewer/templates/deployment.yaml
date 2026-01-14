@@ -138,6 +138,51 @@ spec:
             value: {{ .Values.interstitial.backgroundGradient | quote }}
           {{- end }}
           {{- end }}
+          {{- /* Redirect URI Security Settings (mcp-oauth v0.2.30+) */ -}}
+          {{- if .Values.oauthSecurity.redirectURISecurity }}
+          {{- if .Values.oauthSecurity.redirectURISecurity.disableProductionMode }}
+          - name: MCP_OAUTH_DISABLE_PRODUCTION_MODE
+            value: "true"
+          {{- end }}
+          {{- if .Values.oauthSecurity.redirectURISecurity.allowLocalhostRedirectURIs }}
+          - name: MCP_OAUTH_ALLOW_LOCALHOST_REDIRECT_URIS
+            value: "true"
+          {{- end }}
+          {{- if .Values.oauthSecurity.redirectURISecurity.allowPrivateIPRedirectURIs }}
+          - name: MCP_OAUTH_ALLOW_PRIVATE_IP_REDIRECT_URIS
+            value: "true"
+          {{- end }}
+          {{- if .Values.oauthSecurity.redirectURISecurity.allowLinkLocalRedirectURIs }}
+          - name: MCP_OAUTH_ALLOW_LINK_LOCAL_REDIRECT_URIS
+            value: "true"
+          {{- end }}
+          {{- if .Values.oauthSecurity.redirectURISecurity.disableDNSValidation }}
+          - name: MCP_OAUTH_DISABLE_DNS_VALIDATION
+            value: "true"
+          {{- end }}
+          {{- if .Values.oauthSecurity.redirectURISecurity.disableDNSValidationStrict }}
+          - name: MCP_OAUTH_DISABLE_DNS_VALIDATION_STRICT
+            value: "true"
+          {{- end }}
+          {{- if .Values.oauthSecurity.redirectURISecurity.disableAuthorizationTimeValidation }}
+          - name: MCP_OAUTH_DISABLE_AUTHORIZATION_TIME_VALIDATION
+            value: "true"
+          {{- end }}
+          {{- end }}
+          {{- /* Trusted Scheme Registration (mcp-oauth v0.2.30+) */ -}}
+          {{- if .Values.oauthSecurity.trustedPublicRegistrationSchemes }}
+          - name: MCP_OAUTH_TRUSTED_SCHEMES
+            value: {{ .Values.oauthSecurity.trustedPublicRegistrationSchemes | join "," | quote }}
+          {{- end }}
+          {{- if .Values.oauthSecurity.disableStrictSchemeMatching }}
+          - name: MCP_OAUTH_DISABLE_STRICT_SCHEME_MATCHING
+            value: "true"
+          {{- end }}
+          {{- /* CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+) */ -}}
+          {{- if hasKey .Values.oauthSecurity "enableCIMD" }}
+          - name: MCP_OAUTH_ENABLE_CIMD
+            value: {{ .Values.oauthSecurity.enableCIMD | quote }}
+          {{- end }}
         {{- end }}
         ports:
           - name: http
@@ -145,8 +190,14 @@ spec:
             protocol: TCP
         {{- if .Values.livenessProbe.enabled }}
         livenessProbe:
+          {{- if .Values.livenessProbe.httpGet }}
+          httpGet:
+            path: {{ .Values.livenessProbe.httpGet.path }}
+            port: {{ .Values.livenessProbe.httpGet.port }}
+          {{- else if .Values.livenessProbe.tcpSocket }}
           tcpSocket:
             {{- toYaml .Values.livenessProbe.tcpSocket | nindent 12 }}
+          {{- end }}
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
@@ -154,8 +205,14 @@ spec:
         {{- end }}
         {{- if .Values.readinessProbe.enabled }}
         readinessProbe:
+          {{- if .Values.readinessProbe.httpGet }}
+          httpGet:
+            path: {{ .Values.readinessProbe.httpGet.path }}
+            port: {{ .Values.readinessProbe.httpGet.port }}
+          {{- else if .Values.readinessProbe.tcpSocket }}
           tcpSocket:
             {{- toYaml .Values.readinessProbe.tcpSocket | nindent 12 }}
+          {{- end }}
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}

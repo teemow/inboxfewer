@@ -11,6 +11,10 @@ import (
 	"github.com/giantswarm/mcp-oauth/storage"
 )
 
+// TokenStore is a type alias for the mcp-oauth TokenStore interface.
+// This allows external packages to use the interface without importing mcp-oauth directly.
+type TokenStore = storage.TokenStore
+
 // TokenProvider implements the server.TokenProvider interface using the mcp-oauth library's storage.
 // It bridges the mcp-oauth storage with our existing server context that needs token access.
 type TokenProvider struct {

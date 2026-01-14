@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -41,6 +42,22 @@ type OAuthSecurityConfig struct {
 	InterstitialButtonText         string
 	InterstitialPrimaryColor       string
 	InterstitialBackgroundGradient string
+
+	// Redirect URI Security (mcp-oauth v0.2.30+)
+	DisableProductionMode              bool
+	AllowLocalhostRedirectURIs         bool
+	AllowPrivateIPRedirectURIs         bool
+	AllowLinkLocalRedirectURIs         bool
+	DisableDNSValidation               bool
+	DisableDNSValidationStrict         bool
+	DisableAuthorizationTimeValidation bool
+
+	// Trusted scheme registration for Cursor/VSCode compatibility (mcp-oauth v0.2.30+)
+	TrustedPublicRegistrationSchemes []string
+	DisableStrictSchemeMatching      bool
+
+	// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
+	EnableCIMD bool
 }
 
 func newServeCmd() *cobra.Command {
@@ -59,6 +76,19 @@ func newServeCmd() *cobra.Command {
 		allowInsecureAuthWithoutState bool
 		maxClientsPerIP               int
 		encryptionKey                 string
+		// Redirect URI Security Settings (mcp-oauth v0.2.30+)
+		disableProductionMode              bool
+		allowLocalhostRedirectURIs         bool
+		allowPrivateIPRedirectURIs         bool
+		allowLinkLocalRedirectURIs         bool
+		disableDNSValidation               bool
+		disableDNSValidationStrict         bool
+		disableAuthorizationTimeValidation bool
+		// Trusted scheme registration for Cursor/VSCode (mcp-oauth v0.2.30+)
+		trustedPublicRegistrationSchemes []string
+		disableStrictSchemeMatching      bool
+		// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
+		enableCIMD bool
 	)
 
 	cmd := &cobra.Command{
@@ -111,6 +141,19 @@ OAuth Configuration:
 				AllowInsecureAuthWithoutState: allowInsecureAuthWithoutState,
 				MaxClientsPerIP:               maxClientsPerIP,
 				EncryptionKey:                 encKeyBytes,
+				// Redirect URI Security (mcp-oauth v0.2.30+)
+				DisableProductionMode:              disableProductionMode,
+				AllowLocalhostRedirectURIs:         allowLocalhostRedirectURIs,
+				AllowPrivateIPRedirectURIs:         allowPrivateIPRedirectURIs,
+				AllowLinkLocalRedirectURIs:         allowLinkLocalRedirectURIs,
+				DisableDNSValidation:               disableDNSValidation,
+				DisableDNSValidationStrict:         disableDNSValidationStrict,
+				DisableAuthorizationTimeValidation: disableAuthorizationTimeValidation,
+				// Trusted scheme registration (mcp-oauth v0.2.30+)
+				TrustedPublicRegistrationSchemes: trustedPublicRegistrationSchemes,
+				DisableStrictSchemeMatching:      disableStrictSchemeMatching,
+				// CIMD (mcp-oauth v0.2.30+)
+				EnableCIMD: enableCIMD,
 			}
 			return runServe(transport, debugMode, httpAddr, yolo, googleClientID, googleClientSecret, disableStreaming, baseURL, securityConfig)
 		},
@@ -131,6 +174,22 @@ OAuth Configuration:
 	cmd.Flags().StringVar(&encryptionKey, "oauth-encryption-key", "", "AES-256 encryption key for token storage at rest (32 bytes, base64 encoded). REQUIRED for production. Can also use MCP_OAUTH_ENCRYPTION_KEY env var. Generate with: openssl rand -base64 32")
 	cmd.Flags().BoolVar(&allowInsecureAuthWithoutState, "oauth-allow-no-state", false, "WARNING: Allow authorization without state parameter (weakens CSRF protection). Can also use MCP_OAUTH_ALLOW_NO_STATE env var. Default: false (secure)")
 	cmd.Flags().IntVar(&maxClientsPerIP, "oauth-max-clients-per-ip", 10, "Maximum number of clients that can be registered per IP address (prevents DoS). Can also use MCP_OAUTH_MAX_CLIENTS_PER_IP env var. Default: 10")
+
+	// Redirect URI Security Settings (mcp-oauth v0.2.30+)
+	cmd.Flags().BoolVar(&disableProductionMode, "oauth-disable-production-mode", false, "WARNING: Disable production mode security (allows HTTP, private IPs in redirect URIs). Significantly weakens security.")
+	cmd.Flags().BoolVar(&allowLocalhostRedirectURIs, "oauth-allow-localhost-redirect-uris", false, "Allow http://localhost redirect URIs for native apps (RFC 8252)")
+	cmd.Flags().BoolVar(&allowPrivateIPRedirectURIs, "oauth-allow-private-ip-redirect-uris", false, "WARNING: Allow private IP addresses (10.x, 172.16.x, 192.168.x) in redirect URIs. SSRF risk.")
+	cmd.Flags().BoolVar(&allowLinkLocalRedirectURIs, "oauth-allow-link-local-redirect-uris", false, "WARNING: Allow link-local addresses (169.254.x.x) in redirect URIs. Cloud metadata SSRF risk.")
+	cmd.Flags().BoolVar(&disableDNSValidation, "oauth-disable-dns-validation", false, "WARNING: Disable DNS validation of redirect URI hostnames. Allows DNS rebinding attacks.")
+	cmd.Flags().BoolVar(&disableDNSValidationStrict, "oauth-disable-dns-validation-strict", false, "WARNING: Disable fail-closed DNS validation (allow registration on DNS failures).")
+	cmd.Flags().BoolVar(&disableAuthorizationTimeValidation, "oauth-disable-authorization-time-validation", false, "WARNING: Disable redirect URI validation at authorization time. Allows TOCTOU attacks.")
+
+	// Trusted scheme registration for Cursor/VSCode compatibility (mcp-oauth v0.2.30+)
+	cmd.Flags().StringSliceVar(&trustedPublicRegistrationSchemes, "oauth-trusted-schemes", nil, "URI schemes allowed for unauthenticated client registration (e.g., cursor,vscode). Best for internal/dev deployments.")
+	cmd.Flags().BoolVar(&disableStrictSchemeMatching, "oauth-disable-strict-scheme-matching", false, "WARNING: Allow mixed redirect URI schemes with trusted scheme registration. Reduces security.")
+
+	// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
+	cmd.Flags().BoolVar(&enableCIMD, "oauth-enable-cimd", true, "Enable Client ID Metadata Documents (CIMD) per MCP 2025-11-25. Allows clients to use HTTPS URLs as client identifiers. Can also use MCP_OAUTH_ENABLE_CIMD env var.")
 
 	return cmd
 }
@@ -193,6 +252,48 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		// If still 0, use default of 10
 		if securityConfig.MaxClientsPerIP == 0 {
 			securityConfig.MaxClientsPerIP = 10
+		}
+	}
+
+	// Parse redirect URI security settings from environment variables (mcp-oauth v0.2.30+)
+	if !securityConfig.DisableProductionMode && os.Getenv("MCP_OAUTH_DISABLE_PRODUCTION_MODE") == "true" {
+		securityConfig.DisableProductionMode = true
+	}
+	if !securityConfig.AllowLocalhostRedirectURIs && os.Getenv("MCP_OAUTH_ALLOW_LOCALHOST_REDIRECT_URIS") == "true" {
+		securityConfig.AllowLocalhostRedirectURIs = true
+	}
+	if !securityConfig.AllowPrivateIPRedirectURIs && os.Getenv("MCP_OAUTH_ALLOW_PRIVATE_IP_REDIRECT_URIS") == "true" {
+		securityConfig.AllowPrivateIPRedirectURIs = true
+	}
+	if !securityConfig.AllowLinkLocalRedirectURIs && os.Getenv("MCP_OAUTH_ALLOW_LINK_LOCAL_REDIRECT_URIS") == "true" {
+		securityConfig.AllowLinkLocalRedirectURIs = true
+	}
+	if !securityConfig.DisableDNSValidation && os.Getenv("MCP_OAUTH_DISABLE_DNS_VALIDATION") == "true" {
+		securityConfig.DisableDNSValidation = true
+	}
+	if !securityConfig.DisableDNSValidationStrict && os.Getenv("MCP_OAUTH_DISABLE_DNS_VALIDATION_STRICT") == "true" {
+		securityConfig.DisableDNSValidationStrict = true
+	}
+	if !securityConfig.DisableAuthorizationTimeValidation && os.Getenv("MCP_OAUTH_DISABLE_AUTHORIZATION_TIME_VALIDATION") == "true" {
+		securityConfig.DisableAuthorizationTimeValidation = true
+	}
+
+	// Parse trusted scheme registration settings from environment variables (mcp-oauth v0.2.30+)
+	if len(securityConfig.TrustedPublicRegistrationSchemes) == 0 {
+		if schemes := os.Getenv("MCP_OAUTH_TRUSTED_SCHEMES"); schemes != "" {
+			securityConfig.TrustedPublicRegistrationSchemes = strings.Split(schemes, ",")
+		}
+	}
+	if !securityConfig.DisableStrictSchemeMatching && os.Getenv("MCP_OAUTH_DISABLE_STRICT_SCHEME_MATCHING") == "true" {
+		securityConfig.DisableStrictSchemeMatching = true
+	}
+
+	// Parse CIMD setting from environment variable (mcp-oauth v0.2.30+)
+	// Default to true (enabled) per MCP 2025-11-25 specification
+	if !securityConfig.EnableCIMD {
+		if os.Getenv("MCP_OAUTH_ENABLE_CIMD") != "false" {
+			// Default to true if not explicitly disabled
+			securityConfig.EnableCIMD = true
 		}
 	}
 
@@ -382,6 +483,21 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		AllowInsecureAuthWithoutState: securityConfig.AllowInsecureAuthWithoutState,
 		MaxClientsPerIP:               securityConfig.MaxClientsPerIP,
 		EncryptionKey:                 securityConfig.EncryptionKey,
+		// Redirect URI Security (mcp-oauth v0.2.30+)
+		RedirectURISecurity: oauth.RedirectURISecurityConfig{
+			DisableProductionMode:              securityConfig.DisableProductionMode,
+			AllowLocalhostRedirectURIs:         securityConfig.AllowLocalhostRedirectURIs,
+			AllowPrivateIPRedirectURIs:         securityConfig.AllowPrivateIPRedirectURIs,
+			AllowLinkLocalRedirectURIs:         securityConfig.AllowLinkLocalRedirectURIs,
+			DisableDNSValidation:               securityConfig.DisableDNSValidation,
+			DisableDNSValidationStrict:         securityConfig.DisableDNSValidationStrict,
+			DisableAuthorizationTimeValidation: securityConfig.DisableAuthorizationTimeValidation,
+		},
+		// Trusted scheme registration (mcp-oauth v0.2.30+)
+		TrustedPublicRegistrationSchemes: securityConfig.TrustedPublicRegistrationSchemes,
+		DisableStrictSchemeMatching:      securityConfig.DisableStrictSchemeMatching,
+		// CIMD (mcp-oauth v0.2.30+)
+		EnableCIMD: securityConfig.EnableCIMD,
 	}
 
 	// Configure interstitial page branding if any env vars are set
@@ -443,8 +559,13 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		return fmt.Errorf("failed to create OAuth HTTP server: %w", err)
 	}
 
+	// Set up health checker for health check endpoints
+	healthChecker := server.NewHealthChecker(serverContext)
+	oauthServer.SetHealthChecker(healthChecker)
+
 	fmt.Printf("Streamable HTTP server with Google OAuth authentication starting on %s\n", addr)
 	fmt.Printf("  HTTP endpoint: /mcp\n")
+	fmt.Printf("  Health endpoints: /healthz, /readyz\n")
 	fmt.Printf("  OAuth metadata: /.well-known/oauth-protected-resource\n")
 	fmt.Printf("  Authorization Server: %s\n", baseURL)
 

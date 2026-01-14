@@ -10,6 +10,7 @@ import (
 	"github.com/giantswarm/mcp-oauth/providers/google"
 	"github.com/giantswarm/mcp-oauth/security"
 	oauthserver "github.com/giantswarm/mcp-oauth/server"
+	"github.com/giantswarm/mcp-oauth/storage"
 	"github.com/giantswarm/mcp-oauth/storage/memory"
 
 	inboxgoogle "github.com/teemow/inboxfewer/internal/google"
@@ -42,6 +43,24 @@ type Config struct {
 	// Interstitial configures the OAuth success page for custom URL schemes (cursor://, vscode://, etc.)
 	// If nil, uses the default mcp-oauth interstitial page
 	Interstitial *InterstitialConfig
+
+	// RedirectURISecurity configures security validation for redirect URIs
+	// All options default to secure values in mcp-oauth
+	RedirectURISecurity RedirectURISecurityConfig
+
+	// TrustedPublicRegistrationSchemes lists URI schemes allowed for unauthenticated
+	// client registration. Enables Cursor/VSCode without registration tokens.
+	// Best suited for internal/development deployments due to platform-specific
+	// limitations in custom URI scheme security. Schemes must conform to RFC 3986.
+	TrustedPublicRegistrationSchemes []string
+
+	// DisableStrictSchemeMatching allows mixed scheme clients to register without token
+	DisableStrictSchemeMatching bool
+
+	// EnableCIMD enables Client ID Metadata Documents per MCP 2025-11-25.
+	// When enabled, clients can use HTTPS URLs as client identifiers.
+	// Default: true (enabled for MCP 2025-11-25 compliance)
+	EnableCIMD bool
 
 	// Logger for structured logging (optional, uses default if not provided)
 	Logger *slog.Logger
@@ -138,11 +157,37 @@ type RateLimitConfig struct {
 	TrustProxy bool
 }
 
+// RedirectURISecurityConfig holds configuration for redirect URI security validation.
+// All options default to secure values in mcp-oauth. Use Disable* flags to opt-out.
+type RedirectURISecurityConfig struct {
+	// DisableProductionMode disables strict HTTPS/private IP enforcement
+	DisableProductionMode bool
+
+	// AllowLocalhostRedirectURIs allows http://localhost for native apps (RFC 8252)
+	AllowLocalhostRedirectURIs bool
+
+	// AllowPrivateIPRedirectURIs allows private IP addresses in redirect URIs
+	AllowPrivateIPRedirectURIs bool
+
+	// AllowLinkLocalRedirectURIs allows link-local addresses (169.254.x.x)
+	AllowLinkLocalRedirectURIs bool
+
+	// DisableDNSValidation disables hostname resolution checks
+	DisableDNSValidation bool
+
+	// DisableDNSValidationStrict disables fail-closed DNS validation
+	DisableDNSValidationStrict bool
+
+	// DisableAuthorizationTimeValidation disables redirect URI checks at auth time
+	DisableAuthorizationTimeValidation bool
+}
+
 // Handler wraps the mcp-oauth library components for integration with inboxfewer
 type Handler struct {
 	server          *oauth.Server
 	handler         *oauth.Handler
-	store           *memory.Store
+	tokenStore      storage.TokenStore
+	memoryStore     *memory.Store // Only set when using memory storage
 	ipRateLimiter   *security.RateLimiter
 	userRateLimiter *security.RateLimiter
 	clientRegRL     *security.ClientRegistrationRateLimiter
@@ -169,8 +214,11 @@ func NewHandler(config *Config) (*Handler, error) {
 		return nil, fmt.Errorf("failed to create Google provider: %w", err)
 	}
 
-	// Create memory storage
-	store := memory.New()
+	// Create memory storage (inboxfewer uses memory storage only)
+	memStore := memory.New()
+	var tokenStore storage.TokenStore = memStore
+	var clientStore storage.ClientStore = memStore
+	var flowStore storage.FlowStore = memStore
 
 	// Set default refresh token TTL if not specified
 	refreshTokenTTL := config.Security.RefreshTokenTTL
@@ -185,7 +233,7 @@ func NewHandler(config *Config) (*Handler, error) {
 	}
 
 	// Create server configuration
-	serverConfig := &oauth.ServerConfig{
+	serverConfig := &oauthserver.Config{
 		Issuer:                        config.BaseURL,
 		RefreshTokenTTL:               int64(refreshTokenTTL.Seconds()),
 		AllowRefreshTokenRotation:     true,  // OAuth 2.1 best practice
@@ -198,6 +246,25 @@ func NewHandler(config *Config) (*Handler, error) {
 		TrustProxy:                    config.RateLimit.TrustProxy,
 		TokenRefreshThreshold:         300, // 5 minutes proactive refresh
 		ClockSkewGracePeriod:          5,   // 5 seconds clock skew tolerance
+
+		// Enable Client ID Metadata Documents (CIMD) per MCP 2025-11-25
+		// Allows clients to use HTTPS URLs as client identifiers
+		EnableClientIDMetadataDocuments: config.EnableCIMD,
+
+		// Trusted scheme registration for Cursor/VSCode compatibility
+		// Allows unauthenticated registration for clients using these schemes only
+		TrustedPublicRegistrationSchemes: config.TrustedPublicRegistrationSchemes,
+		DisableStrictSchemeMatching:      config.DisableStrictSchemeMatching,
+
+		// Redirect URI Security Configuration
+		// mcp-oauth defaults to secure values; we pass explicit disable flags
+		DisableProductionMode:              config.RedirectURISecurity.DisableProductionMode,
+		AllowLocalhostRedirectURIs:         config.RedirectURISecurity.AllowLocalhostRedirectURIs,
+		AllowPrivateIPRedirectURIs:         config.RedirectURISecurity.AllowPrivateIPRedirectURIs,
+		AllowLinkLocalRedirectURIs:         config.RedirectURISecurity.AllowLinkLocalRedirectURIs,
+		DisableDNSValidation:               config.RedirectURISecurity.DisableDNSValidation,
+		DisableDNSValidationStrict:         config.RedirectURISecurity.DisableDNSValidationStrict,
+		DisableAuthorizationTimeValidation: config.RedirectURISecurity.DisableAuthorizationTimeValidation,
 	}
 
 	// Configure interstitial page branding if provided
@@ -219,9 +286,9 @@ func NewHandler(config *Config) (*Handler, error) {
 	// Create OAuth server
 	server, err := oauth.NewServer(
 		provider,
-		store, // TokenStore
-		store, // ClientStore
-		store, // FlowStore
+		tokenStore,  // TokenStore
+		clientStore, // ClientStore
+		flowStore,   // FlowStore
 		serverConfig,
 		logger,
 	)
@@ -274,9 +341,17 @@ func NewHandler(config *Config) (*Handler, error) {
 			"burst", burst)
 	}
 
-	// Set up client registration rate limiting
-	clientRegRL := security.NewClientRegistrationRateLimiter(logger)
+	// Set up client registration rate limiting with configured maxClientsPerIP
+	clientRegRL := security.NewClientRegistrationRateLimiterWithConfig(
+		maxClientsPerIP,
+		security.DefaultRegistrationWindow,
+		security.DefaultMaxRegistrationEntries,
+		logger,
+	)
 	server.SetClientRegistrationRateLimiter(clientRegRL)
+	logger.Info("Client registration rate limiting enabled",
+		"maxClientsPerIP", maxClientsPerIP,
+		"window", security.DefaultRegistrationWindow)
 
 	// Create HTTP handler
 	handler := oauth.NewHandler(server, logger)
@@ -284,7 +359,8 @@ func NewHandler(config *Config) (*Handler, error) {
 	return &Handler{
 		server:          server,
 		handler:         handler,
-		store:           store,
+		tokenStore:      tokenStore,
+		memoryStore:     memStore,
 		ipRateLimiter:   ipRateLimiter,
 		userRateLimiter: userRateLimiter,
 		clientRegRL:     clientRegRL,
@@ -297,8 +373,8 @@ func (h *Handler) GetHandler() *oauth.Handler {
 }
 
 // GetStore returns the underlying storage for token provider integration
-func (h *Handler) GetStore() *memory.Store {
-	return h.store
+func (h *Handler) GetStore() storage.TokenStore {
+	return h.tokenStore
 }
 
 // GetServer returns the underlying OAuth server
@@ -317,8 +393,8 @@ func (h *Handler) CanRefreshTokens() bool {
 // This method is idempotent and safe to call concurrently from multiple goroutines.
 func (h *Handler) Stop() {
 	h.stopOnce.Do(func() {
-		if h.store != nil {
-			h.store.Stop()
+		if h.memoryStore != nil {
+			h.memoryStore.Stop()
 		}
 		if h.ipRateLimiter != nil {
 			h.ipRateLimiter.Stop()
