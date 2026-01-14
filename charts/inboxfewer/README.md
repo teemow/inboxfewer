@@ -238,7 +238,32 @@ The following table lists the configurable parameters of the inboxfewer chart an
 | `grafanaDashboards.dashboards.security.enabled` | Enable Security Operations dashboard | `true` |
 | `grafanaDashboards.dashboards.endUser.enabled` | Enable End-User dashboard | `true` |
 
-**Note:** Dashboard ConfigMaps are created with labels that match the default Grafana sidecar configuration in kube-prometheus-stack. The sidecar automatically imports dashboards from ConfigMaps with the `grafana_dashboard: "1"` label.
+**Note:** Dashboard ConfigMaps are created with labels that match the default Grafana sidecar configuration in kube-prometheus-stack. The sidecar automatically imports dashboards from ConfigMaps with the `grafana_dashboard: "1"` label. When deploying to a different namespace, ensure the Helm release has RBAC permissions to create ConfigMaps in that namespace.
+
+### Prometheus Alerting Rules
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `prometheusRule.enabled` | Enable PrometheusRule for alerting | `false` |
+| `prometheusRule.namespace` | Namespace for PrometheusRule (defaults to release namespace) | `""` |
+| `prometheusRule.labels` | Labels for Prometheus discovery | `{}` |
+| `prometheusRule.annotations` | Additional annotations | `{}` |
+| `prometheusRule.rules.httpErrorRate.enabled` | Enable HTTP error rate alert | `true` |
+| `prometheusRule.rules.httpErrorRate.threshold` | Error percentage threshold | `5` |
+| `prometheusRule.rules.httpErrorRate.for` | Duration before firing | `5m` |
+| `prometheusRule.rules.httpErrorRate.severity` | Alert severity | `warning` |
+| `prometheusRule.rules.highLatency.enabled` | Enable high latency alert | `true` |
+| `prometheusRule.rules.highLatency.threshold` | P95 latency threshold (seconds) | `2` |
+| `prometheusRule.rules.oauthFailures.enabled` | Enable OAuth failure alert | `true` |
+| `prometheusRule.rules.oauthFailures.threshold` | Failures per minute threshold | `10` |
+| `prometheusRule.rules.podRestarts.enabled` | Enable pod restart alert | `true` |
+| `prometheusRule.rules.podRestarts.threshold` | Restarts per hour threshold | `3` |
+| `prometheusRule.rules.googleAPIErrors.enabled` | Enable Google API error alert | `true` |
+| `prometheusRule.rules.googleAPIErrors.threshold` | Error percentage threshold | `10` |
+| `prometheusRule.rules.toolErrors.enabled` | Enable MCP tool error alert | `true` |
+| `prometheusRule.rules.toolErrors.threshold` | Error percentage threshold | `10` |
+
+**Note:** PrometheusRule requires prometheus-operator or kube-prometheus-stack. Configure `prometheusRule.labels` to match your Prometheus operator's `ruleSelector` for automatic discovery.
 
 ### Volumes and Storage
 
@@ -324,6 +349,26 @@ This creates ConfigMaps containing three dashboards:
 - **End-User** - AI agent activity visibility and tool usage transparency
 
 **Note:** The Grafana sidecar must be configured to watch the namespace where dashboards are created. By default, kube-prometheus-stack watches all namespaces for ConfigMaps with the `grafana_dashboard: "1"` label. Dashboards use Grafana template variables for data source selection.
+
+### With Prometheus Alerting Rules
+
+Enable PrometheusRule for alerting (requires kube-prometheus-stack or prometheus-operator):
+
+```bash
+helm install inboxfewer ./charts/inboxfewer \
+  --set prometheusRule.enabled=true \
+  --set prometheusRule.labels.release=prometheus
+```
+
+This creates alerting rules for:
+- **HTTP Error Rate** - Alerts when 5xx errors exceed 5%
+- **High Latency** - Alerts when P95 latency exceeds 2 seconds
+- **OAuth Failures** - Alerts on authentication failures (>10/min)
+- **Pod Restarts** - Alerts on container restarts (>3/hour)
+- **Google API Errors** - Alerts when API errors exceed 10%
+- **MCP Tool Errors** - Alerts when tool invocation errors exceed 10%
+
+**Note:** Configure `prometheusRule.labels` to match your Prometheus operator's `ruleSelector`. For kube-prometheus-stack, this is typically `release: prometheus`.
 
 ### With Persistent OAuth Token Storage
 

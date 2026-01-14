@@ -1,0 +1,134 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "inboxfewer.fullname" . }}
+  namespace: {{ .Values.prometheusRule.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "inboxfewer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alerting
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.prometheusRule.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  groups:
+    - name: inboxfewer.rules
+      rules:
+        {{- if .Values.prometheusRule.rules.httpErrorRate.enabled }}
+        # HTTP Error Rate Alert
+        - alert: InboxfewerHighHTTPErrorRate
+          expr: (sum(rate(http_requests_total{namespace="{{ .Release.Namespace }}", status=~"5.."}[5m])) / sum(rate(http_requests_total{namespace="{{ .Release.Namespace }}"}[5m]))) * 100 > {{ .Values.prometheusRule.rules.httpErrorRate.threshold }}
+          for: {{ .Values.prometheusRule.rules.httpErrorRate.for | quote }}
+          labels:
+            severity: {{ .Values.prometheusRule.rules.httpErrorRate.severity | quote }}
+            service: inboxfewer
+            {{- with .Values.prometheusRule.rules.httpErrorRate.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: High HTTP error rate in inboxfewer
+            description: 'HTTP error rate is {{`{{ $value | printf "%.2f" }}`}}% (threshold: {{ .Values.prometheusRule.rules.httpErrorRate.threshold }}%)'
+            {{- if .Values.prometheusRule.rules.httpErrorRate.runbookUrl }}
+            runbook_url: {{ .Values.prometheusRule.rules.httpErrorRate.runbookUrl | quote }}
+            {{- end }}
+        {{- end }}
+
+        {{- if .Values.prometheusRule.rules.highLatency.enabled }}
+        # High Latency Alert
+        - alert: InboxfewerHighLatency
+          expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="{{ .Release.Namespace }}"}[5m])) by (le)) > {{ .Values.prometheusRule.rules.highLatency.threshold }}
+          for: {{ .Values.prometheusRule.rules.highLatency.for | quote }}
+          labels:
+            severity: {{ .Values.prometheusRule.rules.highLatency.severity | quote }}
+            service: inboxfewer
+            {{- with .Values.prometheusRule.rules.highLatency.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: High P95 latency in inboxfewer
+            description: 'P95 latency is {{`{{ $value | printf "%.2f" }}`}}s (threshold: {{ .Values.prometheusRule.rules.highLatency.threshold }}s)'
+            {{- if .Values.prometheusRule.rules.highLatency.runbookUrl }}
+            runbook_url: {{ .Values.prometheusRule.rules.highLatency.runbookUrl | quote }}
+            {{- end }}
+        {{- end }}
+
+        {{- if .Values.prometheusRule.rules.oauthFailures.enabled }}
+        # OAuth Failures Alert
+        - alert: InboxfewerOAuthFailures
+          expr: sum(rate(oauth_auth_total{namespace="{{ .Release.Namespace }}", result="failure"}[5m])) * 60 > {{ .Values.prometheusRule.rules.oauthFailures.threshold }}
+          for: {{ .Values.prometheusRule.rules.oauthFailures.for | quote }}
+          labels:
+            severity: {{ .Values.prometheusRule.rules.oauthFailures.severity | quote }}
+            service: inboxfewer
+            {{- with .Values.prometheusRule.rules.oauthFailures.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: High OAuth failure rate in inboxfewer
+            description: 'OAuth failures: {{`{{ $value | printf "%.0f" }}`}}/min (threshold: {{ .Values.prometheusRule.rules.oauthFailures.threshold }}/min)'
+            {{- if .Values.prometheusRule.rules.oauthFailures.runbookUrl }}
+            runbook_url: {{ .Values.prometheusRule.rules.oauthFailures.runbookUrl | quote }}
+            {{- end }}
+        {{- end }}
+
+        {{- if .Values.prometheusRule.rules.podRestarts.enabled }}
+        # Pod Restarts Alert
+        - alert: InboxfewerPodRestarts
+          expr: increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}", container="inboxfewer"}[1h]) > {{ .Values.prometheusRule.rules.podRestarts.threshold }}
+          for: {{ .Values.prometheusRule.rules.podRestarts.for | quote }}
+          labels:
+            severity: {{ .Values.prometheusRule.rules.podRestarts.severity | quote }}
+            service: inboxfewer
+            {{- with .Values.prometheusRule.rules.podRestarts.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: Inboxfewer pod restarting frequently
+            description: 'Pod {{`{{ $labels.pod }}`}} restarted {{`{{ $value | printf "%.0f" }}`}} times in the last hour'
+            {{- if .Values.prometheusRule.rules.podRestarts.runbookUrl }}
+            runbook_url: {{ .Values.prometheusRule.rules.podRestarts.runbookUrl | quote }}
+            {{- end }}
+        {{- end }}
+
+        {{- if .Values.prometheusRule.rules.googleAPIErrors.enabled }}
+        # Google API Error Rate Alert
+        - alert: InboxfewerGoogleAPIErrors
+          expr: (sum(rate(google_api_operations_total{namespace="{{ .Release.Namespace }}", status="error"}[5m])) / sum(rate(google_api_operations_total{namespace="{{ .Release.Namespace }}"}[5m]))) * 100 > {{ .Values.prometheusRule.rules.googleAPIErrors.threshold }}
+          for: {{ .Values.prometheusRule.rules.googleAPIErrors.for | quote }}
+          labels:
+            severity: {{ .Values.prometheusRule.rules.googleAPIErrors.severity | quote }}
+            service: inboxfewer
+            {{- with .Values.prometheusRule.rules.googleAPIErrors.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: High Google API error rate in inboxfewer
+            description: 'Google API error rate is {{`{{ $value | printf "%.2f" }}`}}% (threshold: {{ .Values.prometheusRule.rules.googleAPIErrors.threshold }}%)'
+            {{- if .Values.prometheusRule.rules.googleAPIErrors.runbookUrl }}
+            runbook_url: {{ .Values.prometheusRule.rules.googleAPIErrors.runbookUrl | quote }}
+            {{- end }}
+        {{- end }}
+
+        {{- if .Values.prometheusRule.rules.toolErrors.enabled }}
+        # MCP Tool Error Rate Alert
+        - alert: InboxfewerToolErrors
+          expr: (sum(rate(mcp_tool_invocations_total{namespace="{{ .Release.Namespace }}", status="error"}[5m])) / sum(rate(mcp_tool_invocations_total{namespace="{{ .Release.Namespace }}"}[5m]))) * 100 > {{ .Values.prometheusRule.rules.toolErrors.threshold }}
+          for: {{ .Values.prometheusRule.rules.toolErrors.for | quote }}
+          labels:
+            severity: {{ .Values.prometheusRule.rules.toolErrors.severity | quote }}
+            service: inboxfewer
+            {{- with .Values.prometheusRule.rules.toolErrors.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: High MCP tool error rate in inboxfewer
+            description: 'MCP tool error rate is {{`{{ $value | printf "%.2f" }}`}}% (threshold: {{ .Values.prometheusRule.rules.toolErrors.threshold }}%)'
+            {{- if .Values.prometheusRule.rules.toolErrors.runbookUrl }}
+            runbook_url: {{ .Values.prometheusRule.rules.toolErrors.runbookUrl | quote }}
+            {{- end }}
+        {{- end }}
+{{- end }}

@@ -529,6 +529,9 @@ grafanaDashboards:
   # Namespace where Grafana is installed (for dashboard ConfigMaps)
   # If not set, dashboards are created in the release namespace
   # Note: Grafana sidecar must be configured to watch this namespace
+  # RBAC: When deploying to a different namespace, ensure the Helm release
+  # ServiceAccount has permissions to create ConfigMaps in the target namespace,
+  # or use a ClusterRole with cross-namespace ConfigMap creation rights.
   namespace: ""
 
   # Labels to add to dashboard ConfigMaps for Grafana sidecar discovery
@@ -560,3 +563,88 @@ grafanaDashboards:
     # Helps users understand how AI agents use MCP tools on their behalf
     endUser:
       enabled: true
+
+# Prometheus Alerting Rules
+# Creates a PrometheusRule resource for alerting on inboxfewer metrics
+# Requires prometheus-operator or kube-prometheus-stack
+prometheusRule:
+  # Enable PrometheusRule creation
+  enabled: false
+
+  # Namespace for the PrometheusRule (defaults to release namespace)
+  namespace: ""
+
+  # Labels to add to the PrometheusRule for Prometheus discovery
+  # Match these to your Prometheus operator's ruleSelector
+  labels: {}
+    # prometheus: kube-prometheus
+    # release: prometheus
+
+  # Additional annotations
+  annotations: {}
+
+  # Individual alert rules configuration
+  rules:
+    # HTTP Error Rate: Alert when 5xx errors exceed threshold
+    httpErrorRate:
+      enabled: true
+      # Error rate percentage threshold
+      threshold: 5
+      # How long the condition must be true before firing
+      for: 5m
+      # Alert severity (critical, warning, info)
+      severity: warning
+      # Additional labels for the alert
+      labels: {}
+      # Runbook URL for incident response
+      runbookUrl: ""
+
+    # High Latency: Alert when P95 latency exceeds threshold
+    highLatency:
+      enabled: true
+      # P95 latency threshold in seconds
+      threshold: 2
+      for: 5m
+      severity: warning
+      labels: {}
+      runbookUrl: ""
+
+    # OAuth Failures: Alert on authentication failures
+    oauthFailures:
+      enabled: true
+      # Failures per minute threshold
+      threshold: 10
+      for: 5m
+      severity: warning
+      labels: {}
+      runbookUrl: ""
+
+    # Pod Restarts: Alert on container restarts
+    podRestarts:
+      enabled: true
+      # Restart count threshold per hour
+      threshold: 3
+      for: 5m
+      severity: warning
+      labels: {}
+      runbookUrl: ""
+
+    # Google API Errors: Alert on API failures
+    googleAPIErrors:
+      enabled: true
+      # Error rate percentage threshold
+      threshold: 10
+      for: 5m
+      severity: warning
+      labels: {}
+      runbookUrl: ""
+
+    # MCP Tool Errors: Alert on tool invocation failures
+    toolErrors:
+      enabled: true
+      # Error rate percentage threshold
+      threshold: 10
+      for: 5m
+      severity: warning
+      labels: {}
+      runbookUrl: ""

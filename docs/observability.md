@@ -326,9 +326,52 @@ spec:
       interval: 15s
 ```
 
-## Example Alerts
+## Alerting
 
-### High Error Rate
+### Helm Chart PrometheusRule (Recommended)
+
+The inboxfewer Helm chart includes a PrometheusRule resource with pre-configured alerts:
+
+```bash
+helm install inboxfewer ./charts/inboxfewer \
+  --set prometheusRule.enabled=true \
+  --set prometheusRule.labels.release=prometheus
+```
+
+**Included Alerts:**
+
+| Alert | Description | Default Threshold |
+|-------|-------------|-------------------|
+| `InboxfewerHighHTTPErrorRate` | 5xx HTTP errors | >5% for 5m |
+| `InboxfewerHighLatency` | P95 response time | >2s for 5m |
+| `InboxfewerOAuthFailures` | OAuth authentication failures | >10/min for 5m |
+| `InboxfewerPodRestarts` | Container restarts | >3/hour for 5m |
+| `InboxfewerGoogleAPIErrors` | Google API errors | >10% for 5m |
+| `InboxfewerToolErrors` | MCP tool invocation errors | >10% for 5m |
+
+**Customizing Thresholds:**
+
+```bash
+helm install inboxfewer ./charts/inboxfewer \
+  --set prometheusRule.enabled=true \
+  --set prometheusRule.rules.httpErrorRate.threshold=10 \
+  --set prometheusRule.rules.highLatency.threshold=5 \
+  --set prometheusRule.rules.httpErrorRate.severity=critical
+```
+
+**Disabling Individual Alerts:**
+
+```bash
+helm install inboxfewer ./charts/inboxfewer \
+  --set prometheusRule.enabled=true \
+  --set prometheusRule.rules.podRestarts.enabled=false
+```
+
+### Example Custom Alerts
+
+For additional custom alerts, use the following PromQL examples:
+
+#### High Error Rate
 
 ```yaml
 groups:
@@ -513,6 +556,8 @@ helm install inboxfewer ./charts/inboxfewer \
 ```
 
 If using kube-prometheus-stack, the Grafana sidecar will automatically detect and import dashboards from ConfigMaps with the `grafana_dashboard: "1"` label.
+
+**Cross-Namespace Deployment:** When deploying dashboard ConfigMaps to a different namespace (e.g., `monitoring`), ensure the Helm release's ServiceAccount has permissions to create ConfigMaps in the target namespace, or use a ClusterRole with cross-namespace ConfigMap creation rights.
 
 #### Option 3: Grafana HTTP API
 
