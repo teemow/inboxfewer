@@ -442,26 +442,74 @@ A basic Grafana dashboard can be created with these panels. See the [Grafana doc
 
 ## Tracing
 
-> **Note**: Full distributed tracing is planned for a future release. See [issue #74](https://github.com/teemow/inboxfewer/issues/74).
+`inboxfewer` provides distributed tracing for all MCP tool invocations using OpenTelemetry.
 
-When `TRACING_EXPORTER=otlp` is set, distributed traces can be exported to an OTLP collector (Jaeger, Tempo, etc.).
+When `TRACING_EXPORTER=otlp` is set, distributed traces are exported to an OTLP collector (Jaeger, Tempo, Honeycomb, etc.).
 
-### Planned Trace Attributes
+### Trace Attributes
 
-Traces will include the following attributes:
+All tool invocation spans include the following attributes:
 
-- `mcp.tool`: MCP tool name being executed
-- `mcp.service`: Google service (gmail, calendar, drive, etc.)
-- `mcp.operation`: Operation type (list, get, create, delete)
-- `mcp.account`: User account (when available)
-- `mcp.status`: Operation result
+| Attribute | Description | Example |
+|-----------|-------------|---------|
+| `mcp.tool` | MCP tool name being executed | `gmail_list_emails` |
+| `google.service` | Google service name (for service-aware tools) | `gmail`, `calendar`, `drive` |
+| `google.operation` | Operation type (for service-aware tools) | `list`, `get`, `create`, `delete` |
+| `mcp.account` | User account (when available) | `work`, `personal` |
 
 ### Span Naming Convention
 
-Spans will follow a consistent naming convention:
+Spans follow a consistent naming convention:
 
 - `tool.<tool_name>`: MCP tool invocations (e.g., `tool.gmail_list_emails`)
 - `google.<service>.<operation>`: Google API calls (e.g., `google.gmail.list`)
+
+### Span Status
+
+Spans are automatically marked with the appropriate status:
+
+- **OK**: When the tool executes successfully
+- **Error**: When the tool returns an error (Go error or `CallToolResult.IsError`)
+
+When an error occurs, the span records:
+- Error status with description
+- Error event with stack trace information
+
+### Log-Trace Correlation
+
+Audit logs automatically include trace context when available:
+
+```json
+{
+  "level": "info",
+  "msg": "tool_executed",
+  "tool": "gmail_send_email",
+  "service": "gmail",
+  "operation": "send",
+  "trace_id": "abc123def456...",
+  "span_id": "789xyz..."
+}
+```
+
+This enables correlation between logs and traces in your observability platform.
+
+### Example: Viewing Traces in Jaeger
+
+1. Configure OTLP endpoint:
+   ```bash
+   TRACING_EXPORTER=otlp
+   OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4318
+   ```
+
+2. Execute some MCP tools
+
+3. Open Jaeger UI and search for service `inboxfewer`
+
+4. View traces to see:
+   - Request flow through tool handlers
+   - Duration of each tool invocation
+   - Error information for failed operations
+   - Service/operation breakdown for Google API tools
 
 ## Health Endpoints
 

@@ -26,6 +26,9 @@ const (
 	// SpanAttrAccount is the user account/email attribute.
 	SpanAttrAccount = "mcp.account"
 
+	// SpanAttrStatus is the operation status attribute.
+	SpanAttrStatus = "mcp.status"
+
 	// SpanAttrResourceID is the resource identifier (email ID, event ID, etc.).
 	SpanAttrResourceID = "mcp.resource_id"
 
