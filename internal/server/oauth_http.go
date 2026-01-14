@@ -12,6 +12,7 @@ import (
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/teemow/inboxfewer/internal/instrumentation"
 	"github.com/teemow/inboxfewer/internal/mcp/oauth"
 )
 
@@ -74,6 +75,7 @@ type OAuthHTTPServer struct {
 	healthChecker    *HealthChecker
 	tlsCertFile      string
 	tlsKeyFile       string
+	metrics          *instrumentation.Metrics
 }
 
 // buildOAuthConfig converts OAuthConfig to oauth.Config
@@ -295,11 +297,13 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 			)
 		}
 
-		// Wrap MCP endpoint with OAuth middleware
+		// Wrap MCP endpoint with OAuth middleware and instrumentation
 		mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			httpServer.ServeHTTP(w, r)
 		})
-		mux.Handle("/mcp", libHandler.ValidateToken(mcpHandler))
+		// Wrap with OAuth validation, then with auth instrumentation
+		validatedHandler := libHandler.ValidateToken(mcpHandler)
+		mux.Handle("/mcp", s.oauthInstrumentationWrapper(validatedHandler))
 
 	default:
 		return fmt.Errorf("unsupported server type: %s", s.serverType)
@@ -312,8 +316,9 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 		s.healthChecker.RegisterHealthEndpoints(mux)
 	}
 
-	// Create HTTP server with security and CORS middleware
-	handler := securityHeadersMiddleware(corsMiddleware(mux))
+	// Create HTTP server with security, CORS, and instrumentation middleware
+	// Order: instrumentation -> security -> CORS -> mux
+	handler := s.instrumentationMiddleware(securityHeadersMiddleware(corsMiddleware(mux)))
 
 	s.httpServer = &http.Server{
 		Addr:              addr,
@@ -354,6 +359,69 @@ func (s *OAuthHTTPServer) GetOAuthHandler() *oauth.Handler {
 // SetHealthChecker sets the health checker for health check endpoints.
 func (s *OAuthHTTPServer) SetHealthChecker(hc *HealthChecker) {
 	s.healthChecker = hc
+}
+
+// SetMetrics sets the metrics instance for HTTP instrumentation.
+func (s *OAuthHTTPServer) SetMetrics(m *instrumentation.Metrics) {
+	s.metrics = m
+}
+
+// responseWriter wraps http.ResponseWriter to capture the status code
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+// newResponseWriter creates a responseWriter with a default 200 status code
+func newResponseWriter(w http.ResponseWriter) *responseWriter {
+	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+}
+
+// WriteHeader captures the status code before calling the underlying WriteHeader
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+// instrumentationMiddleware records HTTP request metrics for all requests
+func (s *OAuthHTTPServer) instrumentationMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip if metrics not configured
+		if s.metrics == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		start := time.Now()
+		rw := newResponseWriter(w)
+
+		next.ServeHTTP(rw, r)
+
+		// Record HTTP request metrics
+		duration := time.Since(start)
+		s.metrics.RecordHTTPRequest(r.Context(), r.Method, r.URL.Path, rw.statusCode, duration)
+	})
+}
+
+// oauthInstrumentationWrapper wraps the OAuth token validation middleware to record auth metrics
+func (s *OAuthHTTPServer) oauthInstrumentationWrapper(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Track auth validation result using response status
+		rw := newResponseWriter(w)
+
+		handler.ServeHTTP(rw, r)
+
+		// Record OAuth auth metrics based on response status
+		if s.metrics != nil {
+			if rw.statusCode == http.StatusUnauthorized || rw.statusCode == http.StatusForbidden {
+				s.metrics.RecordOAuthAuth(r.Context(), instrumentation.OAuthResultFailure)
+			} else if rw.statusCode >= 200 && rw.statusCode < 400 {
+				s.metrics.RecordOAuthAuth(r.Context(), instrumentation.OAuthResultSuccess)
+				// Increment active sessions on successful auth
+				s.metrics.IncrementActiveSessions(r.Context())
+			}
+		}
+	})
 }
 
 // validateHTTPSRequirement ensures OAuth 2.1 HTTPS compliance
