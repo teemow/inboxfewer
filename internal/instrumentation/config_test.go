@@ -2,6 +2,7 @@ package instrumentation
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -160,7 +161,7 @@ func TestConfig_Validate(t *testing.T) {
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error, got nil")
-				} else if tt.errContains != "" && !containsString(err.Error(), tt.errContains) {
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
 					t.Errorf("expected error containing %q, got %q", tt.errContains, err.Error())
 				}
 			} else {
@@ -170,19 +171,6 @@ func TestConfig_Validate(t *testing.T) {
 			}
 		})
 	}
-}
-
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func TestGetEnvOrDefault(t *testing.T) {

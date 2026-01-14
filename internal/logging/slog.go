@@ -21,6 +21,8 @@ const (
 )
 
 // Status values for consistent logging.
+// Note: These are intentionally duplicated from instrumentation package
+// to avoid circular dependencies (instrumentation imports logging).
 const (
 	StatusSuccess = "success"
 	StatusError   = "error"
@@ -72,9 +74,16 @@ func Status(status string) slog.Attr {
 }
 
 // Err returns a slog attribute for an error.
+// If err is nil, returns an empty Group attribute that will be omitted from output.
+// This allows safely passing Err(maybeNilErr) without adding empty attributes.
+//
+// Usage:
+//
+//	logger.Info("operation", logging.Err(err))  // Safe even if err is nil
 func Err(err error) slog.Attr {
 	if err == nil {
-		return slog.String(KeyError, "")
+		// Return an empty Group that slog will omit from output
+		return slog.Group("")
 	}
 	return slog.String(KeyError, err.Error())
 }

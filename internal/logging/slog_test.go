@@ -99,10 +99,11 @@ func TestErr(t *testing.T) {
 		t.Errorf("Err value = %q, want %q", attr.Value.String(), "test error")
 	}
 
-	// Test with nil
+	// Test with nil - should return an empty group that slog will omit
 	attr = Err(nil)
-	if attr.Value.String() != "" {
-		t.Errorf("Err(nil) value = %q, want empty string", attr.Value.String())
+	// Empty Group has empty key
+	if attr.Key != "" {
+		t.Errorf("Err(nil) key = %q, want empty string (empty group)", attr.Key)
 	}
 }
 

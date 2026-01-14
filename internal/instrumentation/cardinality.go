@@ -1,6 +1,8 @@
 package instrumentation
 
-import "strings"
+import (
+	"github.com/teemow/inboxfewer/internal/logging"
+)
 
 // Cardinality management helpers for metrics.
 // These functions reduce high-cardinality label values to prevent metrics explosion.
@@ -16,6 +18,7 @@ import "strings"
 
 // ExtractUserDomain extracts the domain part from an email address.
 // This reduces cardinality by using the domain instead of the full email.
+// Returns "unknown" for invalid or empty emails to ensure metric labels always have a value.
 //
 // Example:
 //
@@ -24,16 +27,11 @@ import "strings"
 //	ExtractUserDomain("invalid")           // "unknown"
 //	ExtractUserDomain("")                  // "unknown"
 func ExtractUserDomain(email string) string {
-	if email == "" {
+	domain := logging.ExtractDomain(email)
+	if domain == "" {
 		return "unknown"
 	}
-
-	parts := strings.Split(email, "@")
-	if len(parts) == 2 && parts[1] != "" {
-		return parts[1]
-	}
-
-	return "unknown"
+	return domain
 }
 
 // Common operation types for Google API metrics.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -47,6 +48,7 @@ type MetricsServerConfig struct {
 type MetricsServer struct {
 	httpServer *http.Server
 	addr       string
+	listener   net.Listener // Stored listener for actual bound address
 }
 
 // NewMetricsServer creates a new metrics server with the given configuration.
@@ -72,6 +74,14 @@ func NewMetricsServer(config MetricsServerConfig) (*MetricsServer, error) {
 // Start starts the metrics server in a blocking manner.
 // Call this in a goroutine if you need non-blocking operation.
 func (s *MetricsServer) Start() error {
+	return s.StartWithReadySignal(nil)
+}
+
+// StartWithReadySignal starts the metrics server and signals readiness via the channel.
+// The ready channel is closed when the server is listening and ready to accept connections.
+// If ready is nil, the server starts without signaling.
+// Call this in a goroutine if you need non-blocking operation.
+func (s *MetricsServer) StartWithReadySignal(ready chan<- struct{}) error {
 	mux := http.NewServeMux()
 
 	// Register /metrics endpoint using promhttp.Handler()
@@ -93,8 +103,21 @@ func (s *MetricsServer) Start() error {
 		IdleTimeout:       DefaultMetricsIdleTimeout,
 	}
 
-	slog.Info("starting metrics server", "addr", s.addr)
-	return s.httpServer.ListenAndServe()
+	// Create listener first to detect bind errors before signaling ready
+	ln, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return fmt.Errorf("failed to bind metrics server to %s: %w", s.addr, err)
+	}
+	s.listener = ln
+
+	slog.Info("metrics server listening", "addr", ln.Addr().String())
+
+	// Signal readiness if channel provided
+	if ready != nil {
+		close(ready)
+	}
+
+	return s.httpServer.Serve(ln)
 }
 
 // Shutdown gracefully shuts down the metrics server.
@@ -106,7 +129,12 @@ func (s *MetricsServer) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// Addr returns the configured address for the metrics server.
+// Addr returns the address the metrics server is listening on.
+// If the server was started with ":0", this returns the actual bound address.
+// Otherwise, returns the configured address.
 func (s *MetricsServer) Addr() string {
+	if s.listener != nil {
+		return s.listener.Addr().String()
+	}
 	return s.addr
 }

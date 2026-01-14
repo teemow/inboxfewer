@@ -45,6 +45,12 @@ func (h *HealthChecker) IsReady() bool {
 	return h.ready.Load()
 }
 
+// isServerShuttingDown checks if the server context is shutting down.
+// Returns false if serverContext is nil (safe for testing).
+func (h *HealthChecker) isServerShuttingDown() bool {
+	return h.serverContext != nil && h.serverContext.IsShutdown()
+}
+
 // HealthResponse represents the JSON response for health endpoints.
 type HealthResponse struct {
 	Status string            `json:"status"`
@@ -91,7 +97,7 @@ func (h *HealthChecker) ReadinessHandler() http.Handler {
 		}
 
 		// Check if server context is not shutdown
-		if h.serverContext != nil && h.serverContext.IsShutdown() {
+		if h.isServerShuttingDown() {
 			checks["shutdown"] = healthStatusShuttingDown
 			allOk = false
 		} else {
@@ -136,7 +142,7 @@ func (h *HealthChecker) DetailedHealthHandler() http.Handler {
 		if !h.ready.Load() {
 			response.Status = healthStatusNotReady
 			w.WriteHeader(http.StatusServiceUnavailable)
-		} else if h.serverContext != nil && h.serverContext.IsShutdown() {
+		} else if h.isServerShuttingDown() {
 			response.Status = healthStatusShuttingDown
 			w.WriteHeader(http.StatusServiceUnavailable)
 		} else {

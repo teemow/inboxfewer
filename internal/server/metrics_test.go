@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,7 +64,7 @@ func TestNewMetricsServer(t *testing.T) {
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("NewMetricsServer() expected error, got nil")
-				} else if tt.errContains != "" && !containsString(err.Error(), tt.errContains) {
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
 					t.Errorf("NewMetricsServer() error = %v, want error containing %q", err, tt.errContains)
 				}
 			} else {
@@ -90,23 +91,30 @@ func TestMetricsServer_StartAndShutdown(t *testing.T) {
 		t.Fatalf("NewMetricsServer() error = %v", err)
 	}
 
-	// Start server in goroutine
+	// Start server in goroutine with ready signal
 	serverErr := make(chan error, 1)
+	ready := make(chan struct{})
 	go func() {
-		if err := server.Start(); err != nil && err != http.ErrServerClosed {
+		if err := server.StartWithReadySignal(ready); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
 		close(serverErr)
 	}()
 
-	// Give server time to start
-	time.Sleep(100 * time.Millisecond)
+	// Wait for server to be ready
+	select {
+	case <-ready:
+		// Server is ready
+	case err := <-serverErr:
+		t.Fatalf("Server failed to start: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Server startup timed out")
+	}
 
-	// Test /healthz endpoint
+	// Test /healthz endpoint - server is now guaranteed to be ready
 	resp, err := http.Get("http://localhost" + server.Addr() + "/healthz")
 	if err != nil {
-		// Server might not be ready yet on :0, skip the HTTP test
-		t.Logf("Skipping HTTP test (server may not be ready): %v", err)
+		t.Errorf("GET /healthz failed: %v", err)
 	} else {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
@@ -204,13 +212,4 @@ func createDisabledProvider(t *testing.T) *instrumentation.Provider {
 		t.Fatalf("failed to create disabled provider: %v", err)
 	}
 	return provider
-}
-
-func containsString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

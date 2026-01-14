@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -273,7 +274,7 @@ OAuth Configuration:
 	cmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "Path to TLS private key file (PEM format). If provided with --tls-cert-file, enables HTTPS. Can also use TLS_KEY_FILE env var.")
 
 	// OAuth storage flags
-	cmd.Flags().StringVar(&oauthStorageType, "oauth-storage-type", "memory", "OAuth token storage type: memory or valkey. Can also use OAUTH_STORAGE_TYPE env var.")
+	cmd.Flags().StringVar(&oauthStorageType, "oauth-storage-type", string(oauth.StorageTypeMemory), "OAuth token storage type: memory or valkey. Can also use OAUTH_STORAGE_TYPE env var.")
 	cmd.Flags().StringVar(&valkeyURL, "valkey-url", "", "Valkey server address (e.g., valkey.namespace.svc:6379). Can also use VALKEY_URL env var.")
 	cmd.Flags().StringVar(&valkeyPassword, "valkey-password", "", "Valkey authentication password. Can also use VALKEY_PASSWORD env var.")
 	cmd.Flags().BoolVar(&valkeyTLS, "valkey-tls", false, "Enable TLS for Valkey connections. Can also use VALKEY_TLS_ENABLED env var.")
@@ -350,12 +351,25 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 			return fmt.Errorf("failed to create metrics server: %w", err)
 		}
 
+		// Use ready channel to confirm metrics server started successfully
+		metricsReady := make(chan struct{})
+		metricsErr := make(chan error, 1)
 		go func() {
-			if err := metricsServer.Start(); err != nil && err != http.ErrServerClosed {
-				log.Printf("Metrics server error: %v", err)
+			if err := metricsServer.StartWithReadySignal(metricsReady); err != nil && err != http.ErrServerClosed {
+				metricsErr <- err
 			}
+			close(metricsErr)
 		}()
-		log.Printf("Metrics server started on %s", metricsConfig.Addr)
+
+		// Wait for metrics server to be ready or fail
+		select {
+		case <-metricsReady:
+			log.Printf("Metrics server started on %s", metricsServer.Addr())
+		case err := <-metricsErr:
+			return fmt.Errorf("metrics server failed to start: %w", err)
+		case <-time.After(5 * time.Second):
+			return fmt.Errorf("metrics server startup timed out")
+		}
 	}
 
 	// Read GitHub config (optional for serve mode - will use empty strings if not available)
@@ -402,8 +416,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	}
 	if securityConfig.MaxClientsPerIP == 0 {
 		if envMax := os.Getenv("MCP_OAUTH_MAX_CLIENTS_PER_IP"); envMax != "" {
-			var maxClients int
-			if _, err := fmt.Sscanf(envMax, "%d", &maxClients); err == nil && maxClients > 0 {
+			if maxClients, err := strconv.Atoi(envMax); err == nil && maxClients > 0 {
 				securityConfig.MaxClientsPerIP = maxClients
 			}
 		}
@@ -851,8 +864,7 @@ func loadOAuthStorageEnvVars(cmd *cobra.Command, config *OAuthStorageConfig) {
 	// Valkey DB - env var only applies if flag was not explicitly set
 	if !cmd.Flags().Changed("valkey-db") {
 		if dbStr := os.Getenv("VALKEY_DB"); dbStr != "" {
-			var db int
-			if _, err := fmt.Sscanf(dbStr, "%d", &db); err == nil {
+			if db, err := strconv.Atoi(dbStr); err == nil {
 				config.Valkey.DB = db
 			}
 		}
