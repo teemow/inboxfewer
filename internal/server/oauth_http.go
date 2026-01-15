@@ -52,6 +52,12 @@ type OAuthConfig struct {
 	// Default: true (enabled for MCP 2025-11-25 compliance)
 	EnableCIMD bool
 
+	// CIMDAllowPrivateIPs allows CIMD metadata URLs that resolve to private IPs.
+	// WARNING: Reduces SSRF protection. Only enable for internal/VPN deployments
+	// where MCP servers legitimately communicate over private networks.
+	// Default: false (blocked for security)
+	CIMDAllowPrivateIPs bool
+
 	// Storage configures the token storage backend
 	// Defaults to in-memory storage if not specified
 	Storage oauth.StorageConfig
@@ -118,6 +124,8 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 		TrustedPublicRegistrationSchemes: config.TrustedPublicRegistrationSchemes,
 		DisableStrictSchemeMatching:      config.DisableStrictSchemeMatching,
 		EnableCIMD:                       config.EnableCIMD,
+		// mcp-oauth v0.2.33+ features
+		CIMDAllowPrivateIPs: config.CIMDAllowPrivateIPs,
 		// Storage configuration
 		Storage: config.Storage,
 	}

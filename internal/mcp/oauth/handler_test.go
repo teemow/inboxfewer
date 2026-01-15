@@ -109,3 +109,54 @@ func TestHandler_Stop(t *testing.T) {
 		handler.Stop()
 	})
 }
+
+func TestNewHandler_WithCIMDOptions(t *testing.T) {
+	// Test CIMD options are passed to the mcp-oauth server configuration
+	tests := []struct {
+		name                string
+		enableCIMD          bool
+		cimdAllowPrivateIPs bool
+	}{
+		{
+			name:                "CIMD enabled, private IPs blocked",
+			enableCIMD:          true,
+			cimdAllowPrivateIPs: false,
+		},
+		{
+			name:                "CIMD enabled, private IPs allowed",
+			enableCIMD:          true,
+			cimdAllowPrivateIPs: true,
+		},
+		{
+			name:                "CIMD disabled",
+			enableCIMD:          false,
+			cimdAllowPrivateIPs: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{
+				BaseURL:             "http://localhost:8080",
+				GoogleClientID:      "test-client-id",
+				GoogleClientSecret:  "test-client-secret",
+				EnableCIMD:          tt.enableCIMD,
+				CIMDAllowPrivateIPs: tt.cimdAllowPrivateIPs,
+			}
+
+			handler, err := NewHandler(config)
+			require.NoError(t, err)
+			require.NotNil(t, handler)
+			defer handler.Stop()
+
+			// Verify handler was created with the configuration
+			assert.NotNil(t, handler.GetHandler())
+			assert.NotNil(t, handler.GetServer())
+
+			// Verify the server configuration
+			serverConfig := handler.GetServer().Config
+			assert.Equal(t, tt.enableCIMD, serverConfig.EnableClientIDMetadataDocuments)
+			assert.Equal(t, tt.cimdAllowPrivateIPs, serverConfig.AllowPrivateIPClientMetadata)
+		})
+	}
+}

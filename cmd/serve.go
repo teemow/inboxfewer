@@ -62,6 +62,9 @@ type OAuthSecurityConfig struct {
 	// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
 	EnableCIMD bool
 
+	// CIMD Security (mcp-oauth v0.2.33+)
+	CIMDAllowPrivateIPs bool
+
 	// TLS/HTTPS support
 	TLSCertFile string
 	TLSKeyFile  string
@@ -139,6 +142,8 @@ func newServeCmd() *cobra.Command {
 		disableStrictSchemeMatching      bool
 		// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
 		enableCIMD bool
+		// CIMD Security (mcp-oauth v0.2.33+)
+		cimdAllowPrivateIPs bool
 		// TLS/HTTPS support
 		tlsCertFile string
 		tlsKeyFile  string
@@ -239,7 +244,8 @@ OAuth Configuration:
 				TrustedPublicRegistrationSchemes: trustedPublicRegistrationSchemes,
 				DisableStrictSchemeMatching:      disableStrictSchemeMatching,
 				// CIMD (mcp-oauth v0.2.30+)
-				EnableCIMD: enableCIMD,
+				EnableCIMD:          enableCIMD,
+				CIMDAllowPrivateIPs: cimdAllowPrivateIPs,
 				// TLS support
 				TLSCertFile: tlsCertFile,
 				TLSKeyFile:  tlsKeyFile,
@@ -300,6 +306,7 @@ OAuth Configuration:
 
 	// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
 	cmd.Flags().BoolVar(&enableCIMD, "oauth-enable-cimd", true, "Enable Client ID Metadata Documents (CIMD) per MCP 2025-11-25. Allows clients to use HTTPS URLs as client identifiers. Can also use MCP_OAUTH_ENABLE_CIMD env var.")
+	cmd.Flags().BoolVar(&cimdAllowPrivateIPs, "cimd-allow-private-ips", false, "WARNING: Allow CIMD metadata URLs that resolve to private IPs (10.x, 172.16.x, 192.168.x). Reduces SSRF protection. Only enable for internal/VPN deployments. Can also use CIMD_ALLOW_PRIVATE_IPS env var.")
 
 	// Metrics server flags
 	cmd.Flags().BoolVar(&metricsEnabled, "metrics-enabled", true, "Enable the metrics server on a dedicated port. Can also use METRICS_ENABLED env var.")
@@ -470,6 +477,11 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 			// Default to true if not explicitly disabled
 			securityConfig.EnableCIMD = true
 		}
+	}
+
+	// Parse CIMD private IP allowlist setting from environment variable (mcp-oauth v0.2.33+)
+	if !securityConfig.CIMDAllowPrivateIPs && os.Getenv("CIMD_ALLOW_PRIVATE_IPS") == "true" {
+		securityConfig.CIMDAllowPrivateIPs = true
 	}
 
 	// Parse interstitial page branding from environment variables
@@ -687,6 +699,8 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		DisableStrictSchemeMatching:      securityConfig.DisableStrictSchemeMatching,
 		// CIMD (mcp-oauth v0.2.30+)
 		EnableCIMD: securityConfig.EnableCIMD,
+		// CIMD Security (mcp-oauth v0.2.33+)
+		CIMDAllowPrivateIPs: securityConfig.CIMDAllowPrivateIPs,
 		// Storage configuration (mcp-oauth v0.2.30+)
 		Storage: oauth.StorageConfig{
 			Type: oauth.StorageType(securityConfig.Storage.Type),

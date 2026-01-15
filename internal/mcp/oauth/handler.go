@@ -66,6 +66,12 @@ type Config struct {
 	// Default: true (enabled for MCP 2025-11-25 compliance)
 	EnableCIMD bool
 
+	// CIMDAllowPrivateIPs allows CIMD metadata URLs that resolve to private IPs.
+	// WARNING: Reduces SSRF protection. Only enable for internal/VPN deployments
+	// where MCP servers legitimately communicate over private networks.
+	// Default: false (blocked for security)
+	CIMDAllowPrivateIPs bool
+
 	// Storage configures the token storage backend
 	// Defaults to in-memory storage if not specified
 	Storage StorageConfig
@@ -390,6 +396,9 @@ func NewHandler(config *Config) (*Handler, error) {
 		// Enable Client ID Metadata Documents (CIMD) per MCP 2025-11-25
 		// Allows clients to use HTTPS URLs as client identifiers
 		EnableClientIDMetadataDocuments: config.EnableCIMD,
+
+		// Allow CIMD metadata URLs that resolve to private IPs (mcp-oauth v0.2.33+)
+		AllowPrivateIPClientMetadata: config.CIMDAllowPrivateIPs,
 
 		// Trusted scheme registration for Cursor/VSCode compatibility
 		// Allows unauthenticated registration for clients using these schemes only

@@ -622,6 +622,7 @@ The OAuth handler is **secure by default** with enterprise-grade security featur
 | **Custom URI Scheme Validation** | ✅ Enabled | Blocks dangerous redirect schemes | `AllowCustomRedirectSchemes = false` |
 | **Per-IP Client Limits** | ✅ 10 clients | Prevents registration DoS | `MaxClientsPerIP = 0` (unlimited) |
 | **Per-User Rate Limiting** | ⚙️  Optional | Prevents user-based abuse | `UserRateLimitRate > 0` to enable |
+| **CIMD Private IP Protection** | ✅ Enabled | Blocks private IP CIMD metadata | `CIMDAllowPrivateIPs = true` to disable |
 
 #### Complete Security Configuration Example
 
@@ -849,6 +850,54 @@ UserRateLimitBurst: 200,  // Allow burst of 200 requests
 - Production deployments with multiple users
 - When IP-based limiting isn't sufficient (NAT, VPNs)
 - Enforcing API quotas per user
+
+---
+
+##### 8. CIMD Private IP Protection (SSRF Protection)
+
+**Default:** `CIMDAllowPrivateIPs = false` (private IPs BLOCKED)
+
+Client ID Metadata Documents (CIMD) allow clients to use HTTPS URLs as client identifiers. When fetching metadata from these URLs, the server validates that the URL does not resolve to private IP addresses.
+
+**To allow private IPs (NOT recommended for public deployments):**
+```go
+CIMDAllowPrivateIPs: true  // WARNING: Reduces SSRF protection
+```
+
+**When you might need to enable:**
+- Home lab deployments where MCP servers are on the same internal network
+- Air-gapped environments
+- Internal enterprise networks with MCP aggregators
+- Any deployment where MCP servers communicate over private networks
+
+**Example scenario:**
+```
+muster.k8s-internal.home.example.com -> 192.168.1.231
+```
+
+Without this option, the server would block fetching metadata from this URL because `192.168.1.231` is a private IP address (RFC 1918).
+
+**Security impact when enabled:**
+- SSRF protection is reduced
+- Server will make HTTP requests to internal network addresses
+- Only enable for deployments that are not exposed to the public internet
+- PKCE and other OAuth security measures still apply
+
+**CLI/Environment Configuration:**
+```bash
+# CLI flag
+inboxfewer serve --cimd-allow-private-ips
+
+# Environment variable
+CIMD_ALLOW_PRIVATE_IPS=true
+```
+
+**Helm values:**
+```yaml
+oauthSecurity:
+  cimd:
+    allowPrivateIPs: true
+```
 
 ---
 

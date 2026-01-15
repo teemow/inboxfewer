@@ -319,6 +319,26 @@ oauthSecurity:
   # Default: true (enabled per MCP 2025-11-25 specification)
   enableCIMD: true
 
+  # CIMD (Client ID Metadata Documents) Security Configuration (mcp-oauth v0.2.33+)
+  cimd:
+    # Allow CIMD metadata URLs that resolve to private IP addresses
+    # (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 per RFC 1918).
+    # This also allows loopback addresses (127.0.0.0/8, ::1) and link-local addresses.
+    #
+    # WARNING: Reduces SSRF protection. Only enable for internal/VPN deployments where
+    # MCP servers legitimately communicate over private networks.
+    #
+    # Use cases:
+    #   - Home lab deployments with MCP servers on the same internal network
+    #   - Air-gapped environments
+    #   - Internal enterprise networks with MCP aggregators
+    #
+    # Security: When enabled, the server will fetch client metadata from URLs that
+    # resolve to private IPs. PKCE and other OAuth security measures still apply.
+    #
+    # Default: false (blocked for security - SSRF protection enabled)
+    allowPrivateIPs: false
+
   # Token storage configuration (mcp-oauth v0.2.30+)
   # In-memory storage is default but NOT recommended for production
   # Use Valkey for production deployments to enable:
