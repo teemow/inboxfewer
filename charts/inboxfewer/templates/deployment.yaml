@@ -183,6 +183,11 @@ spec:
           - name: MCP_OAUTH_ENABLE_CIMD
             value: {{ .Values.oauthSecurity.enableCIMD | quote }}
           {{- end }}
+          {{- /* CIMD Security (mcp-oauth v0.2.33+) */ -}}
+          {{- if and .Values.oauthSecurity.cimd .Values.oauthSecurity.cimd.allowPrivateIPs }}
+          - name: CIMD_ALLOW_PRIVATE_IPS
+            value: "true"
+          {{- end }}
           {{- /* Valkey storage configuration (mcp-oauth v0.2.30+) */ -}}
           {{- if eq ((.Values.oauthSecurity.storage).type | default "memory") "valkey" }}
           - name: OAUTH_STORAGE_TYPE
