@@ -160,3 +160,57 @@ func TestNewHandler_WithCIMDOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestNewHandler_WithTrustedAudiences(t *testing.T) {
+	// Test TrustedAudiences are passed to the mcp-oauth server configuration
+	tests := []struct {
+		name              string
+		trustedAudiences  []string
+		expectedAudiences []string
+	}{
+		{
+			name:              "no trusted audiences",
+			trustedAudiences:  nil,
+			expectedAudiences: nil,
+		},
+		{
+			name:              "empty trusted audiences",
+			trustedAudiences:  []string{},
+			expectedAudiences: []string{},
+		},
+		{
+			name:              "single trusted audience",
+			trustedAudiences:  []string{"muster-client"},
+			expectedAudiences: []string{"muster-client"},
+		},
+		{
+			name:              "multiple trusted audiences",
+			trustedAudiences:  []string{"muster-client", "other-aggregator"},
+			expectedAudiences: []string{"muster-client", "other-aggregator"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{
+				BaseURL:            "http://localhost:8080",
+				GoogleClientID:     "test-client-id",
+				GoogleClientSecret: "test-client-secret",
+				TrustedAudiences:   tt.trustedAudiences,
+			}
+
+			handler, err := NewHandler(config)
+			require.NoError(t, err)
+			require.NotNil(t, handler)
+			defer handler.Stop()
+
+			// Verify handler was created with the configuration
+			assert.NotNil(t, handler.GetHandler())
+			assert.NotNil(t, handler.GetServer())
+
+			// Verify the server configuration includes trusted audiences
+			serverConfig := handler.GetServer().Config
+			assert.Equal(t, tt.expectedAudiences, serverConfig.TrustedAudiences)
+		})
+	}
+}

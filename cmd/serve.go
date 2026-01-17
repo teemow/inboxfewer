@@ -473,7 +473,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	// Parse trusted scheme registration settings from environment variables (mcp-oauth v0.2.30+)
 	if len(securityConfig.TrustedPublicRegistrationSchemes) == 0 {
 		if schemes := os.Getenv("MCP_OAUTH_TRUSTED_SCHEMES"); schemes != "" {
-			securityConfig.TrustedPublicRegistrationSchemes = strings.Split(schemes, ",")
+			securityConfig.TrustedPublicRegistrationSchemes = parseCommaSeparatedList(schemes)
 		}
 	}
 	if !securityConfig.DisableStrictSchemeMatching && os.Getenv("MCP_OAUTH_DISABLE_STRICT_SCHEME_MATCHING") == "true" {
@@ -505,7 +505,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	// Only apply env var if flag was not explicitly set
 	if len(securityConfig.TrustedAudiences) == 0 {
 		if audiences := os.Getenv("OAUTH_TRUSTED_AUDIENCES"); audiences != "" {
-			securityConfig.TrustedAudiences = strings.Split(audiences, ",")
+			securityConfig.TrustedAudiences = parseCommaSeparatedList(audiences)
 		}
 	}
 
@@ -937,4 +937,21 @@ func loadOAuthStorageEnvVars(cmd *cobra.Command, config *OAuthStorageConfig) {
 			}
 		}
 	}
+}
+
+// parseCommaSeparatedList parses a comma-separated string into a slice,
+// trimming whitespace from each element and filtering out empty strings.
+func parseCommaSeparatedList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }
