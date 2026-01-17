@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 )
 
@@ -51,9 +52,14 @@ func TestParseCommaSeparatedList(t *testing.T) {
 			expected: []string{"muster-client", "other-client"},
 		},
 		{
-			name:     "only commas and spaces",
+			name:     "only commas and spaces returns nil",
 			input:    ",  , , ",
-			expected: []string{},
+			expected: nil,
+		},
+		{
+			name:     "whitespace only returns nil",
+			input:    "   ",
+			expected: nil,
 		},
 		{
 			name:     "single value with surrounding whitespace",
@@ -84,6 +90,85 @@ func TestParseCommaSeparatedList(t *testing.T) {
 				if v != tt.expected[i] {
 					t.Errorf("parseCommaSeparatedList(%q)[%d] = %q, want %q",
 						tt.input, i, v, tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
+// TestOAuthTrustedAudiencesEnvVar tests that OAUTH_TRUSTED_AUDIENCES is correctly
+// parsed and applied when the --oauth-trusted-audiences flag is not set.
+func TestOAuthTrustedAudiencesEnvVar(t *testing.T) {
+	tests := []struct {
+		name          string
+		envValue      string
+		flagValue     []string
+		expectedValue []string
+	}{
+		{
+			name:          "env var sets trusted audiences",
+			envValue:      "muster-client,another-aggregator",
+			flagValue:     nil,
+			expectedValue: []string{"muster-client", "another-aggregator"},
+		},
+		{
+			name:          "env var with whitespace is trimmed",
+			envValue:      " muster-client , another-aggregator ",
+			flagValue:     nil,
+			expectedValue: []string{"muster-client", "another-aggregator"},
+		},
+		{
+			name:          "flag overrides env var",
+			envValue:      "env-client",
+			flagValue:     []string{"flag-client"},
+			expectedValue: []string{"flag-client"},
+		},
+		{
+			name:          "empty env var returns nil",
+			envValue:      "",
+			flagValue:     nil,
+			expectedValue: nil,
+		},
+		{
+			name:          "only commas in env var returns nil",
+			envValue:      ",,,",
+			flagValue:     nil,
+			expectedValue: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variable
+			if tt.envValue != "" {
+				t.Setenv("OAUTH_TRUSTED_AUDIENCES", tt.envValue)
+			}
+
+			// Simulate the logic from runServe
+			var result []string
+			if len(tt.flagValue) > 0 {
+				result = tt.flagValue
+			} else if envVal := os.Getenv("OAUTH_TRUSTED_AUDIENCES"); envVal != "" {
+				result = parseCommaSeparatedList(envVal)
+			}
+
+			// Compare results
+			if tt.expectedValue == nil {
+				if result != nil {
+					t.Errorf("expected nil, got %v", result)
+				}
+				return
+			}
+
+			if len(result) != len(tt.expectedValue) {
+				t.Errorf("expected %v (len %d), got %v (len %d)",
+					tt.expectedValue, len(tt.expectedValue), result, len(result))
+				return
+			}
+
+			for i, v := range result {
+				if v != tt.expectedValue[i] {
+					t.Errorf("expected[%d] = %q, got %q", i, tt.expectedValue[i], v)
 				}
 			}
 		})

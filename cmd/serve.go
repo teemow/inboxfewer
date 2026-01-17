@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -509,6 +510,14 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		}
 	}
 
+	// Log security warning when SSO token forwarding is enabled
+	// This is a security-sensitive configuration that operators should be aware of
+	if len(securityConfig.TrustedAudiences) > 0 {
+		slog.Warn("SSO token forwarding enabled: tokens from trusted upstream clients will be accepted",
+			"trusted_audiences", securityConfig.TrustedAudiences,
+			"security_note", "ensure these client IDs are from services you control and trust")
+	}
+
 	// Parse interstitial page branding from environment variables
 	if logoURL := os.Getenv("MCP_INTERSTITIAL_LOGO_URL"); logoURL != "" {
 		securityConfig.InterstitialLogoURL = logoURL
@@ -941,6 +950,7 @@ func loadOAuthStorageEnvVars(cmd *cobra.Command, config *OAuthStorageConfig) {
 
 // parseCommaSeparatedList parses a comma-separated string into a slice,
 // trimming whitespace from each element and filtering out empty strings.
+// Returns nil if the input is empty or contains only whitespace/commas.
 func parseCommaSeparatedList(s string) []string {
 	if s == "" {
 		return nil
@@ -952,6 +962,9 @@ func parseCommaSeparatedList(s string) []string {
 		if p != "" {
 			result = append(result, p)
 		}
+	}
+	if len(result) == 0 {
+		return nil
 	}
 	return result
 }
