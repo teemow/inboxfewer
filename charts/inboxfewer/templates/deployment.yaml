@@ -188,6 +188,11 @@ spec:
           - name: CIMD_ALLOW_PRIVATE_IPS
             value: "true"
           {{- end }}
+          {{- /* SSO Token Forwarding (mcp-oauth v0.2.38+) */ -}}
+          {{- if .Values.oauthSecurity.trustedAudiences }}
+          - name: OAUTH_TRUSTED_AUDIENCES
+            value: {{ .Values.oauthSecurity.trustedAudiences | join "," | quote }}
+          {{- end }}
           {{- /* Valkey storage configuration (mcp-oauth v0.2.30+) */ -}}
           {{- if eq ((.Values.oauthSecurity.storage).type | default "memory") "valkey" }}
           - name: OAUTH_STORAGE_TYPE

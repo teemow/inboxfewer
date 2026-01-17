@@ -1211,6 +1211,180 @@ The OAuth implementation has been significantly cleaned up:
 - **Least Surprise**: Clear, predictable behavior throughout
 - **Production Ready**: Enterprise-grade logging and configuration
 
+## Single Sign-On (SSO) via Token Forwarding
+
+Inboxfewer supports Single Sign-On (SSO) scenarios where tokens from trusted upstream aggregators (like muster) are accepted without requiring a separate authentication flow.
+
+### Overview
+
+When users connect through an MCP aggregator to inboxfewer, they typically need to authenticate separately to each service. With SSO token forwarding, if both services use the same Identity Provider (e.g., Google or Dex), the aggregator can forward the user's ID token, and inboxfewer will accept it.
+
+### How It Works
+
+```
+User ─── authenticates ───> Aggregator (muster)
+                               │
+                               │ forwards user's ID token
+                               ▼
+                           Inboxfewer
+                               │
+                               │ validates token:
+                               │ - Same issuer (Google/Dex)
+                               │ - Valid signature
+                               │ - Audience in TrustedAudiences
+                               ▼
+                           Access granted
+```
+
+### Configuration
+
+#### CLI Flag
+
+```bash
+# Accept tokens from muster-client and another aggregator
+inboxfewer serve --transport streamable-http \
+  --oauth-trusted-audiences "muster-client,my-aggregator-client"
+```
+
+#### Environment Variable
+
+```bash
+# Comma-separated list of trusted client IDs
+export OAUTH_TRUSTED_AUDIENCES="muster-client,my-aggregator-client"
+inboxfewer serve --transport streamable-http
+```
+
+#### Helm Values
+
+```yaml
+oauthSecurity:
+  # Accept tokens from trusted upstream aggregators
+  trustedAudiences:
+    - "muster-client"
+    - "my-aggregator-client"
+```
+
+### Security Model
+
+SSO token forwarding maintains strong security guarantees:
+
+1. **Same Issuer Required**: Tokens MUST be from the same Identity Provider (Google/Dex) configured for inboxfewer. Cross-issuer tokens are rejected.
+
+2. **Cryptographic Validation**: Tokens are cryptographically verified using the issuer's public keys. Forged tokens are rejected.
+
+3. **Explicit Trust**: Only client IDs explicitly listed in `TrustedAudiences` are accepted. There is no implicit trust.
+
+4. **Scope Preservation**: The token's original scopes are preserved and enforced. If the aggregator's token has narrower scopes than inboxfewer requires, operations will fail with appropriate errors. Inboxfewer does not grant additional scopes beyond what was authorized in the original token.
+
+5. **Audit Trail**: An audit event (`EventCrossClientTokenAccepted`) is logged whenever a cross-client token is accepted, providing visibility into SSO usage. See [Monitoring SSO Usage](#monitoring-sso-usage) for metrics and alerting.
+
+6. **All Other Checks Apply**: Token expiration, signature verification, and all other OAuth validations still apply.
+
+### Monitoring SSO Usage
+
+Inboxfewer provides observability for SSO token forwarding:
+
+#### Metrics
+
+| Metric | Description |
+|--------|-------------|
+| `oauth_cross_client_token_total{result="accepted"}` | Cross-client tokens successfully validated |
+| `oauth_cross_client_token_total{result="rejected"}` | Cross-client tokens rejected (audience not trusted) |
+
+Example PromQL queries:
+
+```promql
+# SSO token acceptance rate
+sum(rate(oauth_cross_client_token_total{result="accepted"}[5m]))
+
+# Rejected SSO attempts (potential misconfiguration or attack)
+sum(rate(oauth_cross_client_token_total{result="rejected"}[5m])) > 0
+```
+
+#### Audit Events
+
+The mcp-oauth library emits structured audit events:
+
+| Event | Description |
+|-------|-------------|
+| `EventCrossClientTokenAccepted` | Token from trusted audience was accepted |
+| `EventCrossClientTokenRejected` | Token audience was not in TrustedAudiences |
+
+These events include:
+- `audience`: The token's original audience (client ID)
+- `user`: User identity from the token
+- `issuer`: Token issuer
+- `timestamp`: Event time
+
+Example log output:
+
+```json
+{
+  "level": "INFO",
+  "msg": "cross_client_token_accepted",
+  "audience": "muster-client",
+  "user": "user@example.com",
+  "issuer": "https://accounts.google.com",
+  "timestamp": "2026-01-17T12:00:00Z"
+}
+```
+
+### Example: Muster Integration
+
+When inboxfewer is accessed through muster:
+
+```yaml
+# muster configuration
+downstream_servers:
+  - name: inboxfewer
+    url: https://inboxfewer.example.com
+    forward_user_token: true
+
+# inboxfewer configuration (Helm values)
+oauthSecurity:
+  trustedAudiences:
+    - "muster-client"  # muster's OAuth client ID
+```
+
+With this configuration:
+1. User authenticates to muster with Google/Dex
+2. Muster forwards the user's ID token to inboxfewer
+3. Inboxfewer validates the token and accepts it (audience "muster-client" is trusted)
+4. User accesses inboxfewer tools without a second login
+
+### When to Use
+
+**Good use cases:**
+- MCP aggregators forwarding tokens to downstream servers
+- Internal deployments where multiple MCP servers share an Identity Provider
+- Reducing authentication friction in multi-service environments
+
+**Not recommended:**
+- Cross-organization token forwarding
+- Situations where different security policies apply to different services
+- When detailed per-service audit trails are required
+
+### Troubleshooting
+
+**"Token audience not trusted"**
+
+The token's audience (client ID) is not in the `TrustedAudiences` list. Add the aggregator's client ID:
+
+```bash
+inboxfewer serve --oauth-trusted-audiences "aggregator-client-id"
+```
+
+**"Token issuer mismatch"**
+
+The token is from a different Identity Provider than inboxfewer is configured for. Ensure both services use the same issuer.
+
+**"Token signature invalid"**
+
+The token could not be cryptographically verified. This may indicate:
+- Token tampering
+- Issuer key rotation (try re-authenticating)
+- Configuration mismatch
+
 ## References
 
 - [MCP Specification - Authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
