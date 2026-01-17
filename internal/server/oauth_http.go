@@ -58,6 +58,11 @@ type OAuthConfig struct {
 	// Default: false (blocked for security)
 	CIMDAllowPrivateIPs bool
 
+	// TrustedAudiences lists additional OAuth client IDs whose tokens are accepted.
+	// Enables SSO token forwarding from upstream aggregators (e.g., muster).
+	// See oauth.Config.TrustedAudiences for full documentation.
+	TrustedAudiences []string
+
 	// Storage configures the token storage backend
 	// Defaults to in-memory storage if not specified
 	Storage oauth.StorageConfig
@@ -126,6 +131,8 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 		EnableCIMD:                       config.EnableCIMD,
 		// mcp-oauth v0.2.33+ features
 		CIMDAllowPrivateIPs: config.CIMDAllowPrivateIPs,
+		// mcp-oauth v0.2.38+ features - SSO token forwarding
+		TrustedAudiences: config.TrustedAudiences,
 		// Storage configuration
 		Storage: config.Storage,
 	}

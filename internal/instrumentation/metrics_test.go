@@ -103,6 +103,53 @@ func TestMetrics_RecordOAuthTokenRefresh(t *testing.T) {
 	metrics.RecordOAuthTokenRefresh(ctx, OAuthResultExpired)
 }
 
+func TestMetrics_RecordOAuthCrossClientToken(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	provider, err := NewProvider(ctx, Config{
+		ServiceName:     "test-service",
+		ServiceVersion:  "1.0.0",
+		Enabled:         true,
+		MetricsExporter: "prometheus",
+		TracingExporter: "none",
+	})
+	if err != nil {
+		t.Fatalf("failed to create provider: %v", err)
+	}
+	defer func() { _ = provider.Shutdown(ctx) }()
+
+	metrics := provider.Metrics()
+
+	// Should not panic
+	metrics.RecordOAuthCrossClientToken(ctx, "accepted", "muster-client")
+	metrics.RecordOAuthCrossClientToken(ctx, "rejected", "unknown-client")
+}
+
+func TestMetrics_RecordOAuthCrossClientToken_DetailedLabels(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Test with detailed labels enabled
+	provider, err := NewProvider(ctx, Config{
+		ServiceName:     "test-service",
+		ServiceVersion:  "1.0.0",
+		Enabled:         true,
+		MetricsExporter: "prometheus",
+		TracingExporter: "none",
+		DetailedLabels:  true,
+	})
+	if err != nil {
+		t.Fatalf("failed to create provider: %v", err)
+	}
+	defer func() { _ = provider.Shutdown(ctx) }()
+
+	metrics := provider.Metrics()
+
+	// Should not panic - audience should be included
+	metrics.RecordOAuthCrossClientToken(ctx, "accepted", "muster-client")
+}
+
 func TestMetrics_RecordToolInvocation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -220,6 +267,7 @@ func TestMetrics_NoOp_WhenDisabled(t *testing.T) {
 	metrics.RecordGoogleAPIOperation(ctx, ServiceGmail, "list", StatusSuccess, 200*time.Millisecond)
 	metrics.RecordOAuthAuth(ctx, OAuthResultSuccess)
 	metrics.RecordOAuthTokenRefresh(ctx, OAuthResultSuccess)
+	metrics.RecordOAuthCrossClientToken(ctx, "accepted", "muster-client")
 	metrics.RecordToolInvocation(ctx, "test_tool", StatusSuccess, 100*time.Millisecond)
 	metrics.RecordToolInvocationWithAccount(ctx, "test_tool", StatusSuccess, "user@example.com", 100*time.Millisecond)
 	metrics.IncrementActiveSessions(ctx)

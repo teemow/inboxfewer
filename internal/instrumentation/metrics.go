@@ -35,8 +35,9 @@ type Metrics struct {
 	googleAPIOperationDuration metric.Float64Histogram
 
 	// OAuth metrics
-	oauthAuthTotal         metric.Int64Counter
-	oauthTokenRefreshTotal metric.Int64Counter
+	oauthAuthTotal             metric.Int64Counter
+	oauthTokenRefreshTotal     metric.Int64Counter
+	oauthCrossClientTokenTotal metric.Int64Counter
 
 	// MCP Tool metrics
 	toolInvocationsTotal metric.Int64Counter
@@ -122,6 +123,15 @@ func NewMetrics(meter metric.Meter, detailedLabels bool) (*Metrics, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create oauth_token_refresh_total counter: %w", err)
+	}
+
+	m.oauthCrossClientTokenTotal, err = meter.Int64Counter(
+		"oauth_cross_client_token_total",
+		metric.WithDescription("Total number of cross-client OAuth tokens processed for SSO"),
+		metric.WithUnit("{token}"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create oauth_cross_client_token_total counter: %w", err)
 	}
 
 	// MCP Tool Metrics
@@ -212,6 +222,29 @@ func (m *Metrics) RecordOAuthTokenRefresh(ctx context.Context, result string) {
 	}
 
 	m.oauthTokenRefreshTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// RecordOAuthCrossClientToken records a cross-client OAuth token event for SSO monitoring.
+// This tracks when tokens from trusted upstream clients (aggregators) are processed.
+//
+// Parameters:
+//   - result: "accepted" when token from TrustedAudiences is validated, "rejected" when audience not trusted
+//   - audience: The token's audience (client ID) for debugging (optional, only included if detailedLabels enabled)
+func (m *Metrics) RecordOAuthCrossClientToken(ctx context.Context, result, audience string) {
+	if m.oauthCrossClientTokenTotal == nil {
+		return // Instrumentation not initialized
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String(attrResult, result),
+	}
+
+	// Only add audience label if detailed labels are enabled (avoid high cardinality)
+	if m.detailedLabels && audience != "" {
+		attrs = append(attrs, attribute.String("audience", audience))
+	}
+
+	m.oauthCrossClientTokenTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
 
 // RecordToolInvocation records an MCP tool invocation with tool name, status, and duration.

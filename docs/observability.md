@@ -218,6 +218,28 @@ oauth_token_refresh_total{result="success"}
 rate(oauth_token_refresh_total{result="expired"}[5m])
 ```
 
+#### `oauth_cross_client_token_total`
+Counter of cross-client OAuth tokens processed for SSO token forwarding.
+
+This metric tracks when tokens from trusted upstream clients (aggregators) are processed.
+See [SSO via Token Forwarding](mcp-oauth.md#single-sign-on-sso-via-token-forwarding) for configuration details.
+
+**Labels:**
+- `result`: Processing result (accepted, rejected)
+- `audience`: Token's client ID (only when detailed labels enabled)
+
+**Example:**
+```promql
+# SSO token acceptance rate
+sum(rate(oauth_cross_client_token_total{result="accepted"}[5m]))
+
+# Rejected SSO attempts (potential misconfiguration or unauthorized access)
+sum(rate(oauth_cross_client_token_total{result="rejected"}[5m])) > 0
+
+# SSO usage by result
+sum by (result) (rate(oauth_cross_client_token_total[5m]))
+```
+
 ### Session Metrics
 
 #### `active_sessions`

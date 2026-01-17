@@ -72,6 +72,18 @@ type Config struct {
 	// Default: false (blocked for security)
 	CIMDAllowPrivateIPs bool
 
+	// TrustedAudiences lists additional OAuth client IDs whose tokens are accepted.
+	// This enables Single Sign-On (SSO) scenarios where an upstream aggregator (like muster)
+	// forwards user tokens to downstream MCP servers. When the aggregator adds its
+	// client_id to TrustedAudiences, downstream servers can accept these forwarded
+	// tokens without requiring a separate authentication flow.
+	//
+	// Security: Tokens must still be from the configured issuer (Google/Dex) and
+	// cryptographically signed. Only the audience claim is relaxed.
+	//
+	// Example: ["muster-client", "my-aggregator-client"]
+	TrustedAudiences []string
+
 	// Storage configures the token storage backend
 	// Defaults to in-memory storage if not specified
 	Storage StorageConfig
@@ -414,6 +426,10 @@ func NewHandler(config *Config) (*Handler, error) {
 		DisableDNSValidation:               config.RedirectURISecurity.DisableDNSValidation,
 		DisableDNSValidationStrict:         config.RedirectURISecurity.DisableDNSValidationStrict,
 		DisableAuthorizationTimeValidation: config.RedirectURISecurity.DisableAuthorizationTimeValidation,
+
+		// SSO token forwarding (mcp-oauth v0.2.38+)
+		// Accept tokens with audiences from trusted upstream aggregators
+		TrustedAudiences: config.TrustedAudiences,
 	}
 
 	// Configure interstitial page branding if provided
