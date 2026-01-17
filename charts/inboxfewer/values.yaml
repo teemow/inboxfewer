@@ -347,8 +347,13 @@ oauthSecurity:
   # Security Model:
   #   - Tokens MUST still be from the configured issuer (Google/Dex)
   #   - Tokens MUST be cryptographically signed by the issuer
+  #   - Token scopes are preserved and enforced (no scope escalation)
   #   - Only the audience claim is relaxed to accept listed client IDs
-  #   - An audit event is logged when cross-client tokens are accepted
+  #
+  # Monitoring:
+  #   - Metric: oauth_cross_client_token_total{result="accepted|rejected"}
+  #   - Audit: EventCrossClientTokenAccepted logged with audience and user
+  #   - Warning logged at startup when SSO is enabled
   #
   # Example: Accept tokens from muster and another aggregator
   #   trustedAudiences:

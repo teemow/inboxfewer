@@ -1274,9 +1274,60 @@ SSO token forwarding maintains strong security guarantees:
 
 3. **Explicit Trust**: Only client IDs explicitly listed in `TrustedAudiences` are accepted. There is no implicit trust.
 
-4. **Audit Trail**: An audit event (`EventCrossClientTokenAccepted`) is logged whenever a cross-client token is accepted, providing visibility into SSO usage.
+4. **Scope Preservation**: The token's original scopes are preserved and enforced. If the aggregator's token has narrower scopes than inboxfewer requires, operations will fail with appropriate errors. Inboxfewer does not grant additional scopes beyond what was authorized in the original token.
 
-5. **All Other Checks Apply**: Token expiration, signature verification, and all other OAuth validations still apply.
+5. **Audit Trail**: An audit event (`EventCrossClientTokenAccepted`) is logged whenever a cross-client token is accepted, providing visibility into SSO usage. See [Monitoring SSO Usage](#monitoring-sso-usage) for metrics and alerting.
+
+6. **All Other Checks Apply**: Token expiration, signature verification, and all other OAuth validations still apply.
+
+### Monitoring SSO Usage
+
+Inboxfewer provides observability for SSO token forwarding:
+
+#### Metrics
+
+| Metric | Description |
+|--------|-------------|
+| `oauth_cross_client_token_total{result="accepted"}` | Cross-client tokens successfully validated |
+| `oauth_cross_client_token_total{result="rejected"}` | Cross-client tokens rejected (audience not trusted) |
+
+Example PromQL queries:
+
+```promql
+# SSO token acceptance rate
+sum(rate(oauth_cross_client_token_total{result="accepted"}[5m]))
+
+# Rejected SSO attempts (potential misconfiguration or attack)
+sum(rate(oauth_cross_client_token_total{result="rejected"}[5m])) > 0
+```
+
+#### Audit Events
+
+The mcp-oauth library emits structured audit events:
+
+| Event | Description |
+|-------|-------------|
+| `EventCrossClientTokenAccepted` | Token from trusted audience was accepted |
+| `EventCrossClientTokenRejected` | Token audience was not in TrustedAudiences |
+
+These events include:
+- `audience`: The token's original audience (client ID)
+- `user`: User identity from the token
+- `issuer`: Token issuer
+- `timestamp`: Event time
+
+Example log output:
+
+```json
+{
+  "level": "INFO",
+  "msg": "cross_client_token_accepted",
+  "audience": "muster-client",
+  "user": "user@example.com",
+  "issuer": "https://accounts.google.com",
+  "timestamp": "2026-01-17T12:00:00Z"
+}
+```
 
 ### Example: Muster Integration
 
