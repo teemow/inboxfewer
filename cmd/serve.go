@@ -65,6 +65,9 @@ type OAuthSecurityConfig struct {
 	// CIMD Security (mcp-oauth v0.2.33+)
 	CIMDAllowPrivateIPs bool
 
+	// SSO Token Forwarding (mcp-oauth v0.2.38+)
+	TrustedAudiences []string
+
 	// TLS/HTTPS support
 	TLSCertFile string
 	TLSKeyFile  string
@@ -144,6 +147,8 @@ func newServeCmd() *cobra.Command {
 		enableCIMD bool
 		// CIMD Security (mcp-oauth v0.2.33+)
 		cimdAllowPrivateIPs bool
+		// SSO Token Forwarding (mcp-oauth v0.2.38+)
+		trustedAudiences []string
 		// TLS/HTTPS support
 		tlsCertFile string
 		tlsKeyFile  string
@@ -246,6 +251,8 @@ OAuth Configuration:
 				// CIMD (mcp-oauth v0.2.30+)
 				EnableCIMD:          enableCIMD,
 				CIMDAllowPrivateIPs: cimdAllowPrivateIPs,
+				// SSO Token Forwarding (mcp-oauth v0.2.38+)
+				TrustedAudiences: trustedAudiences,
 				// TLS support
 				TLSCertFile: tlsCertFile,
 				TLSKeyFile:  tlsKeyFile,
@@ -307,6 +314,9 @@ OAuth Configuration:
 	// CIMD (Client ID Metadata Documents) per MCP 2025-11-25 (mcp-oauth v0.2.30+)
 	cmd.Flags().BoolVar(&enableCIMD, "oauth-enable-cimd", true, "Enable Client ID Metadata Documents (CIMD) per MCP 2025-11-25. Allows clients to use HTTPS URLs as client identifiers. Can also use MCP_OAUTH_ENABLE_CIMD env var.")
 	cmd.Flags().BoolVar(&cimdAllowPrivateIPs, "cimd-allow-private-ips", false, "Allow CIMD metadata URLs to resolve to private IPs (SSRF risk; internal deployments only). Can also use CIMD_ALLOW_PRIVATE_IPS env var.")
+
+	// SSO Token Forwarding (mcp-oauth v0.2.38+)
+	cmd.Flags().StringSliceVar(&trustedAudiences, "oauth-trusted-audiences", nil, "Additional OAuth client IDs whose tokens are accepted for SSO (comma-separated). Enables token forwarding from aggregators like muster. Can also use OAUTH_TRUSTED_AUDIENCES env var.")
 
 	// Metrics server flags
 	cmd.Flags().BoolVar(&metricsEnabled, "metrics-enabled", true, "Enable the metrics server on a dedicated port. Can also use METRICS_ENABLED env var.")
@@ -488,6 +498,14 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 			} else {
 				log.Printf("Warning: invalid CIMD_ALLOW_PRIVATE_IPS value %q (expected true/false), using default: false", envVal)
 			}
+		}
+	}
+
+	// Parse trusted audiences from environment variable (mcp-oauth v0.2.38+)
+	// Only apply env var if flag was not explicitly set
+	if len(securityConfig.TrustedAudiences) == 0 {
+		if audiences := os.Getenv("OAUTH_TRUSTED_AUDIENCES"); audiences != "" {
+			securityConfig.TrustedAudiences = strings.Split(audiences, ",")
 		}
 	}
 
@@ -713,6 +731,8 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		EnableCIMD: securityConfig.EnableCIMD,
 		// CIMD Security (mcp-oauth v0.2.33+)
 		CIMDAllowPrivateIPs: securityConfig.CIMDAllowPrivateIPs,
+		// SSO Token Forwarding (mcp-oauth v0.2.38+)
+		TrustedAudiences: securityConfig.TrustedAudiences,
 		// Storage configuration (mcp-oauth v0.2.30+)
 		Storage: oauth.StorageConfig{
 			Type: oauth.StorageType(securityConfig.Storage.Type),

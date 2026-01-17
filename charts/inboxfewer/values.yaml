@@ -339,6 +339,25 @@ oauthSecurity:
     # Default: false (blocked for security - SSRF protection enabled)
     allowPrivateIPs: false
 
+  # SSO Token Forwarding (mcp-oauth v0.2.38+)
+  # Accept tokens from trusted upstream aggregators for Single Sign-On (SSO).
+  # This enables scenarios where an MCP aggregator (like muster) forwards user
+  # tokens to downstream MCP servers without requiring separate authentication.
+  #
+  # Security Model:
+  #   - Tokens MUST still be from the configured issuer (Google/Dex)
+  #   - Tokens MUST be cryptographically signed by the issuer
+  #   - Only the audience claim is relaxed to accept listed client IDs
+  #   - An audit event is logged when cross-client tokens are accepted
+  #
+  # Example: Accept tokens from muster and another aggregator
+  #   trustedAudiences:
+  #     - "muster-client"
+  #     - "my-aggregator-client"
+  #
+  # Default: [] (only accept tokens issued directly to this server's client_id)
+  trustedAudiences: []
+
   # Token storage configuration (mcp-oauth v0.2.30+)
   # In-memory storage is default but NOT recommended for production
   # Use Valkey for production deployments to enable:
