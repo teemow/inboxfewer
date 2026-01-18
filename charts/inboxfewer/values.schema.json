@@ -1,10 +1,347 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Inboxfewer Helm Chart Values",
+  "description": "Schema for validating Inboxfewer Helm chart values",
   "type": "object",
+  "additionalProperties": false,
   "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "description": "Number of pod replicas",
+      "minimum": 1,
+      "default": 1,
+      "examples": [1, 3]
+    },
+    "image": {
+      "type": "object",
+      "description": "Container image configuration",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Container image repository",
+          "default": "ghcr.io/teemow/inboxfewer",
+          "examples": ["ghcr.io/teemow/inboxfewer"]
+        },
+        "pullPolicy": {
+          "type": "string",
+          "description": "Image pull policy",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "default": "IfNotPresent"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Image tag (defaults to chart appVersion if empty)",
+          "default": ""
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "description": "Image pull secrets for private registries",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the image pull secret"
+          }
+        },
+        "required": ["name"]
+      },
+      "default": []
+    },
+    "nameOverride": {
+      "type": "string",
+      "description": "Override the chart name",
+      "default": ""
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "description": "Override the full name of resources",
+      "default": ""
+    },
+    "serviceAccount": {
+      "type": "object",
+      "description": "ServiceAccount configuration",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Create a ServiceAccount",
+          "default": true
+        },
+        "automount": {
+          "type": "boolean",
+          "description": "Automatically mount the ServiceAccount API credentials",
+          "default": false
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations to add to the ServiceAccount",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the ServiceAccount (generated if not set)",
+          "default": ""
+        }
+      }
+    },
+    "podAnnotations": {
+      "type": "object",
+      "description": "Annotations to add to pods",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "podLabels": {
+      "type": "object",
+      "description": "Labels to add to pods",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "description": "Pod security context configuration",
+      "properties": {
+        "runAsNonRoot": {
+          "type": "boolean",
+          "description": "Run as non-root user"
+        },
+        "runAsUser": {
+          "type": "integer",
+          "description": "User ID to run as"
+        },
+        "runAsGroup": {
+          "type": "integer",
+          "description": "Group ID to run as"
+        },
+        "fsGroup": {
+          "type": "integer",
+          "description": "Filesystem group ID"
+        },
+        "fsGroupChangePolicy": {
+          "type": "string",
+          "enum": ["OnRootMismatch", "Always"]
+        },
+        "supplementalGroups": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "sysctls": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "seccompProfile": {
+          "type": "object"
+        }
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "description": "Container security context configuration",
+      "properties": {
+        "allowPrivilegeEscalation": {
+          "type": "boolean",
+          "description": "Allow privilege escalation"
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "add": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "drop": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean",
+          "description": "Mount root filesystem as read-only"
+        },
+        "runAsNonRoot": {
+          "type": "boolean",
+          "description": "Run as non-root user"
+        },
+        "runAsUser": {
+          "type": "integer",
+          "description": "User ID to run as"
+        },
+        "runAsGroup": {
+          "type": "integer",
+          "description": "Group ID to run as"
+        },
+        "privileged": {
+          "type": "boolean",
+          "description": "Run container in privileged mode"
+        },
+        "procMount": {
+          "type": "string"
+        },
+        "seccompProfile": {
+          "type": "object"
+        },
+        "seLinuxOptions": {
+          "type": "object"
+        },
+        "windowsOptions": {
+          "type": "object"
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "description": "Kubernetes Service configuration",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Service type",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"],
+          "default": "ClusterIP"
+        },
+        "port": {
+          "type": "integer",
+          "description": "Service port",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8080
+        },
+        "targetPort": {
+          "type": ["integer", "string"],
+          "description": "Target port on the pod",
+          "default": 8080
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Service annotations",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "nodePort": {
+          "type": "integer",
+          "description": "Node port (when type is NodePort)",
+          "minimum": 30000,
+          "maximum": 32767
+        },
+        "loadBalancerIP": {
+          "type": "string",
+          "description": "Load balancer IP (when type is LoadBalancer)"
+        },
+        "loadBalancerSourceRanges": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "externalTrafficPolicy": {
+          "type": "string",
+          "enum": ["Cluster", "Local"]
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "description": "Ingress configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable Ingress",
+          "default": false
+        },
+        "className": {
+          "type": "string",
+          "description": "Ingress class name",
+          "default": ""
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Ingress annotations",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "hosts": {
+          "type": "array",
+          "description": "Ingress hosts configuration",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Hostname"
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "Path"
+                    },
+                    "pathType": {
+                      "type": "string",
+                      "enum": ["Prefix", "Exact", "ImplementationSpecific"],
+                      "description": "Path type"
+                    }
+                  },
+                  "required": ["path", "pathType"]
+                }
+              }
+            },
+            "required": ["host"]
+          }
+        },
+        "tls": {
+          "type": "array",
+          "description": "TLS configuration for Ingress",
+          "items": {
+            "type": "object",
+            "properties": {
+              "secretName": {
+                "type": "string",
+                "description": "TLS secret name"
+              },
+              "hosts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "TLS hosts"
+              }
+            }
+          },
+          "default": []
+        }
+      }
+    },
     "gatewayAPI": {
       "type": "object",
       "description": "Gateway API configuration for HTTPRoute and BackendTrafficPolicy",
+      "additionalProperties": false,
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -14,6 +351,7 @@
         "httpRoute": {
           "type": "object",
           "description": "HTTPRoute configuration",
+          "additionalProperties": false,
           "properties": {
             "parentRefs": {
               "type": "array",
@@ -158,6 +496,7 @@
         "backendTrafficPolicy": {
           "type": "object",
           "description": "BackendTrafficPolicy for Envoy Gateway (optional)",
+          "additionalProperties": false,
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -184,6 +523,1250 @@
               }
             }
           }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "description": "Container resource requests and limits",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "description": "Resource limits",
+          "properties": {
+            "cpu": {
+              "type": ["string", "number"],
+              "description": "CPU limit"
+            },
+            "memory": {
+              "type": "string",
+              "description": "Memory limit"
+            },
+            "ephemeral-storage": {
+              "type": "string",
+              "description": "Ephemeral storage limit"
+            }
+          }
+        },
+        "requests": {
+          "type": "object",
+          "description": "Resource requests",
+          "properties": {
+            "cpu": {
+              "type": ["string", "number"],
+              "description": "CPU request"
+            },
+            "memory": {
+              "type": "string",
+              "description": "Memory request"
+            },
+            "ephemeral-storage": {
+              "type": "string",
+              "description": "Ephemeral storage request"
+            }
+          }
+        }
+      }
+    },
+    "livenessProbe": {
+      "type": "object",
+      "description": "Liveness probe configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable liveness probe",
+          "default": true
+        },
+        "httpGet": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "HTTP path for health check"
+            },
+            "port": {
+              "type": ["integer", "string"],
+              "description": "Port to check"
+            },
+            "scheme": {
+              "type": "string",
+              "enum": ["HTTP", "HTTPS"]
+            },
+            "httpHeaders": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tcpSocket": {
+          "type": "object",
+          "properties": {
+            "port": {
+              "type": ["integer", "string"]
+            }
+          }
+        },
+        "exec": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "description": "Initial delay before starting probes",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "description": "Probe frequency",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "description": "Probe timeout",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "description": "Failures before marking unhealthy",
+          "minimum": 1
+        },
+        "successThreshold": {
+          "type": "integer",
+          "description": "Successes before marking healthy",
+          "minimum": 1
+        }
+      }
+    },
+    "readinessProbe": {
+      "type": "object",
+      "description": "Readiness probe configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable readiness probe",
+          "default": true
+        },
+        "httpGet": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "HTTP path for health check"
+            },
+            "port": {
+              "type": ["integer", "string"],
+              "description": "Port to check"
+            },
+            "scheme": {
+              "type": "string",
+              "enum": ["HTTP", "HTTPS"]
+            },
+            "httpHeaders": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tcpSocket": {
+          "type": "object",
+          "properties": {
+            "port": {
+              "type": ["integer", "string"]
+            }
+          }
+        },
+        "exec": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "description": "Initial delay before starting probes",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "description": "Probe frequency",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "description": "Probe timeout",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "description": "Failures before marking unready",
+          "minimum": 1
+        },
+        "successThreshold": {
+          "type": "integer",
+          "description": "Successes before marking ready",
+          "minimum": 1
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "description": "Horizontal Pod Autoscaler configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable HPA",
+          "default": false
+        },
+        "minReplicas": {
+          "type": "integer",
+          "description": "Minimum number of replicas",
+          "minimum": 1,
+          "default": 1
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "description": "Maximum number of replicas",
+          "minimum": 1,
+          "default": 10
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": "integer",
+          "description": "Target CPU utilization percentage",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "targetMemoryUtilizationPercentage": {
+          "type": "integer",
+          "description": "Target memory utilization percentage",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "behavior": {
+          "type": "object",
+          "description": "HPA scaling behavior"
+        },
+        "metrics": {
+          "type": "array",
+          "description": "Custom metrics for autoscaling",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "description": "Pod Disruption Budget configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable PodDisruptionBudget",
+          "default": false
+        },
+        "minAvailable": {
+          "type": ["integer", "string"],
+          "description": "Minimum available pods (number or percentage)"
+        },
+        "maxUnavailable": {
+          "type": ["integer", "string"],
+          "description": "Maximum unavailable pods (number or percentage)",
+          "default": 1
+        }
+      }
+    },
+    "volumes": {
+      "type": "array",
+      "description": "Additional volumes for the pod",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Volume name"
+          },
+          "emptyDir": {
+            "type": "object"
+          },
+          "configMap": {
+            "type": "object"
+          },
+          "secret": {
+            "type": "object"
+          },
+          "persistentVolumeClaim": {
+            "type": "object"
+          },
+          "hostPath": {
+            "type": "object"
+          },
+          "projected": {
+            "type": "object"
+          },
+          "csi": {
+            "type": "object"
+          }
+        },
+        "required": ["name"]
+      }
+    },
+    "volumeMounts": {
+      "type": "array",
+      "description": "Additional volume mounts for the container",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Volume name to mount"
+          },
+          "mountPath": {
+            "type": "string",
+            "description": "Path to mount the volume"
+          },
+          "subPath": {
+            "type": "string",
+            "description": "Sub-path within the volume"
+          },
+          "readOnly": {
+            "type": "boolean",
+            "description": "Mount as read-only"
+          }
+        },
+        "required": ["name", "mountPath"]
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "description": "Node selector for pod scheduling",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "tolerations": {
+      "type": "array",
+      "description": "Tolerations for pod scheduling",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "operator": {
+            "type": "string",
+            "enum": ["Exists", "Equal"]
+          },
+          "value": {
+            "type": "string"
+          },
+          "effect": {
+            "type": "string",
+            "enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"]
+          },
+          "tolerationSeconds": {
+            "type": "integer"
+          }
+        }
+      },
+      "default": []
+    },
+    "affinity": {
+      "type": "object",
+      "description": "Affinity rules for pod scheduling",
+      "properties": {
+        "nodeAffinity": {
+          "type": "object"
+        },
+        "podAffinity": {
+          "type": "object"
+        },
+        "podAntiAffinity": {
+          "type": "object"
+        }
+      },
+      "default": {}
+    },
+    "config": {
+      "type": "object",
+      "description": "Application configuration",
+      "additionalProperties": false,
+      "properties": {
+        "transport": {
+          "type": "string",
+          "description": "Transport type",
+          "enum": ["stdio", "streamable-http"],
+          "default": "streamable-http"
+        },
+        "httpAddr": {
+          "type": "string",
+          "description": "HTTP server address",
+          "default": ":8080",
+          "examples": [":8080", "0.0.0.0:8080", "127.0.0.1:8080"]
+        },
+        "baseURL": {
+          "type": "string",
+          "description": "Public base URL for OAuth callbacks",
+          "default": "",
+          "examples": ["https://inboxfewer.example.com"]
+        },
+        "yolo": {
+          "type": "boolean",
+          "description": "Enable write operations (default: false for read-only mode)",
+          "default": false
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "Enable debug logging",
+          "default": false
+        },
+        "disableStreaming": {
+          "type": "boolean",
+          "description": "Disable streaming for HTTP transport",
+          "default": false
+        }
+      }
+    },
+    "google": {
+      "type": "object",
+      "description": "Google OAuth configuration",
+      "additionalProperties": false,
+      "properties": {
+        "clientId": {
+          "type": "string",
+          "description": "Google OAuth Client ID",
+          "default": ""
+        },
+        "clientSecret": {
+          "type": "string",
+          "description": "Google OAuth Client Secret",
+          "default": ""
+        }
+      }
+    },
+    "oauthSecurity": {
+      "type": "object",
+      "description": "OAuth Security Settings (secure by default)",
+      "additionalProperties": false,
+      "properties": {
+        "allowPublicClientRegistration": {
+          "type": "boolean",
+          "description": "Allow unauthenticated dynamic client registration (WARNING: weakens security)",
+          "default": false
+        },
+        "registrationAccessToken": {
+          "type": "string",
+          "description": "Registration access token required for client registration",
+          "default": ""
+        },
+        "encryptionKey": {
+          "type": "string",
+          "description": "AES-256 encryption key for token storage (32 bytes, base64 encoded)",
+          "default": ""
+        },
+        "allowInsecureAuthWithoutState": {
+          "type": "boolean",
+          "description": "Allow authorization without state parameter (WARNING: weakens CSRF protection)",
+          "default": false
+        },
+        "maxClientsPerIP": {
+          "type": "integer",
+          "description": "Maximum clients that can be registered per IP address",
+          "minimum": 1,
+          "default": 10
+        },
+        "redirectURISecurity": {
+          "type": "object",
+          "description": "Redirect URI Security Configuration",
+          "additionalProperties": false,
+          "properties": {
+            "disableProductionMode": {
+              "type": "boolean",
+              "description": "Disable production mode security validation",
+              "default": false
+            },
+            "allowLocalhostRedirectURIs": {
+              "type": "boolean",
+              "description": "Allow http://localhost and http://127.0.0.1 redirect URIs",
+              "default": false
+            },
+            "allowPrivateIPRedirectURIs": {
+              "type": "boolean",
+              "description": "Allow private IP addresses in redirect URIs (WARNING: enables SSRF)",
+              "default": false
+            },
+            "allowLinkLocalRedirectURIs": {
+              "type": "boolean",
+              "description": "Allow link-local addresses in redirect URIs (WARNING: cloud metadata risk)",
+              "default": false
+            },
+            "disableDNSValidation": {
+              "type": "boolean",
+              "description": "Disable DNS validation of redirect URI hostnames",
+              "default": false
+            },
+            "disableDNSValidationStrict": {
+              "type": "boolean",
+              "description": "Disable fail-closed DNS validation",
+              "default": false
+            },
+            "disableAuthorizationTimeValidation": {
+              "type": "boolean",
+              "description": "Disable redirect URI validation at authorization time",
+              "default": false
+            }
+          }
+        },
+        "trustedPublicRegistrationSchemes": {
+          "type": "array",
+          "description": "Trusted URI schemes for unauthenticated client registration",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "examples": [["cursor", "vscode", "vscode-insiders", "windsurf"]]
+        },
+        "disableStrictSchemeMatching": {
+          "type": "boolean",
+          "description": "Disable strict scheme matching for trusted scheme registration",
+          "default": false
+        },
+        "enableCIMD": {
+          "type": "boolean",
+          "description": "Enable Client ID Metadata Documents (MCP 2025-11-25)",
+          "default": true
+        },
+        "cimd": {
+          "type": "object",
+          "description": "CIMD Security Configuration",
+          "additionalProperties": false,
+          "properties": {
+            "allowPrivateIPs": {
+              "type": "boolean",
+              "description": "Allow CIMD metadata URLs that resolve to private IPs (WARNING: reduces SSRF protection)",
+              "default": false
+            }
+          }
+        },
+        "trustedAudiences": {
+          "type": "array",
+          "description": "Trusted audiences for SSO token forwarding",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "examples": [["muster-client", "my-aggregator-client"]]
+        },
+        "storage": {
+          "type": "object",
+          "description": "Token storage configuration",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "Storage backend type",
+              "enum": ["memory", "valkey"],
+              "default": "memory"
+            },
+            "valkey": {
+              "type": "object",
+              "description": "Valkey storage configuration",
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "description": "Valkey server URL",
+                  "default": "",
+                  "examples": ["valkey.namespace.svc:6379"]
+                },
+                "tls": {
+                  "type": "object",
+                  "description": "TLS configuration for Valkey",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Enable TLS for Valkey connections",
+                      "default": false
+                    },
+                    "caSecretName": {
+                      "type": "string",
+                      "description": "Secret containing CA certificate",
+                      "default": ""
+                    },
+                    "caSecretKey": {
+                      "type": "string",
+                      "description": "Key in secret containing CA certificate",
+                      "default": "ca.crt"
+                    }
+                  }
+                },
+                "keyPrefix": {
+                  "type": "string",
+                  "description": "Key prefix for Valkey keys",
+                  "default": "mcp:"
+                },
+                "db": {
+                  "type": "integer",
+                  "description": "Valkey database number",
+                  "minimum": 0,
+                  "maximum": 15,
+                  "default": 0
+                },
+                "existingSecret": {
+                  "type": "string",
+                  "description": "Existing secret for Valkey password",
+                  "default": ""
+                },
+                "secretKeyPassword": {
+                  "type": "string",
+                  "description": "Key in secret containing Valkey password",
+                  "default": "valkey-password"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "description": "Token storage configuration (top-level)",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Storage backend type",
+          "enum": ["memory", "valkey"],
+          "default": "memory"
+        },
+        "valkey": {
+          "type": "object",
+          "description": "Valkey storage configuration",
+          "additionalProperties": false,
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "Valkey server URL",
+              "default": ""
+            },
+            "tls": {
+              "type": "object",
+              "description": "TLS configuration for Valkey",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable TLS for Valkey connections",
+                  "default": false
+                },
+                "caSecretName": {
+                  "type": "string",
+                  "description": "Secret containing CA certificate",
+                  "default": ""
+                },
+                "caSecretKey": {
+                  "type": "string",
+                  "description": "Key in secret containing CA certificate",
+                  "default": "ca.crt"
+                }
+              }
+            },
+            "keyPrefix": {
+              "type": "string",
+              "description": "Key prefix for Valkey keys",
+              "default": "mcp:"
+            },
+            "db": {
+              "type": "integer",
+              "description": "Valkey database number",
+              "minimum": 0,
+              "maximum": 15,
+              "default": 0
+            },
+            "existingSecret": {
+              "type": "string",
+              "description": "Existing secret for Valkey password",
+              "default": ""
+            },
+            "secretKeyPassword": {
+              "type": "string",
+              "description": "Key in secret containing Valkey password",
+              "default": "valkey-password"
+            }
+          }
+        }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "description": "TLS/HTTPS Configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable native TLS/HTTPS",
+          "default": false
+        },
+        "existingSecret": {
+          "type": "string",
+          "description": "Existing secret containing TLS certificate and key",
+          "default": ""
+        },
+        "mountPath": {
+          "type": "string",
+          "description": "Path where TLS files will be mounted",
+          "default": "/etc/tls"
+        }
+      }
+    },
+    "interstitial": {
+      "type": "object",
+      "description": "OAuth Interstitial Page Branding",
+      "additionalProperties": false,
+      "properties": {
+        "logoURL": {
+          "type": "string",
+          "description": "Logo URL displayed on the success page (must be HTTPS)",
+          "default": ""
+        },
+        "logoAlt": {
+          "type": "string",
+          "description": "Alt text for the logo image",
+          "default": ""
+        },
+        "title": {
+          "type": "string",
+          "description": "Title displayed on the success page",
+          "default": ""
+        },
+        "message": {
+          "type": "string",
+          "description": "Message shown below the title (use {{.AppName}} placeholder)",
+          "default": ""
+        },
+        "buttonText": {
+          "type": "string",
+          "description": "Button text for manual redirect",
+          "default": ""
+        },
+        "primaryColor": {
+          "type": "string",
+          "description": "Primary/accent color for buttons (CSS color value)",
+          "default": "",
+          "examples": ["#667eea"]
+        },
+        "backgroundGradient": {
+          "type": "string",
+          "description": "Background gradient CSS value",
+          "default": "",
+          "examples": ["linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)"]
+        }
+      }
+    },
+    "existingSecret": {
+      "type": "string",
+      "description": "Existing secret containing Google OAuth credentials",
+      "default": ""
+    },
+    "github": {
+      "type": "object",
+      "description": "GitHub configuration (required for cleanup command)",
+      "additionalProperties": false,
+      "properties": {
+        "user": {
+          "type": "string",
+          "description": "GitHub username",
+          "default": ""
+        },
+        "token": {
+          "type": "string",
+          "description": "GitHub token",
+          "default": ""
+        }
+      }
+    },
+    "githubSecret": {
+      "type": "string",
+      "description": "Existing secret containing GitHub credentials",
+      "default": ""
+    },
+    "networkPolicy": {
+      "type": "object",
+      "description": "NetworkPolicy configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable NetworkPolicy",
+          "default": false
+        },
+        "policyTypes": {
+          "type": "array",
+          "description": "Policy types to enforce",
+          "items": {
+            "type": "string",
+            "enum": ["Ingress", "Egress"]
+          }
+        },
+        "ingress": {
+          "type": "array",
+          "description": "Ingress rules",
+          "items": {
+            "type": "object"
+          }
+        },
+        "egress": {
+          "type": "array",
+          "description": "Egress rules",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "ciliumNetworkPolicy": {
+      "type": "object",
+      "description": "CiliumNetworkPolicy configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable CiliumNetworkPolicy",
+          "default": false
+        },
+        "labels": {
+          "type": "object",
+          "description": "Additional labels",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Additional annotations",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Metrics server configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable the metrics server",
+          "default": true
+        },
+        "port": {
+          "type": "integer",
+          "description": "Port for the metrics server",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 9090
+        },
+        "service": {
+          "type": "object",
+          "description": "Service configuration for metrics",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "Service type for metrics (keep as ClusterIP for security)",
+              "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+              "default": "ClusterIP"
+            },
+            "annotations": {
+              "type": "object",
+              "description": "Service annotations",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            }
+          }
+        }
+      }
+    },
+    "instrumentation": {
+      "type": "object",
+      "description": "OpenTelemetry instrumentation configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable instrumentation",
+          "default": true
+        },
+        "metricsExporter": {
+          "type": "string",
+          "description": "Metrics exporter type",
+          "enum": ["prometheus", "otlp", "stdout"],
+          "default": "prometheus"
+        },
+        "tracingExporter": {
+          "type": "string",
+          "description": "Tracing exporter type",
+          "enum": ["otlp", "stdout", "none"],
+          "default": "none"
+        },
+        "otlpEndpoint": {
+          "type": "string",
+          "description": "OTLP endpoint for traces/metrics",
+          "default": "",
+          "examples": ["otel-collector.observability:4318"]
+        },
+        "otlpInsecure": {
+          "type": "boolean",
+          "description": "Use insecure connection for OTLP (WARNING: never enable in production)",
+          "default": false
+        },
+        "traceSamplingRate": {
+          "type": "string",
+          "description": "Trace sampling rate (0.0 to 1.0)",
+          "default": "0.1",
+          "examples": ["0.1", "0.5", "1.0"]
+        },
+        "detailedLabels": {
+          "type": "boolean",
+          "description": "Include detailed/high-cardinality labels (WARNING: cardinality explosion)",
+          "default": false
+        },
+        "auditLogging": {
+          "type": "object",
+          "description": "Audit logging configuration",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable audit logging",
+              "default": true
+            },
+            "includePII": {
+              "type": "boolean",
+              "description": "Include full email addresses (PII) in audit logs",
+              "default": false
+            }
+          }
+        }
+      }
+    },
+    "serviceMonitor": {
+      "type": "object",
+      "description": "Prometheus ServiceMonitor configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable ServiceMonitor creation",
+          "default": false
+        },
+        "labels": {
+          "type": "object",
+          "description": "Additional labels for the ServiceMonitor",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Additional annotations for the ServiceMonitor",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "interval": {
+          "type": "string",
+          "description": "Scrape interval",
+          "default": ""
+        },
+        "scrapeTimeout": {
+          "type": "string",
+          "description": "Scrape timeout",
+          "default": ""
+        },
+        "relabelings": {
+          "type": "array",
+          "description": "Relabelings for the ServiceMonitor",
+          "items": {
+            "type": "object"
+          },
+          "default": []
+        },
+        "metricRelabelings": {
+          "type": "array",
+          "description": "Metric relabelings for the ServiceMonitor",
+          "items": {
+            "type": "object"
+          },
+          "default": []
+        }
+      }
+    },
+    "grafanaDashboards": {
+      "type": "object",
+      "description": "Grafana Dashboard ConfigMaps configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable dashboard ConfigMap creation",
+          "default": false
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace where Grafana is installed",
+          "default": ""
+        },
+        "labels": {
+          "type": "object",
+          "description": "Labels for dashboard ConfigMaps",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {
+            "grafana_dashboard": "1"
+          }
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Additional annotations for dashboard ConfigMaps",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "folder": {
+          "type": "string",
+          "description": "Folder in Grafana for dashboards",
+          "default": "Inboxfewer"
+        },
+        "dashboards": {
+          "type": "object",
+          "description": "Individual dashboard configuration",
+          "additionalProperties": false,
+          "properties": {
+            "administrator": {
+              "type": "object",
+              "description": "Administrator dashboard",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable administrator dashboard",
+                  "default": true
+                }
+              }
+            },
+            "security": {
+              "type": "object",
+              "description": "Security Operations dashboard",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable security dashboard",
+                  "default": true
+                }
+              }
+            },
+            "endUser": {
+              "type": "object",
+              "description": "End-User dashboard",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable end-user dashboard",
+                  "default": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "prometheusRule": {
+      "type": "object",
+      "description": "Prometheus Alerting Rules configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable PrometheusRule creation",
+          "default": false
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace for the PrometheusRule",
+          "default": ""
+        },
+        "labels": {
+          "type": "object",
+          "description": "Labels for the PrometheusRule",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Additional annotations",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "rules": {
+          "type": "object",
+          "description": "Individual alert rules configuration",
+          "additionalProperties": false,
+          "properties": {
+            "httpErrorRate": {
+              "$ref": "#/$defs/alertRule",
+              "description": "HTTP Error Rate alert",
+              "default": {
+                "enabled": true,
+                "threshold": 5,
+                "for": "5m",
+                "severity": "warning"
+              }
+            },
+            "highLatency": {
+              "$ref": "#/$defs/alertRule",
+              "description": "High Latency alert",
+              "default": {
+                "enabled": true,
+                "threshold": 2,
+                "for": "5m",
+                "severity": "warning"
+              }
+            },
+            "oauthFailures": {
+              "$ref": "#/$defs/alertRule",
+              "description": "OAuth Failures alert",
+              "default": {
+                "enabled": true,
+                "threshold": 10,
+                "for": "5m",
+                "severity": "warning"
+              }
+            },
+            "podRestarts": {
+              "$ref": "#/$defs/alertRule",
+              "description": "Pod Restarts alert",
+              "default": {
+                "enabled": true,
+                "threshold": 3,
+                "for": "5m",
+                "severity": "warning"
+              }
+            },
+            "googleAPIErrors": {
+              "$ref": "#/$defs/alertRule",
+              "description": "Google API Errors alert",
+              "default": {
+                "enabled": true,
+                "threshold": 10,
+                "for": "5m",
+                "severity": "warning"
+              }
+            },
+            "toolErrors": {
+              "$ref": "#/$defs/alertRule",
+              "description": "MCP Tool Errors alert",
+              "default": {
+                "enabled": true,
+                "threshold": 10,
+                "for": "5m",
+                "severity": "warning"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "alertRule": {
+      "type": "object",
+      "description": "Alert rule configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable this alert rule",
+          "default": true
+        },
+        "threshold": {
+          "type": "number",
+          "description": "Threshold value for the alert",
+          "minimum": 0
+        },
+        "for": {
+          "type": "string",
+          "description": "Duration the condition must be true",
+          "default": "5m",
+          "examples": ["1m", "5m", "15m"]
+        },
+        "severity": {
+          "type": "string",
+          "description": "Alert severity level",
+          "enum": ["info", "warning", "critical"],
+          "default": "warning"
+        },
+        "labels": {
+          "type": "object",
+          "description": "Additional labels for the alert",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "runbookUrl": {
+          "type": "string",
+          "description": "Runbook URL for incident response",
+          "default": ""
         }
       }
     }
