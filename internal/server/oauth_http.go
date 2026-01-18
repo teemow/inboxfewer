@@ -64,18 +64,14 @@ type OAuthConfig struct {
 	TrustedAudiences []string
 
 	// SSOAllowPrivateIPs allows JWKS endpoints to resolve to private IP addresses
-	// during SSO token validation. This is necessary for private/internal deployments
-	// where the IdP (e.g., Dex) runs on a private network.
+	// during SSO token validation (mcp-oauth v0.2.40+). This is necessary for
+	// private/internal deployments where the IdP (e.g., Dex) runs on a private network.
 	//
 	// WARNING: Reduces SSRF protection. Only enable for internal/VPN deployments
 	// where the IdP legitimately runs on private networks.
 	//
 	// Note: For Google OAuth, this setting has no effect as Google's JWKS endpoint
 	// is always publicly accessible. This is primarily for private Dex deployments.
-	//
-	// IMPORTANT: This option requires mcp-oauth to add AllowPrivateIPJWKS support.
-	// See: https://github.com/giantswarm/mcp-oauth/issues/175
-	// Until mcp-oauth supports this, the config is stored but has no effect.
 	//
 	// Default: false (blocked for security)
 	SSOAllowPrivateIPs bool
@@ -150,10 +146,7 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 		CIMDAllowPrivateIPs: config.CIMDAllowPrivateIPs,
 		// mcp-oauth v0.2.38+ features - SSO token forwarding
 		TrustedAudiences: config.TrustedAudiences,
-		// mcp-oauth v0.2.39+ features - SSO security
-		// Note: SSOAllowPrivateIPs is stored for future use when mcp-oauth adds support
-		// Currently, this setting has no effect as mcp-oauth v0.2.39 doesn't have
-		// AllowPrivateIPJWKS configuration. Google JWKS is always public anyway.
+		// mcp-oauth v0.2.40+ features - SSO security
 		SSOAllowPrivateIPs: config.SSOAllowPrivateIPs,
 		// Storage configuration
 		Storage: config.Storage,
@@ -162,16 +155,6 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 	// Pass through interstitial config if provided
 	if config.Interstitial != nil {
 		oauthConfig.Interstitial = config.Interstitial
-	}
-
-	// Log warning if SSOAllowPrivateIPs is requested but not yet supported by mcp-oauth
-	// This setting is stored for future use when mcp-oauth adds AllowPrivateIPJWKS support
-	if config.SSOAllowPrivateIPs {
-		logger.Warn("SSO private IP allowance requested but not yet supported by mcp-oauth",
-			"config", "SSOAllowPrivateIPs=true",
-			"impact", "JWKS fetching from private IP IdPs may fail with SSRF protection errors",
-			"workaround", "ensure your IdP's JWKS endpoint is accessible via a public IP or wait for mcp-oauth support",
-			"tracking", "https://github.com/giantswarm/mcp-oauth/issues/175")
 	}
 
 	return oauthConfig

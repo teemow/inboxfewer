@@ -69,7 +69,7 @@ type OAuthSecurityConfig struct {
 	// SSO Token Forwarding (mcp-oauth v0.2.38+)
 	TrustedAudiences []string
 
-	// SSO Security (mcp-oauth v0.2.39+)
+	// SSO Security (mcp-oauth v0.2.40+)
 	// Allows JWKS endpoints to resolve to private IPs for private IdP deployments
 	SSOAllowPrivateIPs bool
 
@@ -154,7 +154,7 @@ func newServeCmd() *cobra.Command {
 		cimdAllowPrivateIPs bool
 		// SSO Token Forwarding (mcp-oauth v0.2.38+)
 		trustedAudiences []string
-		// SSO Security (mcp-oauth v0.2.39+)
+		// SSO Security (mcp-oauth v0.2.40+)
 		ssoAllowPrivateIPs bool
 		// TLS/HTTPS support
 		tlsCertFile string
@@ -260,7 +260,7 @@ OAuth Configuration:
 				CIMDAllowPrivateIPs: cimdAllowPrivateIPs,
 				// SSO Token Forwarding (mcp-oauth v0.2.38+)
 				TrustedAudiences: trustedAudiences,
-				// SSO Security (mcp-oauth v0.2.39+)
+				// SSO Security (mcp-oauth v0.2.40+)
 				SSOAllowPrivateIPs: ssoAllowPrivateIPs,
 				// TLS support
 				TLSCertFile: tlsCertFile,
@@ -519,7 +519,7 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		}
 	}
 
-	// Parse SSO private IP setting from environment variable (mcp-oauth v0.2.39+)
+	// Parse SSO private IP setting from environment variable (mcp-oauth v0.2.40+)
 	if !securityConfig.SSOAllowPrivateIPs {
 		if envVal := os.Getenv("SSO_ALLOW_PRIVATE_IPS"); envVal != "" {
 			if parsed, err := strconv.ParseBool(envVal); err == nil {
@@ -769,7 +769,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		CIMDAllowPrivateIPs: securityConfig.CIMDAllowPrivateIPs,
 		// SSO Token Forwarding (mcp-oauth v0.2.38+)
 		TrustedAudiences: securityConfig.TrustedAudiences,
-		// SSO Security (mcp-oauth v0.2.39+)
+		// SSO Security (mcp-oauth v0.2.40+)
 		SSOAllowPrivateIPs: securityConfig.SSOAllowPrivateIPs,
 		// Storage configuration (mcp-oauth v0.2.30+)
 		Storage: oauth.StorageConfig{

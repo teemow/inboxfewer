@@ -928,12 +928,12 @@
         },
         "sso": {
           "type": "object",
-          "description": "SSO security configuration (mcp-oauth v0.2.39+)",
+          "description": "SSO security configuration (mcp-oauth v0.2.40+)",
           "additionalProperties": false,
           "properties": {
             "allowPrivateIPs": {
               "type": "boolean",
-              "description": "Allow JWKS endpoints to resolve to private IPs during SSO token validation. Required for private IdP deployments (e.g., Dex on internal networks). WARNING: reduces SSRF protection. Has no effect for Google OAuth (JWKS is always public). Note: Requires future mcp-oauth support for AllowPrivateIPJWKS.",
+              "description": "Allow JWKS endpoints to resolve to private IPs during SSO token validation. Required for private IdP deployments (e.g., Dex on internal networks). WARNING: reduces SSRF protection. Has no effect for Google OAuth (JWKS is always public).",
               "default": false
             }
           }

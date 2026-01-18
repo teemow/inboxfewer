@@ -88,8 +88,8 @@ type Config struct {
 	TrustedAudiences []string
 
 	// SSOAllowPrivateIPs allows JWKS endpoints to resolve to private IP addresses
-	// during SSO token validation. This is necessary for private/internal deployments
-	// where the IdP (e.g., Dex) runs on a private network.
+	// during SSO token validation (mcp-oauth v0.2.40+). This is necessary for
+	// private/internal deployments where the IdP (e.g., Dex) runs on a private network.
 	//
 	// WARNING: Reduces SSRF protection. Only enable for internal/VPN deployments
 	// where the IdP legitimately runs on private networks (10.0.0.0/8, 172.16.0.0/12,
@@ -448,6 +448,10 @@ func NewHandler(config *Config) (*Handler, error) {
 		// SSO token forwarding (mcp-oauth v0.2.38+)
 		// Accept tokens with audiences from trusted upstream aggregators
 		TrustedAudiences: config.TrustedAudiences,
+
+		// Allow JWKS endpoints to resolve to private IPs (mcp-oauth v0.2.40+)
+		// Required for private IdP deployments (e.g., Dex on internal networks)
+		AllowPrivateIPJWKS: config.SSOAllowPrivateIPs,
 	}
 
 	// Configure interstitial page branding if provided

@@ -1270,7 +1270,7 @@ oauthSecurity:
     - "muster-client"
     - "my-aggregator-client"
 
-  # SSO Security Configuration (mcp-oauth v0.2.39+)
+  # SSO Security Configuration (mcp-oauth v0.2.40+)
   sso:
     # Allow JWKS endpoints to resolve to private IPs
     # Required for private Dex deployments on internal networks
@@ -1297,7 +1297,7 @@ oauthSecurity:
 
 **Note:** For Google OAuth, this setting has no effect because Google's JWKS endpoint (`https://www.googleapis.com/oauth2/v3/certs`) is always publicly accessible.
 
-**Status:** This configuration option requires mcp-oauth to add `AllowPrivateIPJWKS` support. See [mcp-oauth#175](https://github.com/giantswarm/mcp-oauth/issues/175). The value is stored for when this capability is available.
+**Availability:** This feature requires mcp-oauth v0.2.40 or later.
 
 ### Security Model
 

@@ -375,7 +375,7 @@ oauthSecurity:
   # Default: [] (only accept tokens issued directly to this server's client_id)
   trustedAudiences: []
 
-  # SSO Security Configuration (mcp-oauth v0.2.39+)
+  # SSO Security Configuration (mcp-oauth v0.2.40+)
   sso:
     # Allow JWKS endpoints to resolve to private IP addresses during SSO token validation.
     # This is necessary for private/internal deployments where the IdP (e.g., Dex)
@@ -387,11 +387,6 @@ oauthSecurity:
     # Note: For Google OAuth, this setting has no effect as Google's JWKS endpoint
     # (https://www.googleapis.com/oauth2/v3/certs) is always publicly accessible.
     # This option is primarily for private Dex deployments.
-    #
-    # IMPORTANT: This configuration option is prepared for future mcp-oauth support.
-    # As of mcp-oauth v0.2.39, the library doesn't yet expose AllowPrivateIPJWKS.
-    # The value is stored for when mcp-oauth adds this capability.
-    # See: https://github.com/giantswarm/mcp-oauth/issues/175 (pending feature request)
     #
     # Default: false (blocked for security - SSRF protection enabled)
     allowPrivateIPs: false
