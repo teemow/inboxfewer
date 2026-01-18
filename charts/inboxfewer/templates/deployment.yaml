@@ -193,6 +193,11 @@ spec:
           - name: OAUTH_TRUSTED_AUDIENCES
             value: {{ .Values.oauthSecurity.trustedAudiences | join "," | quote }}
           {{- end }}
+          {{- /* SSO Security (mcp-oauth v0.2.39+) */ -}}
+          {{- if and .Values.oauthSecurity.sso .Values.oauthSecurity.sso.allowPrivateIPs }}
+          - name: SSO_ALLOW_PRIVATE_IPS
+            value: "true"
+          {{- end }}
           {{- /* Valkey storage configuration (mcp-oauth v0.2.30+) */ -}}
           {{- if eq ((.Values.oauthSecurity.storage).type | default "memory") "valkey" }}
           - name: OAUTH_STORAGE_TYPE

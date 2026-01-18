@@ -919,12 +919,24 @@
         },
         "trustedAudiences": {
           "type": "array",
-          "description": "Trusted audiences for SSO token forwarding",
+          "description": "Trusted audiences for SSO token forwarding. When configured, tokens with these audience claims are validated via JWKS signature verification, enabling SSO from upstream aggregators.",
           "items": {
             "type": "string"
           },
           "default": [],
           "examples": [["muster-client", "my-aggregator-client"]]
+        },
+        "sso": {
+          "type": "object",
+          "description": "SSO security configuration (mcp-oauth v0.2.39+)",
+          "additionalProperties": false,
+          "properties": {
+            "allowPrivateIPs": {
+              "type": "boolean",
+              "description": "Allow JWKS endpoints to resolve to private IPs during SSO token validation. Required for private IdP deployments (e.g., Dex on internal networks). WARNING: reduces SSRF protection. Has no effect for Google OAuth (JWKS is always public). Note: Requires future mcp-oauth support for AllowPrivateIPJWKS.",
+              "default": false
+            }
+          }
         },
         "storage": {
           "type": "object",
