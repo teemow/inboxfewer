@@ -74,7 +74,7 @@ type OAuthConfig struct {
 	// is always publicly accessible. This is primarily for private Dex deployments.
 	//
 	// IMPORTANT: This option requires mcp-oauth to add AllowPrivateIPJWKS support.
-	// See: https://github.com/giantswarm/mcp-oauth/issues/175 (TODO: create this issue)
+	// See: https://github.com/giantswarm/mcp-oauth/issues/175
 	// Until mcp-oauth supports this, the config is stored but has no effect.
 	//
 	// Default: false (blocked for security)
@@ -162,6 +162,16 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 	// Pass through interstitial config if provided
 	if config.Interstitial != nil {
 		oauthConfig.Interstitial = config.Interstitial
+	}
+
+	// Log warning if SSOAllowPrivateIPs is requested but not yet supported by mcp-oauth
+	// This setting is stored for future use when mcp-oauth adds AllowPrivateIPJWKS support
+	if config.SSOAllowPrivateIPs {
+		logger.Warn("SSO private IP allowance requested but not yet supported by mcp-oauth",
+			"config", "SSOAllowPrivateIPs=true",
+			"impact", "JWKS fetching from private IP IdPs may fail with SSRF protection errors",
+			"workaround", "ensure your IdP's JWKS endpoint is accessible via a public IP or wait for mcp-oauth support",
+			"tracking", "https://github.com/giantswarm/mcp-oauth/issues/175")
 	}
 
 	return oauthConfig

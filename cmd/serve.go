@@ -535,8 +535,14 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 	if len(securityConfig.TrustedAudiences) > 0 {
 		slog.Warn("SSO token forwarding enabled: tokens from trusted upstream clients will be accepted",
 			"trusted_audiences", securityConfig.TrustedAudiences,
-			"sso_allow_private_ips", securityConfig.SSOAllowPrivateIPs,
 			"security_note", "ensure these client IDs are from services you control and trust")
+
+		// Additional info log when SSO private IPs are configured
+		if securityConfig.SSOAllowPrivateIPs {
+			slog.Info("SSO private IP allowance configured",
+				"sso_allow_private_ips", true,
+				"note", "JWKS endpoints on private networks will be allowed for SSO token validation")
+		}
 	}
 
 	// Parse interstitial page branding from environment variables
