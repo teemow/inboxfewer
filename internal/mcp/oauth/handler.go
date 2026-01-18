@@ -78,11 +78,29 @@ type Config struct {
 	// client_id to TrustedAudiences, downstream servers can accept these forwarded
 	// tokens without requiring a separate authentication flow.
 	//
+	// The SSO flow validates JWT tokens using the IdP's JWKS endpoint (Google, Dex, etc.)
+	// instead of calling the userinfo endpoint, which correctly handles ID token forwarding.
+	//
 	// Security: Tokens must still be from the configured issuer (Google/Dex) and
 	// cryptographically signed. Only the audience claim is relaxed.
 	//
 	// Example: ["muster-client", "my-aggregator-client"]
 	TrustedAudiences []string
+
+	// SSOAllowPrivateIPs allows JWKS endpoints to resolve to private IP addresses
+	// during SSO token validation (mcp-oauth v0.2.40+). This is necessary for
+	// private/internal deployments where the IdP (e.g., Dex) runs on a private network.
+	//
+	// WARNING: Reduces SSRF protection. Only enable for internal/VPN deployments
+	// where the IdP legitimately runs on private networks (10.0.0.0/8, 172.16.0.0/12,
+	// 192.168.0.0/16).
+	//
+	// Note: For Google OAuth, this setting has no effect as Google's JWKS endpoint
+	// (https://www.googleapis.com/oauth2/v3/certs) is always publicly accessible.
+	// This option is primarily for private Dex deployments.
+	//
+	// Default: false (blocked for security)
+	SSOAllowPrivateIPs bool
 
 	// Storage configures the token storage backend
 	// Defaults to in-memory storage if not specified
@@ -430,6 +448,10 @@ func NewHandler(config *Config) (*Handler, error) {
 		// SSO token forwarding (mcp-oauth v0.2.38+)
 		// Accept tokens with audiences from trusted upstream aggregators
 		TrustedAudiences: config.TrustedAudiences,
+
+		// Allow JWKS endpoints to resolve to private IPs (mcp-oauth v0.2.40+)
+		// Required for private IdP deployments (e.g., Dex on internal networks)
+		AllowPrivateIPJWKS: config.SSOAllowPrivateIPs,
 	}
 
 	// Configure interstitial page branding if provided

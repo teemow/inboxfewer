@@ -63,6 +63,19 @@ type OAuthConfig struct {
 	// See oauth.Config.TrustedAudiences for full documentation.
 	TrustedAudiences []string
 
+	// SSOAllowPrivateIPs allows JWKS endpoints to resolve to private IP addresses
+	// during SSO token validation (mcp-oauth v0.2.40+). This is necessary for
+	// private/internal deployments where the IdP (e.g., Dex) runs on a private network.
+	//
+	// WARNING: Reduces SSRF protection. Only enable for internal/VPN deployments
+	// where the IdP legitimately runs on private networks.
+	//
+	// Note: For Google OAuth, this setting has no effect as Google's JWKS endpoint
+	// is always publicly accessible. This is primarily for private Dex deployments.
+	//
+	// Default: false (blocked for security)
+	SSOAllowPrivateIPs bool
+
 	// Storage configures the token storage backend
 	// Defaults to in-memory storage if not specified
 	Storage oauth.StorageConfig
@@ -133,6 +146,8 @@ func buildOAuthConfig(config OAuthConfig) *oauth.Config {
 		CIMDAllowPrivateIPs: config.CIMDAllowPrivateIPs,
 		// mcp-oauth v0.2.38+ features - SSO token forwarding
 		TrustedAudiences: config.TrustedAudiences,
+		// mcp-oauth v0.2.40+ features - SSO security
+		SSOAllowPrivateIPs: config.SSOAllowPrivateIPs,
 		// Storage configuration
 		Storage: config.Storage,
 	}

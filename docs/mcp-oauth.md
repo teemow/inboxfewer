@@ -1219,7 +1219,9 @@ Inboxfewer supports Single Sign-On (SSO) scenarios where tokens from trusted ups
 
 When users connect through an MCP aggregator to inboxfewer, they typically need to authenticate separately to each service. With SSO token forwarding, if both services use the same Identity Provider (e.g., Google or Dex), the aggregator can forward the user's ID token, and inboxfewer will accept it.
 
-### How It Works
+### How It Works (mcp-oauth v0.2.39)
+
+The SSO token forwarding implementation uses JWKS-based JWT validation, which correctly handles ID token forwarding scenarios where the previous userinfo-based validation failed.
 
 ```
 User ─── authenticates ───> Aggregator (muster)
@@ -1228,13 +1230,18 @@ User ─── authenticates ───> Aggregator (muster)
                                ▼
                            Inboxfewer
                                │
-                               │ validates token:
-                               │ - Same issuer (Google/Dex)
-                               │ - Valid signature
-                               │ - Audience in TrustedAudiences
+                               │ validates token via JWKS:
+                               │ 1. Detect JWT format (3 dot-separated parts)
+                               │ 2. Fetch JWKS from IdP (Google/Dex)
+                               │ 3. Validate signature using public key
+                               │ 4. Validate issuer matches provider
+                               │ 5. Check audience in TrustedAudiences
+                               │ 6. Extract user info from JWT claims
                                ▼
                            Access granted
 ```
+
+**Key Improvement (v0.2.39):** The previous implementation called the IdP's userinfo endpoint, which fails for ID tokens (userinfo expects access tokens). The new implementation validates ID tokens directly using JWKS signature verification.
 
 ### Configuration
 
@@ -1262,7 +1269,35 @@ oauthSecurity:
   trustedAudiences:
     - "muster-client"
     - "my-aggregator-client"
+
+  # SSO Security Configuration (mcp-oauth v0.2.40+)
+  sso:
+    # Allow JWKS endpoints to resolve to private IPs
+    # Required for private Dex deployments on internal networks
+    allowPrivateIPs: false
 ```
+
+### Private IdP Deployments
+
+For deployments where the Identity Provider (e.g., Dex) runs on a private network, you may need to allow private IP addresses for JWKS fetching:
+
+```yaml
+oauthSecurity:
+  trustedAudiences:
+    - "muster-client"
+  sso:
+    # Enable for private Dex on internal networks (10.x, 172.16.x, 192.168.x)
+    allowPrivateIPs: true
+```
+
+**Warning:** Enabling `sso.allowPrivateIPs` reduces SSRF protection. Only use for:
+- Home lab deployments
+- Air-gapped environments  
+- Internal enterprise networks
+
+**Note:** For Google OAuth, this setting has no effect because Google's JWKS endpoint (`https://www.googleapis.com/oauth2/v3/certs`) is always publicly accessible.
+
+**Availability:** This feature requires mcp-oauth v0.2.40 or later.
 
 ### Security Model
 

@@ -69,6 +69,10 @@ type OAuthSecurityConfig struct {
 	// SSO Token Forwarding (mcp-oauth v0.2.38+)
 	TrustedAudiences []string
 
+	// SSO Security (mcp-oauth v0.2.40+)
+	// Allows JWKS endpoints to resolve to private IPs for private IdP deployments
+	SSOAllowPrivateIPs bool
+
 	// TLS/HTTPS support
 	TLSCertFile string
 	TLSKeyFile  string
@@ -150,6 +154,8 @@ func newServeCmd() *cobra.Command {
 		cimdAllowPrivateIPs bool
 		// SSO Token Forwarding (mcp-oauth v0.2.38+)
 		trustedAudiences []string
+		// SSO Security (mcp-oauth v0.2.40+)
+		ssoAllowPrivateIPs bool
 		// TLS/HTTPS support
 		tlsCertFile string
 		tlsKeyFile  string
@@ -254,6 +260,8 @@ OAuth Configuration:
 				CIMDAllowPrivateIPs: cimdAllowPrivateIPs,
 				// SSO Token Forwarding (mcp-oauth v0.2.38+)
 				TrustedAudiences: trustedAudiences,
+				// SSO Security (mcp-oauth v0.2.40+)
+				SSOAllowPrivateIPs: ssoAllowPrivateIPs,
 				// TLS support
 				TLSCertFile: tlsCertFile,
 				TLSKeyFile:  tlsKeyFile,
@@ -318,6 +326,7 @@ OAuth Configuration:
 
 	// SSO Token Forwarding (mcp-oauth v0.2.38+)
 	cmd.Flags().StringSliceVar(&trustedAudiences, "oauth-trusted-audiences", nil, "Additional OAuth client IDs whose tokens are accepted for SSO (comma-separated). Enables token forwarding from aggregators like muster. Can also use OAUTH_TRUSTED_AUDIENCES env var.")
+	cmd.Flags().BoolVar(&ssoAllowPrivateIPs, "sso-allow-private-ips", false, "Allow JWKS endpoints to resolve to private IPs during SSO token validation (for private IdP deployments). Can also use SSO_ALLOW_PRIVATE_IPS env var.")
 
 	// Metrics server flags
 	cmd.Flags().BoolVar(&metricsEnabled, "metrics-enabled", true, "Enable the metrics server on a dedicated port. Can also use METRICS_ENABLED env var.")
@@ -510,12 +519,30 @@ func runServe(transport string, debugMode bool, httpAddr string, yolo bool, goog
 		}
 	}
 
+	// Parse SSO private IP setting from environment variable (mcp-oauth v0.2.40+)
+	if !securityConfig.SSOAllowPrivateIPs {
+		if envVal := os.Getenv("SSO_ALLOW_PRIVATE_IPS"); envVal != "" {
+			if parsed, err := strconv.ParseBool(envVal); err == nil {
+				securityConfig.SSOAllowPrivateIPs = parsed
+			} else {
+				log.Printf("Warning: invalid SSO_ALLOW_PRIVATE_IPS value %q (expected true/false), using default: false", envVal)
+			}
+		}
+	}
+
 	// Log security warning when SSO token forwarding is enabled
 	// This is a security-sensitive configuration that operators should be aware of
 	if len(securityConfig.TrustedAudiences) > 0 {
 		slog.Warn("SSO token forwarding enabled: tokens from trusted upstream clients will be accepted",
 			"trusted_audiences", securityConfig.TrustedAudiences,
 			"security_note", "ensure these client IDs are from services you control and trust")
+
+		// Additional info log when SSO private IPs are configured
+		if securityConfig.SSOAllowPrivateIPs {
+			slog.Info("SSO private IP allowance configured",
+				"sso_allow_private_ips", true,
+				"note", "JWKS endpoints on private networks will be allowed for SSO token validation")
+		}
 	}
 
 	// Parse interstitial page branding from environment variables
@@ -742,6 +769,8 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 		CIMDAllowPrivateIPs: securityConfig.CIMDAllowPrivateIPs,
 		// SSO Token Forwarding (mcp-oauth v0.2.38+)
 		TrustedAudiences: securityConfig.TrustedAudiences,
+		// SSO Security (mcp-oauth v0.2.40+)
+		SSOAllowPrivateIPs: securityConfig.SSOAllowPrivateIPs,
 		// Storage configuration (mcp-oauth v0.2.30+)
 		Storage: oauth.StorageConfig{
 			Type: oauth.StorageType(securityConfig.Storage.Type),
