@@ -1,0 +1,340 @@
+suite: Gateway API Tests
+templates:
+  - templates/httproute.yaml
+  - templates/backendtrafficpolicy.yaml
+tests:
+  #
+  # HTTPRoute Tests
+  #
+
+  - it: should not render HTTPRoute when gatewayAPI is disabled
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when parentRefs is empty with gatewayAPI enabled
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "gatewayAPI.httpRoute.parentRefs is required when gatewayAPI.enabled is true. Specify at least one parent Gateway reference."
+
+  - it: should render HTTPRoute with valid parentRefs
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+              namespace: envoy-gateway-system
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: HTTPRoute
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1
+
+  - it: should set parentRefs correctly
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+              namespace: envoy-gateway-system
+    asserts:
+      - equal:
+          path: spec.parentRefs[0].name
+          value: internal
+      - equal:
+          path: spec.parentRefs[0].namespace
+          value: envoy-gateway-system
+
+  - it: should set hostnames when provided
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+          hostnames:
+            - example.com
+            - api.example.com
+    asserts:
+      - equal:
+          path: spec.hostnames[0]
+          value: example.com
+      - equal:
+          path: spec.hostnames[1]
+          value: api.example.com
+
+  - it: should create default rule when no rules provided
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.type
+          value: PathPrefix
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /
+
+  - it: should apply custom rules with matches
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+          rules:
+            - matches:
+                - path:
+                    type: PathPrefix
+                    value: /api
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.type
+          value: PathPrefix
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /api
+
+  - it: should apply filters when provided
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+          rules:
+            - matches:
+                - path:
+                    type: PathPrefix
+                    value: /
+              filters:
+                - type: RequestHeaderModifier
+                  requestHeaderModifier:
+                    add:
+                      - name: X-Custom-Header
+                        value: custom-value
+    asserts:
+      - equal:
+          path: spec.rules[0].filters[0].type
+          value: RequestHeaderModifier
+      - equal:
+          path: spec.rules[0].filters[0].requestHeaderModifier.add[0].name
+          value: X-Custom-Header
+
+  - it: should apply timeouts when provided
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+          rules:
+            - timeouts:
+                request: 30s
+    asserts:
+      - equal:
+          path: spec.rules[0].timeouts.request
+          value: 30s
+
+  - it: should include standard labels
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+
+  - it: should apply custom labels to HTTPRoute
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+          labels:
+            custom-label: custom-value
+    asserts:
+      - equal:
+          path: metadata.labels["custom-label"]
+          value: custom-value
+
+  - it: should apply custom annotations to HTTPRoute
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+          annotations:
+            custom-annotation: annotation-value
+    asserts:
+      - equal:
+          path: metadata.annotations["custom-annotation"]
+          value: annotation-value
+
+  - it: should reference correct service port in backendRefs
+    template: templates/httproute.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+      service:
+        port: 9000
+    asserts:
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 9000
+
+  #
+  # BackendTrafficPolicy Tests
+  #
+
+  - it: should not render BackendTrafficPolicy when gatewayAPI is disabled
+    template: templates/backendtrafficpolicy.yaml
+    set:
+      gatewayAPI:
+        enabled: false
+        backendTrafficPolicy:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render BackendTrafficPolicy when backendTrafficPolicy is disabled
+    template: templates/backendtrafficpolicy.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+        backendTrafficPolicy:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render BackendTrafficPolicy when both flags are enabled
+    template: templates/backendtrafficpolicy.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+        backendTrafficPolicy:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: BackendTrafficPolicy
+      - isAPIVersion:
+          of: gateway.envoyproxy.io/v1alpha1
+
+  - it: should set timeout correctly in BackendTrafficPolicy
+    template: templates/backendtrafficpolicy.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+        backendTrafficPolicy:
+          enabled: true
+          timeout: "600s"
+    asserts:
+      - equal:
+          path: spec.timeout.http.requestTimeout
+          value: "600s"
+
+  - it: should target the HTTPRoute in BackendTrafficPolicy
+    template: templates/backendtrafficpolicy.yaml
+    release:
+      name: my-release
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+        backendTrafficPolicy:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.targetRefs[0].group
+          value: gateway.networking.k8s.io
+      - equal:
+          path: spec.targetRefs[0].kind
+          value: HTTPRoute
+      - equal:
+          path: spec.targetRefs[0].name
+          value: my-release-inboxfewer
+
+  - it: should apply custom labels to BackendTrafficPolicy
+    template: templates/backendtrafficpolicy.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+        backendTrafficPolicy:
+          enabled: true
+          labels:
+            custom-label: btp-value
+    asserts:
+      - equal:
+          path: metadata.labels["custom-label"]
+          value: btp-value
+
+  - it: should apply custom annotations to BackendTrafficPolicy
+    template: templates/backendtrafficpolicy.yaml
+    set:
+      gatewayAPI:
+        enabled: true
+        httpRoute:
+          parentRefs:
+            - name: internal
+        backendTrafficPolicy:
+          enabled: true
+          annotations:
+            custom-annotation: btp-annotation
+    asserts:
+      - equal:
+          path: metadata.annotations["custom-annotation"]
+          value: btp-annotation

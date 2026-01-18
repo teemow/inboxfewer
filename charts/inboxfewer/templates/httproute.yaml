@@ -1,4 +1,7 @@
 {{- if .Values.gatewayAPI.enabled -}}
+{{- if not .Values.gatewayAPI.httpRoute.parentRefs }}
+{{- fail "gatewayAPI.httpRoute.parentRefs is required when gatewayAPI.enabled is true. Specify at least one parent Gateway reference." }}
+{{- end }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -33,6 +36,10 @@ spec:
         - path:
             type: PathPrefix
             value: /
+      {{- end }}
+      {{- if .filters }}
+      filters:
+        {{- toYaml .filters | nindent 8 }}
       {{- end }}
       {{- if .timeouts }}
       timeouts:

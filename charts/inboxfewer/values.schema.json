@@ -1,0 +1,191 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "gatewayAPI": {
+      "type": "object",
+      "description": "Gateway API configuration for HTTPRoute and BackendTrafficPolicy",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable Gateway API HTTPRoute creation",
+          "default": false
+        },
+        "httpRoute": {
+          "type": "object",
+          "description": "HTTPRoute configuration",
+          "properties": {
+            "parentRefs": {
+              "type": "array",
+              "description": "Parent gateway references (required when gatewayAPI.enabled is true)",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name of the parent Gateway"
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "description": "Namespace of the parent Gateway"
+                  },
+                  "sectionName": {
+                    "type": "string",
+                    "description": "SectionName is the name of a section within the target Gateway"
+                  },
+                  "port": {
+                    "type": "integer",
+                    "description": "Port is the network port to match"
+                  }
+                },
+                "required": ["name"]
+              }
+            },
+            "hostnames": {
+              "type": "array",
+              "description": "Hostnames for the route",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rules": {
+              "type": "array",
+              "description": "Routing rules (optional, defaults to a single PathPrefix '/' rule)",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "matches": {
+                    "type": "array",
+                    "description": "Match conditions for the rule",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": ["Exact", "PathPrefix", "RegularExpression"]
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "headers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "queryParams": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "method": {
+                          "type": "string",
+                          "enum": ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"]
+                        }
+                      }
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "description": "Filters for request/response modification",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "description": "Filter type (e.g., RequestHeaderModifier, ResponseHeaderModifier, RequestRedirect, URLRewrite)"
+                        },
+                        "requestHeaderModifier": {
+                          "type": "object"
+                        },
+                        "responseHeaderModifier": {
+                          "type": "object"
+                        },
+                        "requestRedirect": {
+                          "type": "object"
+                        },
+                        "urlRewrite": {
+                          "type": "object"
+                        },
+                        "requestMirror": {
+                          "type": "object"
+                        },
+                        "extensionRef": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  },
+                  "timeouts": {
+                    "type": "object",
+                    "description": "Timeout configuration for the rule",
+                    "properties": {
+                      "request": {
+                        "type": "string",
+                        "description": "Request timeout (e.g., '30s', '5m')"
+                      },
+                      "backendRequest": {
+                        "type": "string",
+                        "description": "Backend request timeout"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "annotations": {
+              "type": "object",
+              "description": "Additional annotations for the HTTPRoute",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "labels": {
+              "type": "object",
+              "description": "Additional labels for the HTTPRoute",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "backendTrafficPolicy": {
+          "type": "object",
+          "description": "BackendTrafficPolicy for Envoy Gateway (optional)",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable BackendTrafficPolicy creation (requires gatewayAPI.enabled to also be true)",
+              "default": false
+            },
+            "timeout": {
+              "type": "string",
+              "description": "Request timeout (e.g., '300s', '5m')",
+              "default": "300s"
+            },
+            "annotations": {
+              "type": "object",
+              "description": "Additional annotations for the BackendTrafficPolicy",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "labels": {
+              "type": "object",
+              "description": "Additional labels for the BackendTrafficPolicy",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -91,6 +91,12 @@ gatewayAPI:
     #         - path:
     #             type: PathPrefix
     #             value: /api
+    #       filters:
+    #         - type: RequestHeaderModifier
+    #           requestHeaderModifier:
+    #             add:
+    #               - name: X-Custom-Header
+    #                 value: custom-value
     #       timeouts:
     #         request: 30s
     rules: []
