@@ -569,176 +569,12 @@
       }
     },
     "livenessProbe": {
-      "type": "object",
-      "description": "Liveness probe configuration",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Enable liveness probe",
-          "default": true
-        },
-        "httpGet": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string",
-              "description": "HTTP path for health check"
-            },
-            "port": {
-              "type": ["integer", "string"],
-              "description": "Port to check"
-            },
-            "scheme": {
-              "type": "string",
-              "enum": ["HTTP", "HTTPS"]
-            },
-            "httpHeaders": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "value": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "tcpSocket": {
-          "type": "object",
-          "properties": {
-            "port": {
-              "type": ["integer", "string"]
-            }
-          }
-        },
-        "exec": {
-          "type": "object",
-          "properties": {
-            "command": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "initialDelaySeconds": {
-          "type": "integer",
-          "description": "Initial delay before starting probes",
-          "minimum": 0
-        },
-        "periodSeconds": {
-          "type": "integer",
-          "description": "Probe frequency",
-          "minimum": 1
-        },
-        "timeoutSeconds": {
-          "type": "integer",
-          "description": "Probe timeout",
-          "minimum": 1
-        },
-        "failureThreshold": {
-          "type": "integer",
-          "description": "Failures before marking unhealthy",
-          "minimum": 1
-        },
-        "successThreshold": {
-          "type": "integer",
-          "description": "Successes before marking healthy",
-          "minimum": 1
-        }
-      }
+      "$ref": "#/$defs/probe",
+      "description": "Liveness probe configuration"
     },
     "readinessProbe": {
-      "type": "object",
-      "description": "Readiness probe configuration",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Enable readiness probe",
-          "default": true
-        },
-        "httpGet": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string",
-              "description": "HTTP path for health check"
-            },
-            "port": {
-              "type": ["integer", "string"],
-              "description": "Port to check"
-            },
-            "scheme": {
-              "type": "string",
-              "enum": ["HTTP", "HTTPS"]
-            },
-            "httpHeaders": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "value": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "tcpSocket": {
-          "type": "object",
-          "properties": {
-            "port": {
-              "type": ["integer", "string"]
-            }
-          }
-        },
-        "exec": {
-          "type": "object",
-          "properties": {
-            "command": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "initialDelaySeconds": {
-          "type": "integer",
-          "description": "Initial delay before starting probes",
-          "minimum": 0
-        },
-        "periodSeconds": {
-          "type": "integer",
-          "description": "Probe frequency",
-          "minimum": 1
-        },
-        "timeoutSeconds": {
-          "type": "integer",
-          "description": "Probe timeout",
-          "minimum": 1
-        },
-        "failureThreshold": {
-          "type": "integer",
-          "description": "Failures before marking unready",
-          "minimum": 1
-        },
-        "successThreshold": {
-          "type": "integer",
-          "description": "Successes before marking ready",
-          "minimum": 1
-        }
-      }
+      "$ref": "#/$defs/probe",
+      "description": "Readiness probe configuration"
     },
     "autoscaling": {
       "type": "object",
@@ -1162,75 +998,6 @@
         }
       }
     },
-    "storage": {
-      "type": "object",
-      "description": "Token storage configuration (top-level)",
-      "additionalProperties": false,
-      "properties": {
-        "type": {
-          "type": "string",
-          "description": "Storage backend type",
-          "enum": ["memory", "valkey"],
-          "default": "memory"
-        },
-        "valkey": {
-          "type": "object",
-          "description": "Valkey storage configuration",
-          "additionalProperties": false,
-          "properties": {
-            "url": {
-              "type": "string",
-              "description": "Valkey server URL",
-              "default": ""
-            },
-            "tls": {
-              "type": "object",
-              "description": "TLS configuration for Valkey",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Enable TLS for Valkey connections",
-                  "default": false
-                },
-                "caSecretName": {
-                  "type": "string",
-                  "description": "Secret containing CA certificate",
-                  "default": ""
-                },
-                "caSecretKey": {
-                  "type": "string",
-                  "description": "Key in secret containing CA certificate",
-                  "default": "ca.crt"
-                }
-              }
-            },
-            "keyPrefix": {
-              "type": "string",
-              "description": "Key prefix for Valkey keys",
-              "default": "mcp:"
-            },
-            "db": {
-              "type": "integer",
-              "description": "Valkey database number",
-              "minimum": 0,
-              "maximum": 15,
-              "default": 0
-            },
-            "existingSecret": {
-              "type": "string",
-              "description": "Existing secret for Valkey password",
-              "default": ""
-            },
-            "secretKeyPassword": {
-              "type": "string",
-              "description": "Key in secret containing Valkey password",
-              "default": "valkey-password"
-            }
-          }
-        }
-      }
-    },
     "tls": {
       "type": "object",
       "description": "TLS/HTTPS Configuration",
@@ -1460,10 +1227,10 @@
           "default": false
         },
         "traceSamplingRate": {
-          "type": "string",
+          "type": ["string", "number"],
           "description": "Trace sampling rate (0.0 to 1.0)",
           "default": "0.1",
-          "examples": ["0.1", "0.5", "1.0"]
+          "examples": ["0.1", "0.5", "1.0", 0.1, 0.5, 1.0]
         },
         "detailedLabels": {
           "type": "boolean",
@@ -1728,6 +1495,118 @@
     }
   },
   "$defs": {
+    "probe": {
+      "type": "object",
+      "description": "Kubernetes probe configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable this probe",
+          "default": true
+        },
+        "httpGet": {
+          "type": "object",
+          "description": "HTTP GET probe configuration",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "HTTP path for health check"
+            },
+            "port": {
+              "type": ["integer", "string"],
+              "description": "Port to check"
+            },
+            "scheme": {
+              "type": "string",
+              "enum": ["HTTP", "HTTPS"],
+              "description": "HTTP scheme"
+            },
+            "httpHeaders": {
+              "type": "array",
+              "description": "Custom HTTP headers",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tcpSocket": {
+          "type": "object",
+          "description": "TCP socket probe configuration",
+          "properties": {
+            "port": {
+              "type": ["integer", "string"],
+              "description": "Port to check"
+            }
+          }
+        },
+        "exec": {
+          "type": "object",
+          "description": "Exec probe configuration",
+          "properties": {
+            "command": {
+              "type": "array",
+              "description": "Command to execute",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "grpc": {
+          "type": "object",
+          "description": "gRPC probe configuration",
+          "properties": {
+            "port": {
+              "type": "integer",
+              "description": "gRPC port"
+            },
+            "service": {
+              "type": "string",
+              "description": "gRPC service name"
+            }
+          }
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "description": "Initial delay before starting probes",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "description": "Probe frequency in seconds",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "description": "Probe timeout in seconds",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "description": "Consecutive failures before marking unhealthy",
+          "minimum": 1
+        },
+        "successThreshold": {
+          "type": "integer",
+          "description": "Consecutive successes before marking healthy",
+          "minimum": 1
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer",
+          "description": "Grace period for pod termination",
+          "minimum": 0
+        }
+      }
+    },
     "alertRule": {
       "type": "object",
       "description": "Alert rule configuration",
