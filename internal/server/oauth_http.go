@@ -100,6 +100,7 @@ type OAuthHTTPServer struct {
 	tlsCertFile      string
 	tlsKeyFile       string
 	metrics          *instrumentation.Metrics
+	logger           *slog.Logger
 }
 
 // buildOAuthConfig converts OAuthConfig to oauth.Config
@@ -174,6 +175,7 @@ func NewOAuthHTTPServer(mcpServer *mcpserver.MCPServer, serverType string, confi
 		disableStreaming: config.DisableStreaming,
 		tlsCertFile:      config.TLSCertFile,
 		tlsKeyFile:       config.TLSKeyFile,
+		logger:           slog.Default(),
 	}, nil
 }
 
@@ -190,6 +192,7 @@ func NewOAuthHTTPServerWithHandler(mcpServer *mcpserver.MCPServer, serverType st
 		oauthHandler:     oauthHandler,
 		serverType:       serverType,
 		disableStreaming: disableStreaming,
+		logger:           slog.Default(),
 	}, nil
 }
 
@@ -202,6 +205,7 @@ func NewOAuthHTTPServerWithHandlerAndTLS(mcpServer *mcpserver.MCPServer, serverT
 		disableStreaming: disableStreaming,
 		tlsCertFile:      tlsCertFile,
 		tlsKeyFile:       tlsKeyFile,
+		logger:           slog.Default(),
 	}, nil
 }
 
@@ -314,25 +318,52 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 	// Register MCP endpoints based on server type
 	switch s.serverType {
 	case "streamable-http":
-		// Create Streamable HTTP server
+		// Create Streamable HTTP server with HTTPContextFunc to propagate Google access token
+		// to mcp-go's internal context. This allows MCP tools to access the token via
+		// oauth.GetGoogleAccessTokenFromContext().
+		httpContextFunc := s.createHTTPContextFunc()
+
 		var httpServer http.Handler
 		if s.disableStreaming {
 			httpServer = mcpserver.NewStreamableHTTPServer(s.mcpServer,
 				mcpserver.WithEndpointPath("/mcp"),
 				mcpserver.WithDisableStreaming(true),
+				mcpserver.WithHTTPContextFunc(httpContextFunc),
 			)
 		} else {
 			httpServer = mcpserver.NewStreamableHTTPServer(s.mcpServer,
 				mcpserver.WithEndpointPath("/mcp"),
+				mcpserver.WithHTTPContextFunc(httpContextFunc),
 			)
 		}
 
-		// Wrap MCP endpoint with OAuth middleware and instrumentation
+		// Wrap MCP endpoint with OAuth middleware, SSO access token middleware, and instrumentation
 		mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			httpServer.ServeHTTP(w, r)
 		})
-		// Wrap with OAuth validation, then with auth instrumentation
-		validatedHandler := libHandler.ValidateToken(mcpHandler)
+
+		// Build middleware chain (execution order, outermost to innermost):
+		// 1. Instrumentation wrapper: records auth metrics
+		// 2. OAuth ValidateToken: validates Bearer token (ID token for SSO), sets user info in context
+		// 3. SSO AccessToken: extracts forwarded access token from X-Google-Access-Token header,
+		//    injects it into context via ContextWithGoogleAccessToken
+		// 4. MCP handler: processes the request (uses HTTPContextFunc to propagate token to mcp-go)
+		//
+		// IMPORTANT: ValidateToken MUST run before SSOAccessToken because the SSO middleware
+		// requires user info in context (set by ValidateToken) to associate the access token
+		// with the correct user email.
+		//
+		// This enables SSO flows where the upstream aggregator forwards both:
+		// - ID token in Authorization header (for authentication)
+		// - Access token in X-Google-Access-Token header (for Google API access)
+		var ssoHandler http.Handler
+		if s.metrics != nil {
+			// Use metrics-enabled wrapper when metrics are available
+			ssoHandler = oauth.WrapWithSSOAccessTokenAndMetrics(mcpHandler, s.oauthHandler.GetStore(), s.logger, s.metrics)
+		} else {
+			ssoHandler = oauth.WrapWithSSOAccessToken(mcpHandler, s.oauthHandler.GetStore(), s.logger)
+		}
+		validatedHandler := libHandler.ValidateToken(ssoHandler)
 		mux.Handle("/mcp", s.oauthInstrumentationWrapper(validatedHandler))
 
 	default:
@@ -472,6 +503,57 @@ func (s *OAuthHTTPServer) oauthInstrumentationWrapper(handler http.Handler) http
 			}
 		}
 	})
+}
+
+// createHTTPContextFunc creates an HTTPContextFunc that copies the Google access token
+// from the HTTP request context (set by SSO middleware) to mcp-go's internal context.
+//
+// This is necessary because mcp-go creates its own context for tool execution and
+// doesn't automatically inherit values from the HTTP request context. Without this,
+// MCP tools wouldn't have access to the Google access token.
+//
+// The function mirrors mcp-kubernetes's createHTTPContextFunc pattern, enabling
+// consistent token propagation across both projects.
+func (s *OAuthHTTPServer) createHTTPContextFunc() func(ctx context.Context, r *http.Request) context.Context {
+	return func(ctx context.Context, r *http.Request) context.Context {
+		// The access token was set in r.Context() by SSOAccessTokenMiddleware
+		// via oauth.ContextWithGoogleAccessToken()
+		accessToken, ok := oauth.GetGoogleAccessTokenFromContext(r.Context())
+		if ok && accessToken != "" {
+			s.logger.Debug("HTTPContextFunc: propagating Google access token to mcp-go context")
+			return oauth.ContextWithGoogleAccessToken(ctx, accessToken)
+		}
+
+		// Also propagate user info for tools that need it
+		userInfo, ok := oauth.GetUserFromContext(r.Context())
+		if ok && userInfo != nil {
+			s.logger.Debug("HTTPContextFunc: propagating user info to mcp-go context",
+				"email_hash", hashEmailForLog(userInfo.Email))
+			ctx = oauth.ContextWithUserInfo(ctx, userInfo)
+		}
+
+		s.logger.Debug("HTTPContextFunc: no Google access token in request context to propagate")
+		return ctx
+	}
+}
+
+// hashEmailForLog returns a partially masked version of the email for logging.
+// This prevents PII leakage in logs while still allowing correlation.
+func hashEmailForLog(email string) string {
+	if email == "" {
+		return ""
+	}
+	if len(email) <= 8 {
+		return "***"
+	}
+	localPart, domain, found := strings.Cut(email, "@")
+	if !found || localPart == "" || domain == "" {
+		return "***"
+	}
+	if len(localPart) <= 2 {
+		return localPart + "***@" + domain
+	}
+	return localPart[:2] + "***@" + domain
 }
 
 // validateHTTPSRequirement ensures OAuth 2.1 HTTPS compliance

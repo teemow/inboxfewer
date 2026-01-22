@@ -38,6 +38,7 @@ type Metrics struct {
 	oauthAuthTotal             metric.Int64Counter
 	oauthTokenRefreshTotal     metric.Int64Counter
 	oauthCrossClientTokenTotal metric.Int64Counter
+	ssoTokenInjectionTotal     metric.Int64Counter
 
 	// MCP Tool metrics
 	toolInvocationsTotal metric.Int64Counter
@@ -132,6 +133,15 @@ func NewMetrics(meter metric.Meter, detailedLabels bool) (*Metrics, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create oauth_cross_client_token_total counter: %w", err)
+	}
+
+	m.ssoTokenInjectionTotal, err = meter.Int64Counter(
+		"sso_token_injection_total",
+		metric.WithDescription("Total number of SSO access token injection attempts"),
+		metric.WithUnit("{injection}"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sso_token_injection_total counter: %w", err)
 	}
 
 	// MCP Tool Metrics
@@ -245,6 +255,37 @@ func (m *Metrics) RecordOAuthCrossClientToken(ctx context.Context, result, audie
 	}
 
 	m.oauthCrossClientTokenTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// SSO token injection result constants
+const (
+	// SSOInjectionResultSuccess indicates SSO token was successfully injected
+	SSOInjectionResultSuccess = "sso_success"
+	// SSOInjectionResultStored indicates token was stored in token store (non-SSO path)
+	SSOInjectionResultStored = "stored"
+	// SSOInjectionResultNoUser indicates no authenticated user in context
+	SSOInjectionResultNoUser = "no_user"
+	// SSOInjectionResultNoToken indicates no access token header present
+	SSOInjectionResultNoToken = "no_token"
+	// SSOInjectionResultStoreFailed indicates token store operation failed
+	SSOInjectionResultStoreFailed = "store_failed"
+)
+
+// RecordSSOTokenInjection records an SSO access token injection attempt.
+// This tracks the different outcomes of the SSOAccessTokenMiddleware.
+//
+// Parameters:
+//   - result: One of the SSOInjectionResult* constants indicating the outcome
+func (m *Metrics) RecordSSOTokenInjection(ctx context.Context, result string) {
+	if m.ssoTokenInjectionTotal == nil {
+		return // Instrumentation not initialized
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String(attrResult, result),
+	}
+
+	m.ssoTokenInjectionTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
 
 // RecordToolInvocation records an MCP tool invocation with tool name, status, and duration.
