@@ -13,6 +13,18 @@ import (
 	"github.com/teemow/inboxfewer/internal/instrumentation"
 )
 
+// contextKey is a custom type for context keys to avoid collisions.
+// Using a custom type instead of a plain string prevents key collisions
+// with other packages that might use the same string key in the context.
+type contextKey string
+
+const (
+	// googleAccessTokenKey is the context key for storing the user's Google access token.
+	// This token is used for downstream Google API authentication.
+	//nolint:gosec // G101 false positive - this is a context key name, not a credential
+	googleAccessTokenKey contextKey = "google_access_token"
+)
+
 // TokenStore is a type alias for the mcp-oauth TokenStore interface.
 // This allows external packages to use the interface without importing mcp-oauth directly.
 type TokenStore = storage.TokenStore
@@ -110,4 +122,30 @@ func GetUserFromContext(ctx context.Context) (*UserInfo, bool) {
 // This is useful for testing code that depends on authenticated user context.
 func ContextWithUserInfo(ctx context.Context, userInfo *UserInfo) context.Context {
 	return oauth.ContextWithUserInfo(ctx, userInfo)
+}
+
+// ContextWithGoogleAccessToken creates a context with the given Google access token.
+// This is used to propagate the user's Google access token through the request context
+// for downstream Google API authentication in MCP tools.
+//
+// This pattern mirrors mcp-kubernetes's ContextWithAccessToken, but is specifically
+// for Google access tokens rather than Kubernetes ID tokens.
+func ContextWithGoogleAccessToken(ctx context.Context, accessToken string) context.Context {
+	return context.WithValue(ctx, googleAccessTokenKey, accessToken)
+}
+
+// GetGoogleAccessTokenFromContext retrieves the Google access token from the context.
+// This returns the user's Google access token that can be used for Google API calls.
+// Returns the access token and true if present, or empty string and false if not available.
+//
+// Usage in tool handlers:
+//
+//	token, ok := oauth.GetGoogleAccessTokenFromContext(ctx)
+//	if !ok {
+//	    return nil, fmt.Errorf("no Google access token available")
+//	}
+//	// Use token for Google API calls
+func GetGoogleAccessTokenFromContext(ctx context.Context) (string, bool) {
+	token, ok := ctx.Value(googleAccessTokenKey).(string)
+	return token, ok && token != ""
 }

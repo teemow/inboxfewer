@@ -337,3 +337,88 @@ func TestTokenProviderWithMetrics_GetTokenForAccount(t *testing.T) {
 	require.Len(t, metrics.tokenRefreshCalls, 1)
 	assert.Equal(t, instrumentation.OAuthResultSuccess, metrics.tokenRefreshCalls[0])
 }
+
+// TestContextWithGoogleAccessToken tests storing and retrieving Google access tokens from context.
+func TestContextWithGoogleAccessToken(t *testing.T) {
+	t.Run("stores and retrieves access token", func(t *testing.T) {
+		ctx := context.Background()
+		token := "test-google-access-token-12345"
+
+		// Store token in context
+		ctxWithToken := ContextWithGoogleAccessToken(ctx, token)
+
+		// Retrieve token from context
+		retrievedToken, ok := GetGoogleAccessTokenFromContext(ctxWithToken)
+		assert.True(t, ok)
+		assert.Equal(t, token, retrievedToken)
+	})
+
+	t.Run("returns false for empty context", func(t *testing.T) {
+		ctx := context.Background()
+
+		token, ok := GetGoogleAccessTokenFromContext(ctx)
+		assert.False(t, ok)
+		assert.Empty(t, token)
+	})
+
+	t.Run("returns false for empty token", func(t *testing.T) {
+		ctx := context.Background()
+		ctxWithToken := ContextWithGoogleAccessToken(ctx, "")
+
+		token, ok := GetGoogleAccessTokenFromContext(ctxWithToken)
+		assert.False(t, ok)
+		assert.Empty(t, token)
+	})
+
+	t.Run("preserves other context values", func(t *testing.T) {
+		ctx := context.Background()
+		ctx = context.WithValue(ctx, "other-key", "other-value")
+		ctxWithToken := ContextWithGoogleAccessToken(ctx, "my-token")
+
+		// Both values should be preserved
+		token, ok := GetGoogleAccessTokenFromContext(ctxWithToken)
+		assert.True(t, ok)
+		assert.Equal(t, "my-token", token)
+
+		otherVal := ctxWithToken.Value("other-key")
+		assert.Equal(t, "other-value", otherVal)
+	})
+
+	t.Run("last token wins on multiple sets", func(t *testing.T) {
+		ctx := context.Background()
+		ctx = ContextWithGoogleAccessToken(ctx, "first-token")
+		ctx = ContextWithGoogleAccessToken(ctx, "second-token")
+
+		token, ok := GetGoogleAccessTokenFromContext(ctx)
+		assert.True(t, ok)
+		assert.Equal(t, "second-token", token)
+	})
+}
+
+// TestGoogleAccessTokenContextKey verifies the context key uses the custom type.
+func TestGoogleAccessTokenContextKey(t *testing.T) {
+	// This test verifies that google access tokens use a separate key from user info
+	ctx := context.Background()
+
+	// Set a user info
+	userInfo := &UserInfo{
+		Email: "test@example.com",
+	}
+	ctx = ContextWithUserInfo(ctx, userInfo)
+
+	// Set a google access token
+	ctx = ContextWithGoogleAccessToken(ctx, "google-api-token")
+
+	// Both should be independently retrievable
+	user, ok := GetUserFromContext(ctx)
+	assert.True(t, ok)
+	assert.Equal(t, "test@example.com", user.Email)
+
+	token, ok := GetGoogleAccessTokenFromContext(ctx)
+	assert.True(t, ok)
+	assert.Equal(t, "google-api-token", token)
+
+	// Using a plain string key should not retrieve our token
+	val := ctx.Value("google_access_token")
+	assert.Nil(t, val, "Plain string key should not retrieve token stored with custom key type")
+}
