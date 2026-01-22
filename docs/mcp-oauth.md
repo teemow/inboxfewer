@@ -1530,6 +1530,132 @@ This typically indicates the access token is missing or not being forwarded. Ver
 2. The aggregator requested the appropriate Google scopes (`https://mail.google.com/`, etc.)
 3. Check logs for "Stored forwarded SSO access token" messages
 
+## Silent Authentication (mcp-oauth v0.2.46+)
+
+Silent authentication enables seamless token refresh without user interaction when the user already has an active session at the Identity Provider (IdP). This feature was introduced in mcp-oauth v0.2.46.
+
+### Overview
+
+Silent authentication uses the OIDC `prompt=none` parameter to attempt re-authentication without displaying any login UI. This is the same pattern used by tools like Teleport's `tsh kube login` for seamless re-authentication.
+
+**How It Works:**
+
+1. Client builds authorization URL with `prompt=none`
+2. Browser opens briefly to the IdP
+3. IdP recognizes existing session and immediately redirects back with authorization code
+4. No user interaction required - no account selection, no consent screen
+5. Client exchanges code for new tokens
+
+If no IdP session exists, the IdP returns an error (`login_required`, `consent_required`, or `interaction_required`) and the client falls back to interactive login.
+
+### OIDC Parameters Supported
+
+The `AuthorizationURLOptions` struct supports all standard OIDC authentication request parameters:
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `Prompt` | Controls authentication UX | `none`, `login`, `consent`, `select_account` |
+| `LoginHint` | Pre-fills username/email field | `user@example.com` |
+| `MaxAge` | Maximum authentication age (seconds) | `3600` (1 hour) |
+| `ACRValues` | Authentication context class references | `urn:mace:incommon:iap:silver` |
+| `IDTokenHint` | Previously issued ID token as session hint | JWT string |
+| `Extra` | Additional custom parameters | `map[string]string` |
+
+### Prompt Values
+
+| Value | Behavior |
+|-------|----------|
+| `none` | Silent authentication - no UI displayed. Returns error if login or consent required. |
+| `login` | Force re-authentication even if session exists. |
+| `consent` | Force consent even if previously granted. |
+| `select_account` | Force account selection even if only one account. |
+
+### Handling Silent Auth Failures
+
+Silent authentication fails when the IdP requires user interaction. Common error codes:
+
+| Error Code | Meaning |
+|------------|---------|
+| `login_required` | No active session at the IdP |
+| `consent_required` | User hasn't granted required scopes |
+| `interaction_required` | IdP needs user interaction |
+| `account_selection_required` | Multiple accounts, none selected |
+
+Use `oauth.IsSilentAuthError()` to detect these failures and fall back to interactive login:
+
+```go
+import "github.com/teemow/inboxfewer/internal/mcp/oauth"
+
+func handleCallback(r *http.Request) error {
+    q := r.URL.Query()
+    result := oauth.ParseCallbackQuery(
+        q.Get("code"),
+        q.Get("state"),
+        q.Get("error"),
+        q.Get("error_description"),
+        q.Get("error_uri"),
+    )
+
+    if err := result.Err(); err != nil {
+        if oauth.IsSilentAuthError(err) {
+            // Fall back to interactive login
+            return startInteractiveLogin(w, r)
+        }
+        // Handle other errors
+        return handleError(w, err)
+    }
+
+    // Success - exchange code for tokens
+    return exchangeCode(result.Code)
+}
+```
+
+### Exported Types and Constants
+
+The following types and functions are available in `internal/mcp/oauth`:
+
+**Types:**
+
+- `AuthorizationURLOptions` - OIDC authorization request options
+- `SilentAuthError` - Error type for silent auth failures
+- `CallbackResult` - Structured OAuth callback result
+
+**Functions:**
+
+- `IsSilentAuthError(err error) bool` - Detects silent auth failures
+- `ParseOAuthError(code, description string) error` - Parses OAuth errors
+- `ParseCallbackQuery(code, state, error, errorDesc, errorURI string) *CallbackResult` - Parses callback
+
+**Constants:**
+
+- `PromptNone`, `PromptLogin`, `PromptConsent`, `PromptSelectAccount` - Prompt values
+- `ErrorCodeLoginRequired`, `ErrorCodeConsentRequired`, etc. - Error codes
+
+### Use Cases
+
+**1. Seamless Token Refresh**
+
+When a user's token is about to expire and they still have an active Google session, silent authentication can refresh tokens without interrupting their workflow.
+
+**2. Background Authentication**
+
+For scheduled background tasks that need fresh tokens, silent auth can attempt to renew tokens without user interaction.
+
+**3. Multi-Account Scenarios**
+
+Use `LoginHint` to pre-fill the email address when the user's identity is already known, improving UX for re-authentication.
+
+### Security Considerations
+
+- Silent authentication only works when the user has an existing session at the IdP
+- PKCE is still required and enforced for all authorization requests
+- Failed silent authentication is not a security concern - it simply means the user needs to log in interactively
+- The `prompt=none` parameter does not bypass any security measures - it only requests that the IdP not display UI
+
+### Future Integration
+
+The mcp-oauth library currently initializes authorization flows with `prompt=nil` (interactive login). A future enhancement will allow clients to request silent authentication via the authorization endpoint, enabling full support for this feature.
+
 ## References
 
 - [MCP Specification - Authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
@@ -1537,4 +1663,5 @@ This typically indicates the access token is missing or not being forwarded. Ver
 - [RFC 9728 - OAuth 2.0 Protected Resource Metadata](https://datatracker.ietf.org/doc/html/rfc9728)
 - [RFC 8707 - Resource Indicators for OAuth 2.0](https://datatracker.ietf.org/doc/html/rfc8707)
 - [RFC 7636 - Proof Key for Code Exchange (PKCE)](https://datatracker.ietf.org/doc/html/rfc7636)
+- [OpenID Connect Core 1.0 - Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest)
 - [Google OAuth 2.0](https://developers.google.com/identity/protocols/oauth2)
