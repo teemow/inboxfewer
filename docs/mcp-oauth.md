@@ -1399,6 +1399,109 @@ With this configuration:
 - Situations where different security policies apply to different services
 - When detailed per-service audit trails are required
 
+### SSO Access Token Forwarding
+
+When SSO token forwarding is enabled via `TrustedAudiences`, inboxfewer can validate the user's identity from the forwarded ID token. However, **ID tokens don't grant Google API access** - they only prove identity.
+
+To enable Google API calls (Gmail, Calendar, Drive, etc.) in SSO flows, the upstream aggregator must also forward the user's access token.
+
+#### The Problem
+
+```
+User → Muster (Google OAuth with Gmail scopes) → inboxfewer (ID token only)
+                     ↓                                    ↓
+              Has access token                      Validates ID token ✓
+              with Gmail scopes                     No access token for Gmail ✗
+```
+
+Without access token forwarding, tools like `gmail_list_threads` will fail even though the user is authenticated.
+
+#### The Solution
+
+The aggregator forwards the Google access token in the `X-Google-Access-Token` header alongside the ID token in the `Authorization` header:
+
+```
+Authorization: Bearer <ID-token>
+X-Google-Access-Token: <Google-access-token>
+X-Google-Refresh-Token: <Google-refresh-token>  (optional)
+X-Google-Token-Expiry: 2026-01-20T15:04:05Z     (optional, RFC3339)
+```
+
+#### Flow After Configuration
+
+```
+User → Muster (Google OAuth) → inboxfewer
+           ↓                       ↓
+   Forwards ID token in       1. Validates ID token (SSO) ✓
+   Authorization header       2. Extracts X-Google-Access-Token header
+   + access token in          3. Stores access token for user email
+   X-Google-Access-Token      4. Gmail API calls work ✓
+```
+
+#### Headers Reference
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | Bearer token containing the ID token (validated via JWKS) |
+| `X-Google-Access-Token` | Yes | Google access token for API calls |
+| `X-Google-Refresh-Token` | No | Google refresh token for automatic renewal |
+| `X-Google-Token-Expiry` | No | Token expiry time (RFC3339 format, defaults to 1 hour) |
+
+#### Security Considerations
+
+1. **Token Binding**: Access tokens are stored against the user email extracted from the validated ID token. This ensures tokens are correctly associated with authenticated users.
+
+2. **Trust Model**: If you trust the aggregator to forward ID tokens, extending that trust to access tokens is logically consistent - both come from the same trusted source.
+
+3. **Google Validation**: Google access tokens are opaque (not JWTs) and cannot be locally validated. Google APIs validate the token on every API call; invalid tokens fail at Google's endpoint.
+
+4. **Header Stripping**: Ensure your ingress configuration prevents end-users from injecting `X-Google-Access-Token` headers directly. The aggregator should be the only source of these headers.
+
+5. **Audit Logging**: Token storage events are logged with masked email addresses for security auditing.
+
+#### Aggregator Configuration (Muster Example)
+
+Configure the aggregator to request appropriate Google scopes and forward both tokens:
+
+```yaml
+muster:
+  oauth:
+    # Request scopes for Google APIs
+    cimdScopes: >-
+      openid profile email offline_access
+      https://mail.google.com/
+      https://www.googleapis.com/auth/gmail.readonly
+      https://www.googleapis.com/auth/gmail.modify
+      https://www.googleapis.com/auth/calendar
+      https://www.googleapis.com/auth/tasks
+
+  downstream_servers:
+    - name: inboxfewer
+      url: https://inboxfewer.example.com
+      forward_user_token: true
+      forward_access_token: true  # Forward Google access token
+```
+
+#### Inboxfewer Configuration
+
+No additional configuration is required beyond `TrustedAudiences`. The SSO access token middleware is automatically applied to the MCP endpoint:
+
+```yaml
+oauthSecurity:
+  trustedAudiences:
+    - "muster-client"
+```
+
+#### Metrics
+
+| Metric | Description |
+|--------|-------------|
+| `sso_token_injection_total{result="sso_success"}` | Access token successfully injected in SSO flow |
+| `sso_token_injection_total{result="stored"}` | Access token stored for non-SSO user |
+| `sso_token_injection_total{result="no_token"}` | No access token header present |
+| `sso_token_injection_total{result="no_user"}` | No authenticated user in context |
+| `sso_token_injection_total{result="store_failed"}` | Failed to store token (still injected to context) |
+
 ### Troubleshooting
 
 **"Token audience not trusted"**
@@ -1419,6 +1522,13 @@ The token could not be cryptographically verified. This may indicate:
 - Token tampering
 - Issuer key rotation (try re-authenticating)
 - Configuration mismatch
+
+**"tool_failed: user_domain=unknown"**
+
+This typically indicates the access token is missing or not being forwarded. Verify:
+1. The aggregator is forwarding the access token in `X-Google-Access-Token` header
+2. The aggregator requested the appropriate Google scopes (`https://mail.google.com/`, etc.)
+3. Check logs for "Stored forwarded SSO access token" messages
 
 ## References
 
