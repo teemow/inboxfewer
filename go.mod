@@ -1,6 +1,6 @@
 module github.com/teemow/inboxfewer
 
-go 1.25.4
+go 1.25.7
 
 require (
 	github.com/giantswarm/mcp-oauth v0.2.52
