@@ -274,7 +274,7 @@
           "refId": "A"
         }
       ],
-      "title": "Active Sessions",
+      "title": "Active OAuth Sessions",
       "type": "stat",
       "description": "Number of currently active OAuth sessions. High values may indicate resource pressure."
     },
@@ -664,7 +664,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-09
+          "le": 1e-9
         },
         "legend": {
           "show": true
@@ -795,7 +795,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval]))",
+          "expr": "sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\", service!=\"\"}[$__rate_interval]))",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -878,7 +878,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\", status=\"error\"}[$__rate_interval])) / sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval]))) * 100",
+          "expr": "(sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\", status=\"error\", service!=\"\"}[$__rate_interval])) / clamp_min(sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\", service!=\"\"}[$__rate_interval])), 1e-10)) * 100",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -987,7 +987,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(google_api_operation_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(google_api_operation_duration_seconds_bucket{namespace=~\"$namespace\", service!=\"\"}[$__rate_interval])))",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -1066,7 +1066,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(10, histogram_quantile(0.99, sum by (service, operation, le) (rate(google_api_operation_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval]))))",
+          "expr": "topk(10, histogram_quantile(0.99, sum by (service, operation, le) (rate(google_api_operation_duration_seconds_bucket{namespace=~\"$namespace\", service!=\"\"}[$__rate_interval]))))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -1447,15 +1447,29 @@
             "uid": "${datasource}"
           },
           "expr": "topk(10, sum by (tool) (increase(mcp_tool_invocations_total{namespace=~\"$namespace\"}[1h])))",
-          "format": "time_series",
-          "instant": true,
+          "format": "table",
           "legendFormat": "{{tool}}",
           "refId": "A"
         }
       ],
       "title": "Top 10 Tools by Usage (1h)",
       "type": "barchart",
-      "description": "Most frequently used MCP tools in the last hour."
+      "description": "Most frequently used MCP tools in the last hour.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Invocations",
+              "tool": "Tool"
+            }
+          }
+        }
+      ]
     },
     {
       "collapsed": false,
@@ -1536,14 +1550,14 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum(rate(oauth_auth_total{namespace=~\"$namespace\", result=\"success\"}[$__rate_interval])) / sum(rate(oauth_auth_total{namespace=~\"$namespace\"}[$__rate_interval]))) * 100",
+          "expr": "(sum(rate(oauth_auth_total{namespace=~\"$namespace\", result=\"success\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(oauth_auth_total{namespace=~\"$namespace\"}[$__rate_interval])) or vector(1), 1e-10) * 100",
           "legendFormat": "Auth Success Rate",
           "refId": "A"
         }
       ],
       "title": "Auth Success Rate",
       "type": "gauge",
-      "description": "OAuth authentication success rate. Values below 99% indicate authentication issues."
+      "description": "OAuth authentication success rate. Shows 100% when no auth attempts in the current window. Values below 99% indicate authentication issues."
     },
     {
       "datasource": {
@@ -1636,7 +1650,7 @@
         "pieType": "pie",
         "reduceOptions": {
           "calcs": [
-            "lastNotNull"
+            "sum"
           ],
           "fields": "",
           "values": false
@@ -2212,6 +2226,6 @@
   "timezone": "browser",
   "title": "Inboxfewer - Administrator Dashboard",
   "uid": "inboxfewer-admin",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
