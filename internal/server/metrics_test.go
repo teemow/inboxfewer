@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -112,7 +113,12 @@ func TestMetricsServer_StartAndShutdown(t *testing.T) {
 	}
 
 	// Test /healthz endpoint - server is now guaranteed to be ready
-	resp, err := http.Get("http://localhost" + server.Addr() + "/healthz")
+	// Extract port from listener address (which may be IPv6 like "[::]:PORT")
+	_, port, err := net.SplitHostPort(server.Addr())
+	if err != nil {
+		t.Fatalf("failed to parse server address %q: %v", server.Addr(), err)
+	}
+	resp, err := http.Get("http://localhost:" + port + "/healthz")
 	if err != nil {
 		t.Errorf("GET /healthz failed: %v", err)
 	} else {
