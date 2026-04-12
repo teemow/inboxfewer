@@ -27,6 +27,8 @@ github.com/giantswarm/mcp-oauth v0.2.94 h1:OGgjFwyYYgD4g2dWObr7cGU+K66zhttuVdDoX
 github.com/giantswarm/mcp-oauth v0.2.94/go.mod h1:r3USsiBDS5KgcVvMhNXf+xBTtW/vtY7cgQ/UzrCaV04=
 github.com/giantswarm/mcp-oauth v0.2.97 h1:mB7vmAn3YjZNQUu25dAnKVInvkUNgRDkYRtvi+KjTSg=
 github.com/giantswarm/mcp-oauth v0.2.97/go.mod h1:c3/Y8oewzv5oi59Hu1QX+Zf94tYcq9/ifXVSu7cqpwY=
+github.com/giantswarm/mcp-oauth v0.2.98 h1:+ky4vltcorub+AokK2G7rPzWF/XbqUYLKabjqAIBvAo=
+github.com/giantswarm/mcp-oauth v0.2.98/go.mod h1:l3qR16J9TWUggTrb3FpRxegW7bI339LDwA3LQK/jnWI=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
@@ -98,6 +100,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/valkey-io/valkey-go v1.0.73 h1:lztOPT0amtR6mwUkeNDcLepdYFdgVpJe/99EohfrmJ4=
 github.com/valkey-io/valkey-go v1.0.73/go.mod h1:VGhZ6fs68Qrn2+OhH+6waZH27bjpgQOiLyUQyXuYK5k=
+github.com/valkey-io/valkey-go v1.0.74 h1:NqtBHzjybz+is+c71hsyZP7hoE5lwCHQX026me0Vb08=
+github.com/valkey-io/valkey-go v1.0.74/go.mod h1:VGhZ6fs68Qrn2+OhH+6waZH27bjpgQOiLyUQyXuYK5k=
 github.com/yosida95/uritemplate/v3 v3.0.2 h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=
 github.com/yosida95/uritemplate/v3 v3.0.2/go.mod h1:ILOh0sOhIJR3+L/8afwt/kE++YT040gmv5BQTMR2HP4=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
