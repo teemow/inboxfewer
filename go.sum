@@ -45,6 +45,10 @@ github.com/giantswarm/mcp-oauth v0.2.118 h1:VPtL+NWJSsdsOiTSbq0kpICA/DmT1Tu7AhGZ
 github.com/giantswarm/mcp-oauth v0.2.118/go.mod h1:Rdb1sti2Kgdo27a3HLIxO9lRZX/sCBY86ZKQMOUVRzw=
 github.com/giantswarm/mcp-oauth v0.2.119 h1:T12ossPlSbsrhDPzb4OaX7tVEJmZHsUO5Kiz4ATPehA=
 github.com/giantswarm/mcp-oauth v0.2.119/go.mod h1:p44pF2fPKttUTNTeIuNtglDLMyjixdjVKtgksuLMPY0=
+github.com/giantswarm/mcp-oauth v0.2.140 h1:/VcIkysQ443u3+abyUwV19nRml99ILEspJSTXJgL3VQ=
+github.com/giantswarm/mcp-oauth v0.2.140/go.mod h1:rAaYnSov60bBZF1X6bGUS1BD8qoxHZvnjIPDeG3A+hs=
+github.com/go-jose/go-jose/v4 v4.1.4 h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=
+github.com/go-jose/go-jose/v4 v4.1.4/go.mod h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
@@ -136,6 +140,8 @@ github.com/valkey-io/valkey-go v1.0.73 h1:lztOPT0amtR6mwUkeNDcLepdYFdgVpJe/99Eoh
 github.com/valkey-io/valkey-go v1.0.73/go.mod h1:VGhZ6fs68Qrn2+OhH+6waZH27bjpgQOiLyUQyXuYK5k=
 github.com/valkey-io/valkey-go v1.0.74 h1:NqtBHzjybz+is+c71hsyZP7hoE5lwCHQX026me0Vb08=
 github.com/valkey-io/valkey-go v1.0.74/go.mod h1:VGhZ6fs68Qrn2+OhH+6waZH27bjpgQOiLyUQyXuYK5k=
+github.com/valkey-io/valkey-go v1.0.75 h1:cfq9DODW2ntuUgyHJmFWb4/p+xpLpQB1t5SQyWM9uJ4=
+github.com/valkey-io/valkey-go v1.0.75/go.mod h1:6X581PhgfeMkJmyfjIsa2eFdq6dy3Qkkg9zwjM1p42M=
 github.com/yosida95/uritemplate/v3 v3.0.2 h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=
 github.com/yosida95/uritemplate/v3 v3.0.2/go.mod h1:ILOh0sOhIJR3+L/8afwt/kE++YT040gmv5BQTMR2HP4=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
