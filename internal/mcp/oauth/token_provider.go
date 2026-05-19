@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/oauth2"
 
-	oauth "github.com/giantswarm/mcp-oauth"
+	oauthhandler "github.com/giantswarm/mcp-oauth/handler"
 	"github.com/giantswarm/mcp-oauth/providers"
 	"github.com/giantswarm/mcp-oauth/storage"
 
@@ -115,13 +115,13 @@ type UserInfo = providers.UserInfo
 // This is set by the OAuth middleware after validating the Bearer token.
 // Returns the user info and true if present, or nil and false if not authenticated.
 func GetUserFromContext(ctx context.Context) (*UserInfo, bool) {
-	return oauth.UserInfoFromContext(ctx)
+	return oauthhandler.UserInfoFromContext(ctx)
 }
 
 // ContextWithUserInfo creates a context with the given user info.
 // This is useful for testing code that depends on authenticated user context.
 func ContextWithUserInfo(ctx context.Context, userInfo *UserInfo) context.Context {
-	return oauth.ContextWithUserInfo(ctx, userInfo)
+	return oauthhandler.ContextWithUserInfo(ctx, userInfo)
 }
 
 // ContextWithGoogleAccessToken creates a context with the given Google access token.

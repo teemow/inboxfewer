@@ -10,6 +10,7 @@ import (
 	"time"
 
 	oauth "github.com/giantswarm/mcp-oauth"
+	oauthhandler "github.com/giantswarm/mcp-oauth/handler"
 	"github.com/giantswarm/mcp-oauth/providers/google"
 	"github.com/giantswarm/mcp-oauth/security"
 	oauthserver "github.com/giantswarm/mcp-oauth/server"
@@ -274,7 +275,7 @@ type valkeyCloser func()
 // Handler wraps the mcp-oauth library components for integration with inboxfewer
 type Handler struct {
 	server          *oauth.Server
-	handler         *oauth.Handler
+	handler         *oauthhandler.Handler
 	tokenStore      storage.TokenStore
 	memoryStore     *memory.Store // Only set when using memory storage
 	closeValkey     valkeyCloser  // Function to close Valkey store
@@ -470,18 +471,9 @@ func NewHandler(config *Config) (*Handler, error) {
 		}
 	}
 
-	// Create OAuth server
-	server, err := oauth.NewServer(
-		provider,
-		tokenStore,  // TokenStore
-		clientStore, // ClientStore
-		flowStore,   // FlowStore
-		serverConfig,
-		logger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create OAuth server: %w", err)
-	}
+	// Build functional options for the OAuth server. Since mcp-oauth v0.2.140
+	// the Set* methods on Server were replaced by options applied at construction.
+	var serverOpts []oauthserver.Option
 
 	// Set up encryption if key provided (only for memory storage; Valkey encryption is set above)
 	if len(config.Security.EncryptionKey) > 0 && config.Storage.Type != StorageTypeValkey {
@@ -489,14 +481,14 @@ func NewHandler(config *Config) (*Handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create encryptor: %w", err)
 		}
-		server.SetEncryptor(encryptor)
+		serverOpts = append(serverOpts, oauthserver.WithEncryptor(encryptor))
 		logger.Info("Token encryption at rest enabled (AES-256-GCM)")
 	}
 
 	// Set up audit logging if enabled
 	if config.Security.EnableAuditLogging {
 		auditor := security.NewAuditor(logger, true)
-		server.SetAuditor(auditor)
+		serverOpts = append(serverOpts, oauthserver.WithAuditor(auditor))
 		logger.Info("Security audit logging enabled")
 	}
 
@@ -508,7 +500,7 @@ func NewHandler(config *Config) (*Handler, error) {
 			burst = config.RateLimit.Rate * defaultBurstMultiplier
 		}
 		ipRateLimiter = security.NewRateLimiter(config.RateLimit.Rate, burst, logger)
-		server.SetRateLimiter(ipRateLimiter)
+		serverOpts = append(serverOpts, oauthserver.WithRateLimiter(ipRateLimiter))
 		logger.Info("IP-based rate limiting enabled",
 			"rate", config.RateLimit.Rate,
 			"burst", burst)
@@ -522,7 +514,7 @@ func NewHandler(config *Config) (*Handler, error) {
 			burst = config.RateLimit.UserRate * defaultBurstMultiplier
 		}
 		userRateLimiter = security.NewRateLimiter(config.RateLimit.UserRate, burst, logger)
-		server.SetUserRateLimiter(userRateLimiter)
+		serverOpts = append(serverOpts, oauthserver.WithUserRateLimiter(userRateLimiter))
 		logger.Info("User-based rate limiting enabled",
 			"rate", config.RateLimit.UserRate,
 			"burst", burst)
@@ -535,13 +527,27 @@ func NewHandler(config *Config) (*Handler, error) {
 		security.DefaultMaxRegistrationEntries,
 		logger,
 	)
-	server.SetClientRegistrationRateLimiter(clientRegRL)
+	serverOpts = append(serverOpts, oauthserver.WithClientRegistrationRateLimiter(clientRegRL))
 	logger.Info("Client registration rate limiting enabled",
 		"maxClientsPerIP", maxClientsPerIP,
 		"window", security.DefaultRegistrationWindow)
 
+	// Create OAuth server with functional options
+	server, err := oauth.NewServer(
+		provider,
+		tokenStore,  // TokenStore
+		clientStore, // ClientStore
+		flowStore,   // FlowStore
+		serverConfig,
+		logger,
+		serverOpts...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OAuth server: %w", err)
+	}
+
 	// Create HTTP handler
-	handler := oauth.NewHandler(server, logger)
+	handler := oauthhandler.New(server, logger)
 
 	return &Handler{
 		server:          server,
@@ -556,7 +562,7 @@ func NewHandler(config *Config) (*Handler, error) {
 }
 
 // GetHandler returns the underlying mcp-oauth handler for HTTP routing
-func (h *Handler) GetHandler() *oauth.Handler {
+func (h *Handler) GetHandler() *oauthhandler.Handler {
 	return h.handler
 }
 
