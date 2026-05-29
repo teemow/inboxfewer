@@ -1,6 +1,8 @@
 package oauth
 
 import (
+	"strings"
+
 	oauth "github.com/giantswarm/mcp-oauth"
 	"github.com/giantswarm/mcp-oauth/providers"
 )
@@ -67,7 +69,21 @@ type CallbackResult = oauth.CallbackResult
 //	    return handleError(w, err)
 //	}
 func IsSilentAuthError(err error) bool {
-	return oauth.IsSilentAuthError(err)
+	if oauth.IsSilentAuthError(err) {
+		return true
+	}
+	// Upstream mcp-oauth >= v0.2.160 only recognizes typed *SilentAuthError.
+	// Preserve our historical contract that also matches plain error strings
+	// containing a known OIDC silent-auth error code, so callers that wrap
+	// raw error strings from providers still fall back to interactive login.
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, ErrorCodeLoginRequired) ||
+		strings.Contains(msg, ErrorCodeConsentRequired) ||
+		strings.Contains(msg, ErrorCodeInteractionRequired) ||
+		strings.Contains(msg, ErrorCodeAccountSelectionRequired)
 }
 
 // ParseOAuthError parses an OAuth error response and returns the appropriate error type.
@@ -122,19 +138,19 @@ func ParseCallbackQuery(code, state, errorCode, errorDescription, errorURI strin
 const (
 	// ErrorCodeLoginRequired indicates no active session at the IdP.
 	// The user must log in interactively.
-	ErrorCodeLoginRequired = oauth.ErrorCodeLoginRequired
+	ErrorCodeLoginRequired = "login_required"
 
 	// ErrorCodeConsentRequired indicates the user hasn't granted required scopes.
 	// The consent screen must be displayed.
-	ErrorCodeConsentRequired = oauth.ErrorCodeConsentRequired
+	ErrorCodeConsentRequired = "consent_required"
 
 	// ErrorCodeInteractionRequired indicates the IdP needs user interaction for other reasons.
 	// Interactive login is required.
-	ErrorCodeInteractionRequired = oauth.ErrorCodeInteractionRequired
+	ErrorCodeInteractionRequired = "interaction_required"
 
 	// ErrorCodeAccountSelectionRequired indicates multiple accounts are available
 	// and the user must select one.
-	ErrorCodeAccountSelectionRequired = oauth.ErrorCodeAccountSelectionRequired
+	ErrorCodeAccountSelectionRequired = "account_selection_required"
 )
 
 // OIDC Prompt values for AuthorizationURLOptions.Prompt field.

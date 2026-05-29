@@ -305,6 +305,20 @@ func NewHandler(config *Config) (*Handler, error) {
 		return nil, fmt.Errorf("failed to create Google provider: %w", err)
 	}
 
+	// Build the token encryptor up-front if a key is provided. Since
+	// mcp-oauth v0.2.160 encryption is wired into the storage backend at
+	// construction time via memory.WithEncryptor / valkey.WithEncryptor —
+	// there is no longer a server-level WithEncryptor or post-construction
+	// SetEncryptor hook.
+	var encryptor *security.Encryptor
+	if len(config.Security.EncryptionKey) > 0 {
+		var err error
+		encryptor, err = security.NewEncryptor(config.Security.EncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create encryptor: %w", err)
+		}
+	}
+
 	// Create storage backend based on configuration
 	var tokenStore storage.TokenStore
 	var clientStore storage.ClientStore
@@ -357,20 +371,17 @@ func NewHandler(config *Config) (*Handler, error) {
 			valkeyConfig.KeyPrefix = valkey.DefaultKeyPrefix
 		}
 
-		valkeyStore, err := valkey.New(valkeyConfig)
+		var valkeyOpts []valkey.Option
+		if encryptor != nil {
+			valkeyOpts = append(valkeyOpts, valkey.WithEncryptor(encryptor))
+		}
+
+		valkeyStore, err := valkey.New(valkeyConfig, valkeyOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Valkey storage: %w", err)
 		}
 
-		// Set up encryption for Valkey store if key is provided
-		if len(config.Security.EncryptionKey) > 0 {
-			encryptor, err := security.NewEncryptor(config.Security.EncryptionKey)
-			if err != nil {
-				// Close the Valkey store on error to release resources
-				valkeyStore.Close()
-				return nil, fmt.Errorf("failed to create encryptor for Valkey storage: %w", err)
-			}
-			valkeyStore.SetEncryptor(encryptor)
+		if encryptor != nil {
 			logger.Info("Token encryption at rest enabled for Valkey storage (AES-256-GCM)")
 		}
 
@@ -383,7 +394,12 @@ func NewHandler(config *Config) (*Handler, error) {
 
 	case StorageTypeMemory, "":
 		// Use memory storage (default)
-		memStore = memory.New()
+		var memOpts []memory.Option
+		if encryptor != nil {
+			memOpts = append(memOpts, memory.WithEncryptor(encryptor))
+			logger.Info("Token encryption at rest enabled for in-memory storage (AES-256-GCM)")
+		}
+		memStore = memory.New(memOpts...)
 		tokenStore = memStore
 		clientStore = memStore
 		flowStore = memStore
@@ -473,17 +489,9 @@ func NewHandler(config *Config) (*Handler, error) {
 
 	// Build functional options for the OAuth server. Since mcp-oauth v0.2.140
 	// the Set* methods on Server were replaced by options applied at construction.
+	// Note: encryption is wired into the storage backend above; the server no
+	// longer accepts an Encryptor option.
 	var serverOpts []oauthserver.Option
-
-	// Set up encryption if key provided (only for memory storage; Valkey encryption is set above)
-	if len(config.Security.EncryptionKey) > 0 && config.Storage.Type != StorageTypeValkey {
-		encryptor, err := security.NewEncryptor(config.Security.EncryptionKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create encryptor: %w", err)
-		}
-		serverOpts = append(serverOpts, oauthserver.WithEncryptor(encryptor))
-		logger.Info("Token encryption at rest enabled (AES-256-GCM)")
-	}
 
 	// Set up audit logging if enabled
 	if config.Security.EnableAuditLogging {
