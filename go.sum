@@ -27,6 +27,8 @@ github.com/giantswarm/mcp-oauth v0.2.192 h1:+Ft0R1c8/6SnpQVP9nKvNvQvGJZZRedIfxfl
 github.com/giantswarm/mcp-oauth v0.2.192/go.mod h1:X/8H2gi9TsoV6eQ4zWx2UzGfPyNlGK2hustIitR4zR8=
 github.com/giantswarm/mcp-oauth v0.2.194 h1:1sQxpa/lIarE6YfKQtVxflBfHac7eh9YJCbJwatwScU=
 github.com/giantswarm/mcp-oauth v0.2.194/go.mod h1:X/8H2gi9TsoV6eQ4zWx2UzGfPyNlGK2hustIitR4zR8=
+github.com/giantswarm/mcp-oauth v0.2.196 h1:bfMP1/iFE9ojWJrcygiPh/LNqD6rBZydZ+Jt7Wl/xY4=
+github.com/giantswarm/mcp-oauth v0.2.196/go.mod h1:kZYmUvfTZUVGwCZE78p7oVe2raiQkhR9WTQK3UB/UfI=
 github.com/go-jose/go-jose/v4 v4.1.4 h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=
 github.com/go-jose/go-jose/v4 v4.1.4/go.mod h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
@@ -140,6 +142,8 @@ golang.org/x/oauth2 v0.36.0 h1:peZ/1z27fi9hUOFCAZaHyrpWG5lwe0RJEEEeH0ThlIs=
 golang.org/x/oauth2 v0.36.0/go.mod h1:YDBUJMTkDnJS+A4BP4eZBjCqtokkg1hODuPjwiGPO7Q=
 golang.org/x/sync v0.20.0 h1:e0PTpb7pjO8GAtTs2dQ6jYa5BWYlMuX047Dco/pItO4=
 golang.org/x/sync v0.20.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
+golang.org/x/sync v0.21.0 h1:HLII4xRRTtCRkxYp4HNFF0Js/Og6q2i++KXbg0gHCwM=
+golang.org/x/sync v0.21.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
 golang.org/x/sys v0.45.0 h1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=
 golang.org/x/sys v0.45.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/text v0.37.0 h1:Cqjiwd9eSg8e0QAkyCaQTNHFIIzWtidPahFWR83rTrc=
