@@ -57,6 +57,8 @@ github.com/giantswarm/mcp-oauth v0.18.0 h1:5RLH993jUpUzPR0pJc7sZ2QR1K0sw2BvDI/72
 github.com/giantswarm/mcp-oauth v0.18.0/go.mod h1:Z/f5JZAz6JGs8A++hfXPUIN4CR1yuMb9cXRx4qrzzIA=
 github.com/giantswarm/mcp-oauth v0.18.4 h1:+PScNvVutkA3Y8tsf31/dulS8+iCym/ZSoJjFUl23uc=
 github.com/giantswarm/mcp-oauth v0.18.4/go.mod h1:Z/f5JZAz6JGs8A++hfXPUIN4CR1yuMb9cXRx4qrzzIA=
+github.com/giantswarm/mcp-oauth v0.18.5 h1:0i9m79W0t1g0NbAITg/P0YaIR0I1THngmXmLwvU66oc=
+github.com/giantswarm/mcp-oauth v0.18.5/go.mod h1:Z/f5JZAz6JGs8A++hfXPUIN4CR1yuMb9cXRx4qrzzIA=
 github.com/go-jose/go-jose/v4 v4.1.4 h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=
 github.com/go-jose/go-jose/v4 v4.1.4/go.mod h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
