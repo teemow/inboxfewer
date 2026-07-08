@@ -6,12 +6,22 @@ import (
 	"testing"
 )
 
+// unsetenv clears an environment variable for the duration of the test.
+// t.Setenv registers restoration of the original value on cleanup.
+func unsetenv(t *testing.T, key string) {
+	t.Helper()
+	t.Setenv(key, "")
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("failed to unset %s: %v", key, err)
+	}
+}
+
 func TestDefaultConfig(t *testing.T) {
 	// Clear environment to get defaults
-	os.Unsetenv("OTEL_SERVICE_NAME")
-	os.Unsetenv("INSTRUMENTATION_ENABLED")
-	os.Unsetenv("METRICS_EXPORTER")
-	os.Unsetenv("TRACING_EXPORTER")
+	unsetenv(t, "OTEL_SERVICE_NAME")
+	unsetenv(t, "INSTRUMENTATION_ENABLED")
+	unsetenv(t, "METRICS_EXPORTER")
+	unsetenv(t, "TRACING_EXPORTER")
 
 	config := DefaultConfig()
 
@@ -37,20 +47,12 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestDefaultConfig_FromEnv(t *testing.T) {
-	// Set environment variables
-	os.Setenv("OTEL_SERVICE_NAME", "test-service")
-	os.Setenv("INSTRUMENTATION_ENABLED", "false")
-	os.Setenv("METRICS_EXPORTER", "stdout")
-	os.Setenv("TRACING_EXPORTER", "stdout")
-	os.Setenv("OTEL_TRACES_SAMPLER_ARG", "0.5")
-
-	defer func() {
-		os.Unsetenv("OTEL_SERVICE_NAME")
-		os.Unsetenv("INSTRUMENTATION_ENABLED")
-		os.Unsetenv("METRICS_EXPORTER")
-		os.Unsetenv("TRACING_EXPORTER")
-		os.Unsetenv("OTEL_TRACES_SAMPLER_ARG")
-	}()
+	// Set environment variables (restored automatically on cleanup)
+	t.Setenv("OTEL_SERVICE_NAME", "test-service")
+	t.Setenv("INSTRUMENTATION_ENABLED", "false")
+	t.Setenv("METRICS_EXPORTER", "stdout")
+	t.Setenv("TRACING_EXPORTER", "stdout")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0.5")
 
 	config := DefaultConfig()
 
@@ -174,8 +176,7 @@ func TestConfig_Validate(t *testing.T) {
 }
 
 func TestGetEnvOrDefault(t *testing.T) {
-	os.Setenv("TEST_VAR", "test_value")
-	defer os.Unsetenv("TEST_VAR")
+	t.Setenv("TEST_VAR", "test_value")
 
 	if v := getEnvOrDefault("TEST_VAR", "default"); v != "test_value" {
 		t.Errorf("expected 'test_value', got %q", v)
@@ -187,14 +188,9 @@ func TestGetEnvOrDefault(t *testing.T) {
 }
 
 func TestGetEnvBoolOrDefault(t *testing.T) {
-	os.Setenv("TEST_BOOL_TRUE", "true")
-	os.Setenv("TEST_BOOL_FALSE", "false")
-	os.Setenv("TEST_BOOL_INVALID", "not_a_bool")
-	defer func() {
-		os.Unsetenv("TEST_BOOL_TRUE")
-		os.Unsetenv("TEST_BOOL_FALSE")
-		os.Unsetenv("TEST_BOOL_INVALID")
-	}()
+	t.Setenv("TEST_BOOL_TRUE", "true")
+	t.Setenv("TEST_BOOL_FALSE", "false")
+	t.Setenv("TEST_BOOL_INVALID", "not_a_bool")
 
 	if v := getEnvBoolOrDefault("TEST_BOOL_TRUE", false); !v {
 		t.Error("expected true")
@@ -214,12 +210,8 @@ func TestGetEnvBoolOrDefault(t *testing.T) {
 }
 
 func TestGetEnvFloatOrDefault(t *testing.T) {
-	os.Setenv("TEST_FLOAT", "0.75")
-	os.Setenv("TEST_FLOAT_INVALID", "not_a_float")
-	defer func() {
-		os.Unsetenv("TEST_FLOAT")
-		os.Unsetenv("TEST_FLOAT_INVALID")
-	}()
+	t.Setenv("TEST_FLOAT", "0.75")
+	t.Setenv("TEST_FLOAT_INVALID", "not_a_float")
 
 	if v := getEnvFloatOrDefault("TEST_FLOAT", 0.5); v != 0.75 {
 		t.Errorf("expected 0.75, got %f", v)

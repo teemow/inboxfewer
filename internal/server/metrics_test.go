@@ -122,7 +122,7 @@ func TestMetricsServer_StartAndShutdown(t *testing.T) {
 	if err != nil {
 		t.Errorf("GET /healthz failed: %v", err)
 	} else {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }() // best-effort: response body close
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("GET /healthz status = %d, want %d", resp.StatusCode, http.StatusOK)
 		}

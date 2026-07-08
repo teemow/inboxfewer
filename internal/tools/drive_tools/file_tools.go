@@ -264,7 +264,7 @@ func registerFileTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOnl
 				if err != nil {
 					return "", err
 				}
-				defer reader.Close()
+				defer func() { _ = reader.Close() }() // best-effort: reader close after full read
 
 				content, err := io.ReadAll(reader)
 				if err != nil {

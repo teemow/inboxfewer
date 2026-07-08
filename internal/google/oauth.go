@@ -201,7 +201,7 @@ func GetTokenSourceForAccount(ctx context.Context, account string) (oauth2.Token
 
 	conf := getOAuthConfig()
 	if conf.ClientID == "" || conf.ClientSecret == "" {
-		return nil, fmt.Errorf("Google OAuth credentials not configured. Set GOOGLE_STDIO_CLIENT_ID and GOOGLE_STDIO_CLIENT_SECRET (or GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) environment variables")
+		return nil, fmt.Errorf("google OAuth credentials not configured: set GOOGLE_STDIO_CLIENT_ID and GOOGLE_STDIO_CLIENT_SECRET (or GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) environment variables")
 	}
 
 	tokenFile := getTokenFilePath(account)

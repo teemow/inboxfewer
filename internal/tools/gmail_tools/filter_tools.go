@@ -241,10 +241,10 @@ func handleListFilters(ctx context.Context, request mcp.CallToolRequest, sc *ser
 
 	// Format result
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("Found %d filter(s):\n\n", len(filters)))
+	fmt.Fprintf(&result, "Found %d filter(s):\n\n", len(filters))
 
 	for i, filter := range filters {
-		result.WriteString(fmt.Sprintf("Filter %d:\n", i+1))
+		fmt.Fprintf(&result, "Filter %d:\n", i+1)
 		result.WriteString(formatFilterInfo(filter, ""))
 		result.WriteString("\n")
 	}
@@ -318,7 +318,7 @@ func handleListLabels(ctx context.Context, request mcp.CallToolRequest, sc *serv
 
 	// Format result
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("Found %d label(s):\n\n", len(labels)))
+	fmt.Fprintf(&result, "Found %d label(s):\n\n", len(labels))
 
 	// Separate system labels and user labels
 	var systemLabels []string
@@ -376,21 +376,21 @@ func formatFilterInfo(filter *gmail.FilterInfo, header string) string {
 		result.WriteString(header + "\n\n")
 	}
 
-	result.WriteString(fmt.Sprintf("Filter ID: %s\n\n", filter.ID))
+	fmt.Fprintf(&result, "Filter ID: %s\n\n", filter.ID)
 
 	// Format criteria
 	result.WriteString("Criteria:\n")
 	if filter.Criteria.From != "" {
-		result.WriteString(fmt.Sprintf("  From: %s\n", filter.Criteria.From))
+		fmt.Fprintf(&result, "  From: %s\n", filter.Criteria.From)
 	}
 	if filter.Criteria.To != "" {
-		result.WriteString(fmt.Sprintf("  To: %s\n", filter.Criteria.To))
+		fmt.Fprintf(&result, "  To: %s\n", filter.Criteria.To)
 	}
 	if filter.Criteria.Subject != "" {
-		result.WriteString(fmt.Sprintf("  Subject: %s\n", filter.Criteria.Subject))
+		fmt.Fprintf(&result, "  Subject: %s\n", filter.Criteria.Subject)
 	}
 	if filter.Criteria.Query != "" {
-		result.WriteString(fmt.Sprintf("  Query: %s\n", filter.Criteria.Query))
+		fmt.Fprintf(&result, "  Query: %s\n", filter.Criteria.Query)
 	}
 	if filter.Criteria.HasAttachment {
 		result.WriteString("  Has Attachment: true\n")
@@ -399,10 +399,10 @@ func formatFilterInfo(filter *gmail.FilterInfo, header string) string {
 	// Format actions
 	result.WriteString("\nActions:\n")
 	if len(filter.Action.AddLabelIDs) > 0 {
-		result.WriteString(fmt.Sprintf("  Add Labels: %s\n", strings.Join(filter.Action.AddLabelIDs, ", ")))
+		fmt.Fprintf(&result, "  Add Labels: %s\n", strings.Join(filter.Action.AddLabelIDs, ", "))
 	}
 	if len(filter.Action.RemoveLabelIDs) > 0 {
-		result.WriteString(fmt.Sprintf("  Remove Labels: %s\n", strings.Join(filter.Action.RemoveLabelIDs, ", ")))
+		fmt.Fprintf(&result, "  Remove Labels: %s\n", strings.Join(filter.Action.RemoveLabelIDs, ", "))
 	}
 	if filter.Action.Archive {
 		result.WriteString("  Archive: true\n")
@@ -420,7 +420,7 @@ func formatFilterInfo(filter *gmail.FilterInfo, header string) string {
 		result.WriteString("  Delete: true\n")
 	}
 	if filter.Action.Forward != "" {
-		result.WriteString(fmt.Sprintf("  Forward to: %s\n", filter.Action.Forward))
+		fmt.Fprintf(&result, "  Forward to: %s\n", filter.Action.Forward)
 	}
 
 	return result.String()

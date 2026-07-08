@@ -202,12 +202,8 @@ func TestGetMessageBody_Format(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// This test validates the format parameter handling
-			// We can't test the actual API call without a mock, but we can test the validation
-			if tt.format == "invalid" {
-				// Create a mock client (would need proper mock setup in real test)
-				// For now, this demonstrates the test structure
-			}
+			// This test validates the format parameter handling.
+			// We can't test the actual API call without a mock, but we can test the validation.
 		})
 	}
 }

@@ -3,7 +3,6 @@ package calendar
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -97,12 +96,6 @@ func NewClient(ctx context.Context) (*Client, error) {
 // using the provided token provider
 func NewClientWithProvider(ctx context.Context, provider google.TokenProvider) (*Client, error) {
 	return NewClientForAccountWithProvider(ctx, "default", provider)
-}
-
-// isTerminal checks if stdin is connected to a terminal (CLI mode)
-func isTerminal() bool {
-	fileInfo, _ := os.Stdin.Stat()
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 // ListEvents lists events in a calendar within a time range

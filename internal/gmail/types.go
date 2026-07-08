@@ -36,7 +36,7 @@ func (id *GitHubIssue) IsStale() (bool, error) {
 	if err != nil {
 		return false, nil
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }() // best-effort: response body close
 	if res.StatusCode == 404 {
 		return true, nil
 	}
@@ -69,7 +69,7 @@ func (id *GitHubPull) IsStale() (bool, error) {
 	if err != nil {
 		return false, nil
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }() // best-effort: response body close
 	if res.StatusCode == 404 {
 		return true, nil
 	}

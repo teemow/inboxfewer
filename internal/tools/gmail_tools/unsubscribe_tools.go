@@ -93,16 +93,17 @@ func handleGetUnsubscribeInfo(ctx context.Context, request mcp.CallToolRequest, 
 	}
 
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("Unsubscribe information for message %s:\n\n", messageID))
-	result.WriteString(fmt.Sprintf("Found %d unsubscribe method(s):\n\n", len(info.Methods)))
+	fmt.Fprintf(&result, "Unsubscribe information for message %s:\n\n", messageID)
+	fmt.Fprintf(&result, "Found %d unsubscribe method(s):\n\n", len(info.Methods))
 
 	for i, method := range info.Methods {
-		result.WriteString(fmt.Sprintf("%d. Type: %s\n", i+1, method.Type))
-		result.WriteString(fmt.Sprintf("   URL: %s\n", method.URL))
+		fmt.Fprintf(&result, "%d. Type: %s\n", i+1, method.Type)
+		fmt.Fprintf(&result, "   URL: %s\n", method.URL)
 
-		if method.Type == "http" {
+		switch method.Type {
+		case "http":
 			result.WriteString("   Action: Use gmail_unsubscribe_via_http with this URL to unsubscribe automatically\n")
-		} else if method.Type == "mailto" {
+		case "mailto":
 			result.WriteString("   Action: Send an email to this address to unsubscribe (use gmail_send_email)\n")
 		}
 		result.WriteString("\n")

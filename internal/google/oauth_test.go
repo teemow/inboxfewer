@@ -83,8 +83,9 @@ func TestMigrateDefaultToken(t *testing.T) {
 	oldTokenFile := filepath.Join(cacheDir, "google.token")
 	newTokenFile := filepath.Join(cacheDir, "google-default.token")
 	defer func() {
-		os.Remove(oldTokenFile)
-		os.Remove(newTokenFile)
+		// Best-effort test cleanup; the files may not exist.
+		_ = os.Remove(oldTokenFile)
+		_ = os.Remove(newTokenFile)
 	}()
 
 	// Create old token file for testing
