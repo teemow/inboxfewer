@@ -1,0 +1,17 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  ci:
+    uses: teemow/github-workflows/.github/workflows/ci-go.yml@main
+    with:
+      runs-on: ubuntu-latest
+  gitleaks:
+    uses: teemow/github-workflows/.github/workflows/gitleaks.yml@main
+    with:
+      runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
