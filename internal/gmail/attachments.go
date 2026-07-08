@@ -118,7 +118,7 @@ func (c *Client) GetThreadMessageBodies(threadID string, format string) (string,
 		body, err := c.extractBodyFromMessage(msg, format)
 		if err != nil {
 			// If we can't get the body for this message, skip it with a note
-			allBodies.WriteString(fmt.Sprintf("\n[Message %d/%d: Error extracting body: %v]\n", i+1, len(thread.Messages), err))
+			fmt.Fprintf(&allBodies, "\n[Message %d/%d: Error extracting body: %v]\n", i+1, len(thread.Messages), err)
 			continue
 		}
 
@@ -127,7 +127,7 @@ func (c *Client) GetThreadMessageBodies(threadID string, format string) (string,
 			allBodies.WriteString("\n\n" + strings.Repeat("-", 80) + "\n\n")
 		}
 
-		allBodies.WriteString(fmt.Sprintf("Message %d/%d (ID: %s):\n\n", i+1, len(thread.Messages), msg.Id))
+		fmt.Fprintf(&allBodies, "Message %d/%d (ID: %s):\n\n", i+1, len(thread.Messages), msg.Id)
 		allBodies.WriteString(body)
 	}
 

@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"mime"
-	"os"
 	"strings"
 
 	"golang.org/x/oauth2"
@@ -72,7 +71,7 @@ func NewClientForAccountWithProvider(ctx context.Context, account string, tokenP
 	client := oauth2.NewClient(ctx, tokenSource)
 	google.ForceHTTP11(client)
 
-	svc, err := gmail.New(client)
+	svc, err := gmail.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		return nil, err
 	}
@@ -233,12 +232,6 @@ func (c *Client) ListThreads(q string, maxResults int64) ([]*gmail.Thread, error
 	}
 
 	return allThreads, nil
-}
-
-// isTerminal checks if stdin is connected to a terminal (CLI mode)
-func isTerminal() bool {
-	fileInfo, _ := os.Stdin.Stat()
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 // Contact represents a simplified contact entry

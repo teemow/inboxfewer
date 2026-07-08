@@ -371,8 +371,11 @@ func TestContextWithGoogleAccessToken(t *testing.T) {
 	})
 
 	t.Run("preserves other context values", func(t *testing.T) {
+		type testCtxKey string
+		otherKey := testCtxKey("other-key")
+
 		ctx := context.Background()
-		ctx = context.WithValue(ctx, "other-key", "other-value")
+		ctx = context.WithValue(ctx, otherKey, "other-value")
 		ctxWithToken := ContextWithGoogleAccessToken(ctx, "my-token")
 
 		// Both values should be preserved
@@ -380,7 +383,7 @@ func TestContextWithGoogleAccessToken(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, "my-token", token)
 
-		otherVal := ctxWithToken.Value("other-key")
+		otherVal := ctxWithToken.Value(otherKey)
 		assert.Equal(t, "other-value", otherVal)
 	})
 

@@ -1,0 +1,18 @@
+name: Auto-release
+on:
+  push:
+    branches: [main]
+jobs:
+  release:
+    uses: teemow/github-workflows/.github/workflows/auto-release.yml@main
+    permissions:
+      contents: write
+      pull-requests: read
+  goreleaser:
+    needs: release
+    if: needs.release.outputs.tag != ''
+    uses: teemow/github-workflows/.github/workflows/release-go.yml@main
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+    permissions:
+      contents: write

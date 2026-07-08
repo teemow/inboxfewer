@@ -3,7 +3,6 @@ package tasks
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -95,12 +94,6 @@ func NewClientWithProvider(ctx context.Context, provider google.TokenProvider) (
 // For MCP usage, it will return an error if no token exists
 func NewClient(ctx context.Context) (*Client, error) {
 	return NewClientForAccount(ctx, "default")
-}
-
-// isTerminal checks if stdin is connected to a terminal (CLI mode)
-func isTerminal() bool {
-	fileInfo, _ := os.Stdin.Stat()
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 // ListTaskLists lists all task lists for the authenticated user

@@ -219,12 +219,6 @@ func TestReplyThreadingHeaders(t *testing.T) {
 		t.Errorf("References header = %v, want %v", references, expectedReferences)
 	}
 
-	// Test case without existing references
-	references = ""
-	if originalReferences == "" {
-		references = originalMessageID
-	}
-
 	// Simulate empty originalReferences
 	testOriginalReferences := ""
 	if testOriginalReferences != "" {

@@ -442,7 +442,7 @@ func handleGetTranscriptText(ctx context.Context, request mcp.CallToolRequest, s
 	}
 
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("Transcript (%d entries):\n\n", len(entries)))
+	fmt.Fprintf(&result, "Transcript (%d entries):\n\n", len(entries))
 
 	for _, entry := range entries {
 		timestamp := ""
@@ -451,12 +451,9 @@ func handleGetTranscriptText(ctx context.Context, request mcp.CallToolRequest, s
 		}
 
 		// Extract participant name (remove "users/" prefix if present)
-		participantName := entry.Participant
-		if strings.HasPrefix(participantName, "users/") {
-			participantName = strings.TrimPrefix(participantName, "users/")
-		}
+		participantName := strings.TrimPrefix(entry.Participant, "users/")
 
-		result.WriteString(fmt.Sprintf("[%s] %s: %s\n", timestamp, participantName, entry.Text))
+		fmt.Fprintf(&result, "[%s] %s: %s\n", timestamp, participantName, entry.Text)
 	}
 
 	return mcp.NewToolResultText(result.String()), nil

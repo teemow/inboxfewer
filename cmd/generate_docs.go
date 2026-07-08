@@ -134,7 +134,7 @@ func generateToolsMarkdown(tools []mcp.Tool) string {
 
 	for _, category := range categories {
 		anchor := strings.ToLower(strings.ReplaceAll(category, " ", "-"))
-		sb.WriteString(fmt.Sprintf("- [%s](#%s)\n", category, anchor))
+		fmt.Fprintf(&sb, "- [%s](#%s)\n", category, anchor)
 	}
 	sb.WriteString("\n")
 
@@ -152,7 +152,7 @@ func generateToolsMarkdown(tools []mcp.Tool) string {
 			return categoryTools[i].Name < categoryTools[j].Name
 		})
 
-		sb.WriteString(fmt.Sprintf("## %s\n\n", category))
+		fmt.Fprintf(&sb, "## %s\n\n", category)
 
 		for _, tool := range categoryTools {
 			sb.WriteString(generateToolMarkdown(tool))
@@ -203,15 +203,15 @@ func generateToolMarkdown(tool mcp.Tool) string {
 	var sb strings.Builder
 
 	// Tool name
-	sb.WriteString(fmt.Sprintf("### %s\n\n", tool.Name))
+	fmt.Fprintf(&sb, "### %s\n\n", tool.Name)
 
 	// Description
 	if tool.Description != "" {
-		sb.WriteString(fmt.Sprintf("%s\n\n", tool.Description))
+		fmt.Fprintf(&sb, "%s\n\n", tool.Description)
 	}
 
 	// Input schema
-	if tool.InputSchema.Properties != nil && len(tool.InputSchema.Properties) > 0 {
+	if len(tool.InputSchema.Properties) > 0 {
 		sb.WriteString("**Arguments:**\n")
 
 		// Sort properties for consistent output
@@ -238,13 +238,13 @@ func generateToolMarkdown(tool mcp.Tool) string {
 
 			propType := getPropertyType(propMap)
 
-			sb.WriteString(fmt.Sprintf("- `%s` (%s): ", name, requiredStr))
+			fmt.Fprintf(&sb, "- `%s` (%s): ", name, requiredStr)
 
 			// Get description
 			if desc, ok := propMap["description"].(string); ok {
 				sb.WriteString(desc)
 			} else {
-				sb.WriteString(fmt.Sprintf("%s parameter", propType))
+				fmt.Fprintf(&sb, "%s parameter", propType)
 			}
 
 			sb.WriteString("\n")

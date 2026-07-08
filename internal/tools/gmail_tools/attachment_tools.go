@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -462,10 +463,7 @@ func handleTransferAttachmentsToDrive(ctx context.Context, request mcp.CallToolR
 
 		// Strategy 3: If still not found, check if it's an index number (0, 1, 2, etc.)
 		if !ok {
-			// Try parsing as index
-			if idx, err := fmt.Sscanf(attachmentID, "%d", new(int)); err == nil && idx == 1 {
-				var index int
-				fmt.Sscanf(attachmentID, "%d", &index)
+			if index, err := strconv.Atoi(attachmentID); err == nil {
 				if index >= 0 && index < len(allAttachments) {
 					attInfo = allAttachments[index]
 					ok = true

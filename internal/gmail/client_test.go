@@ -2,14 +2,7 @@ package gmail
 
 import (
 	"testing"
-
-	gmail "google.golang.org/api/gmail/v1"
 )
-
-// MockUsersService is a mock implementation for testing
-type MockUsersService struct {
-	modifyThreadFunc func(userId, id string, req *gmail.ModifyThreadRequest) (*gmail.Thread, error)
-}
 
 // TestMarkThreadAsSpam tests the MarkThreadAsSpam method
 func TestMarkThreadAsSpam(t *testing.T) {

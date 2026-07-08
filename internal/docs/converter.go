@@ -24,7 +24,7 @@ func DocumentToMarkdown(doc *docs.Document) (string, error) {
 	}
 
 	// Check if document uses the new tabs structure
-	if doc.Tabs != nil && len(doc.Tabs) > 0 {
+	if len(doc.Tabs) > 0 {
 		// Process tabbed document - iterate through all tabs
 		for tabIndex, tab := range doc.Tabs {
 			if tab.TabProperties != nil && tab.TabProperties.Title != "" {
@@ -35,7 +35,7 @@ func DocumentToMarkdown(doc *docs.Document) (string, error) {
 			} else if tabIndex > 0 {
 				// For tabs without explicit titles, add a separator
 				md.WriteString("## Tab ")
-				md.WriteString(fmt.Sprintf("%d", tabIndex+1))
+				fmt.Fprintf(&md, "%d", tabIndex+1)
 				md.WriteString("\n\n")
 			}
 
@@ -47,7 +47,7 @@ func DocumentToMarkdown(doc *docs.Document) (string, error) {
 			}
 
 			// Process child tabs recursively if they exist
-			if tab.ChildTabs != nil && len(tab.ChildTabs) > 0 {
+			if len(tab.ChildTabs) > 0 {
 				childMd, err := processChildTabs(tab.ChildTabs, 3) // Start at H3 for child tabs
 				if err != nil {
 					return "", fmt.Errorf("failed to process child tabs: %w", err)
@@ -81,7 +81,7 @@ func processChildTabs(tabs []*docs.Tab, headingLevel int) (string, error) {
 		} else {
 			md.WriteString(strings.Repeat("#", headingLevel))
 			md.WriteString(" Subtab ")
-			md.WriteString(fmt.Sprintf("%d", tabIndex+1))
+			fmt.Fprintf(&md, "%d", tabIndex+1)
 			md.WriteString("\n\n")
 		}
 
@@ -93,7 +93,7 @@ func processChildTabs(tabs []*docs.Tab, headingLevel int) (string, error) {
 		}
 
 		// Recursively process nested child tabs
-		if tab.ChildTabs != nil && len(tab.ChildTabs) > 0 {
+		if len(tab.ChildTabs) > 0 {
 			childMd, err := processChildTabs(tab.ChildTabs, headingLevel+1)
 			if err != nil {
 				return "", err
@@ -121,7 +121,7 @@ func DocumentToPlainText(doc *docs.Document) (string, error) {
 	}
 
 	// Check if document uses the new tabs structure
-	if doc.Tabs != nil && len(doc.Tabs) > 0 {
+	if len(doc.Tabs) > 0 {
 		// Process tabbed document - iterate through all tabs
 		for tabIndex, tab := range doc.Tabs {
 			if tab.TabProperties != nil && tab.TabProperties.Title != "" {
@@ -130,7 +130,7 @@ func DocumentToPlainText(doc *docs.Document) (string, error) {
 				text.WriteString(tab.TabProperties.Title)
 				text.WriteString(" ===\n\n")
 			} else if tabIndex > 0 {
-				text.WriteString(fmt.Sprintf("=== Tab %d ===\n\n", tabIndex+1))
+				fmt.Fprintf(&text, "=== Tab %d ===\n\n", tabIndex+1)
 			}
 
 			// Process tab content
@@ -141,7 +141,7 @@ func DocumentToPlainText(doc *docs.Document) (string, error) {
 			}
 
 			// Process child tabs recursively if they exist
-			if tab.ChildTabs != nil && len(tab.ChildTabs) > 0 {
+			if len(tab.ChildTabs) > 0 {
 				childText := extractChildTabsText(tab.ChildTabs, 1)
 				text.WriteString(childText)
 			}
@@ -172,7 +172,7 @@ func extractChildTabsText(tabs []*docs.Tab, level int) string {
 			text.WriteString(" ---\n\n")
 		} else {
 			text.WriteString(strings.Repeat("  ", level))
-			text.WriteString(fmt.Sprintf("--- Subtab %d ---\n\n", tabIndex+1))
+			fmt.Fprintf(&text, "--- Subtab %d ---\n\n", tabIndex+1)
 		}
 
 		// Process child tab content
@@ -183,7 +183,7 @@ func extractChildTabsText(tabs []*docs.Tab, level int) string {
 		}
 
 		// Recursively process nested child tabs
-		if tab.ChildTabs != nil && len(tab.ChildTabs) > 0 {
+		if len(tab.ChildTabs) > 0 {
 			text.WriteString(extractChildTabsText(tab.ChildTabs, level+1))
 		}
 

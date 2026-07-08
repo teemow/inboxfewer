@@ -25,7 +25,11 @@ func TestInstrumentedToolHandler_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that returns success
 	called := false
@@ -62,7 +66,11 @@ func TestInstrumentedToolHandler_Error(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that returns an error
 	expectedErr := errors.New("test error")
@@ -92,7 +100,11 @@ func TestInstrumentedToolHandler_ErrorResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that returns an error result (not Go error)
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -112,7 +124,7 @@ func TestInstrumentedToolHandler_ErrorResult(t *testing.T) {
 		t.Errorf("expected no error, got %v", err)
 	}
 	if result == nil {
-		t.Error("expected result, got nil")
+		t.Fatal("expected result, got nil")
 	}
 	if !result.IsError {
 		t.Error("expected result.IsError to be true")
@@ -127,7 +139,11 @@ func TestInstrumentedToolHandlerWithService_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that returns success
 	called := false
@@ -164,7 +180,11 @@ func TestInstrumentedToolHandlerWithService_WithMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create metrics with noop meter (for testing)
 	meter := noop.NewMeterProvider().Meter("test")
@@ -215,7 +235,11 @@ func TestInstrumentedToolHandlerWithService_ErrorWithMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create metrics with noop meter
 	meter := noop.NewMeterProvider().Meter("test")
@@ -281,7 +305,11 @@ func TestInstrumentedToolHandler_CreatesSpan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that returns success
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -344,7 +372,11 @@ func TestInstrumentedToolHandler_SpanRecordsError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that returns an error
 	expectedErr := errors.New("test error")
@@ -389,7 +421,11 @@ func TestInstrumentedToolHandlerWithService_CreatesSpanWithServiceAttributes(t *
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that returns success
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -454,7 +490,11 @@ func TestInstrumentedToolHandlerWithService_SpanRecordsErrorWithService(t *testi
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that returns an error
 	expectedErr := errors.New("gmail API error")
@@ -512,7 +552,11 @@ func TestInstrumentedToolHandler_SpanContextPassedToHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that verifies trace context is present
 	var traceID, spanID string
@@ -566,7 +610,11 @@ func TestInstrumentedToolHandler_SpanRecordsErrorResultStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server context: %v", err)
 	}
-	defer sc.Shutdown()
+	defer func() {
+		if err := sc.Shutdown(); err != nil {
+			t.Errorf("failed to shut down server context: %v", err)
+		}
+	}()
 
 	// Create a handler that returns an error result (not Go error)
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -19,7 +18,7 @@ var githubUser, githubToken string
 
 func readGithubConfig() error {
 	file := filepath.Join(homeDir(), "keys", "github-inboxfewer.token")
-	slurp, err := ioutil.ReadFile(file)
+	slurp, err := os.ReadFile(file)
 	if err != nil {
 		return err
 	}

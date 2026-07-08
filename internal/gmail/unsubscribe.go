@@ -109,7 +109,7 @@ func (c *Client) UnsubscribeViaHTTP(url string) error {
 	if err != nil {
 		return fmt.Errorf("failed to send unsubscribe request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // best-effort: response body close
 
 	// Read response body (but discard it, we just want the status)
 	_, _ = io.ReadAll(resp.Body)
