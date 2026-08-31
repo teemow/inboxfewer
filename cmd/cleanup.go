@@ -32,12 +32,18 @@ func readGithubConfig() error {
 
 func newCleanupCmd() *cobra.Command {
 	var account string
+	var skipPersonal bool
 
 	cmd := &cobra.Command{
 		Use:   "cleanup",
 		Short: "Clean up Gmail inbox by archiving closed GitHub issue threads",
 		Long: `Scan your Gmail inbox for threads related to GitHub issues and pull requests.
-If the corresponding GitHub issue or PR is closed, the thread will be archived.`,
+If the corresponding GitHub issue or PR is closed, the thread will be archived.
+
+With --skip-personal, threads that notified you personally are kept even when the
+issue or PR is closed. A notification counts as personal when GitHub sets the
+X-GitHub-Reason header to mention, assign or author. Team mentions and review
+requests are still archived.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := readGithubConfig(); err != nil {
 				return fmt.Errorf("failed to read GitHub config: %w", err)
@@ -50,6 +56,7 @@ If the corresponding GitHub issue or PR is closed, the thread will be archived.`
 			}
 
 			n := 0
+			kept := 0
 			if err := client.ForeachThread("in:inbox", func(t *gmail_v1.Thread) error {
 				if err := client.PopulateThread(t); err != nil {
 					return err
@@ -58,6 +65,13 @@ If the corresponding GitHub issue or PR is closed, the thread will be archived.`
 				n++
 				log.Printf("Thread %d (%v) = %T %v", n, t.Id, topic, topic)
 				if topic == nil {
+					return nil
+				}
+				// Check the notification reason before IsStale, so that a personal
+				// thread does not cost a GitHub API request.
+				if skipPersonal && gmail.IsPersonallyAddressed(t, gmail.DefaultPersonalReasons) {
+					log.Printf("  ... keeping (personally addressed: %v)", gmail.ThreadReasons(t))
+					kept++
 					return nil
 				}
 				if stale, err := topic.IsStale(); err != nil {
@@ -71,12 +85,17 @@ If the corresponding GitHub issue or PR is closed, the thread will be archived.`
 				return fmt.Errorf("error processing threads: %w", err)
 			}
 
-			log.Printf("Processed %d threads", n)
+			if skipPersonal {
+				log.Printf("Processed %d threads, kept %d personally addressed", n, kept)
+			} else {
+				log.Printf("Processed %d threads", n)
+			}
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&account, "account", "default", "Google account name to use (default: 'default')")
+	cmd.Flags().BoolVar(&skipPersonal, "skip-personal", false, "Do not archive threads where GitHub notified you personally (X-GitHub-Reason: mention, assign or author)")
 	return cmd
 }
 

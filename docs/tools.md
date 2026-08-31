@@ -31,6 +31,7 @@ Archive all Gmail threads in inbox that are related to closed GitHub issues/PRs
 **Arguments:**
 - `account` (optional): Account name (default: 'default'). Used to manage multiple Google accounts.
 - `query` (optional): Gmail search query (default: 'in:inbox')
+- `skipPersonal` (optional): Keep threads where GitHub notified you personally, even when the issue/PR is closed (X-GitHub-Reason: mention, assign or author). Team mentions and review requests are still archived. Default: false
 
 
 ### gmail_archive_threads

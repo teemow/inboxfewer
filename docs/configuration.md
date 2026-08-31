@@ -155,6 +155,42 @@ inboxfewer serve
 # and are loaded automatically when the server starts.
 ```
 
+## Cleanup Behavior
+
+By default, `inboxfewer cleanup` archives every inbox thread whose GitHub issue or
+pull request is closed.
+
+### Keeping Threads That Notify You Personally
+
+A closed issue that mentions you by handle is often the thread you least want to lose.
+Pass `--skip-personal` to keep those threads in the inbox:
+
+```bash
+inboxfewer cleanup --skip-personal
+```
+
+The flag reads the `X-GitHub-Reason` header that GitHub sets on every notification
+email. A thread is kept when any of its messages carries one of these reasons:
+
+| Reason | Meaning |
+| --- | --- |
+| `mention` | Someone wrote `@your-handle` in the issue or pull request |
+| `assign` | The issue or pull request is assigned to you |
+| `author` | You opened the issue or pull request |
+
+Every other reason is still archived when the issue or pull request is closed. This
+includes `team_mention` and `review_requested`, which GitHub also sends when a whole
+team is named, for example through a `CODEOWNERS` entry.
+
+The flag is off by default, so the behaviour of existing setups does not change.
+
+The same behaviour is available in MCP server mode through the `skipPersonal`
+parameter of the `gmail_archive_stale_threads` tool:
+
+```javascript
+gmail_archive_stale_threads({skipPersonal: true})
+```
+
 ## MCP Server Configuration
 
 ### Claude Desktop
