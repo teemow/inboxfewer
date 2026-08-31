@@ -180,6 +180,9 @@ func RegisterGmailTools(s *mcpserver.MCPServer, sc *server.ServerContext, readOn
 		mcp.WithString("query",
 			mcp.Description("Gmail search query (default: 'in:inbox')"),
 		),
+		mcp.WithBoolean("skipPersonal",
+			mcp.Description("Keep threads where GitHub notified you personally, even when the issue/PR is closed (X-GitHub-Reason: mention, assign or author). Team mentions and review requests are still archived. Default: false"),
+		),
 	)
 
 	s.AddTool(archiveStaleTool, common.InstrumentedToolHandlerWithService(
@@ -407,6 +410,11 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 		query = queryVal
 	}
 
+	skipPersonal := false
+	if skipPersonalVal, ok := args["skipPersonal"].(bool); ok {
+		skipPersonal = skipPersonalVal
+	}
+
 	// Get or create Gmail client for the specified account
 	client := sc.GmailClientForAccount(account)
 	if client == nil {
@@ -425,6 +433,7 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 
 	archived := 0
 	checked := 0
+	kept := 0
 
 	err := client.ForeachThread(query, func(t *gmail_v1.Thread) error {
 		if err := client.PopulateThread(t); err != nil {
@@ -435,6 +444,13 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 		checked++
 
 		if classification == nil {
+			return nil
+		}
+
+		// Check the notification reason before IsStale, so that a personal thread
+		// does not cost a GitHub API request.
+		if skipPersonal && gmail.IsPersonallyAddressed(t, gmail.DefaultPersonalReasons) {
+			kept++
 			return nil
 		}
 
@@ -455,6 +471,10 @@ func handleArchiveStaleThreads(ctx context.Context, request mcp.CallToolRequest,
 
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to archive stale threads: %v", err)), nil
+	}
+
+	if skipPersonal {
+		return mcp.NewToolResultText(fmt.Sprintf("Checked %d threads, archived %d stale threads, kept %d personally addressed", checked, archived, kept)), nil
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Checked %d threads, archived %d stale threads", checked, archived)), nil

@@ -9,7 +9,7 @@ Archive Gmail threads for closed GitHub issues and provide MCP server for AI ass
 
 ```
 inboxfewer [command] [options]
-inboxfewer cleanup [--account ACCOUNT] [--debug]
+inboxfewer cleanup [--account ACCOUNT] [--skip-personal] [--debug]
 inboxfewer serve [--transport TYPE] [--http-addr ADDR] [--yolo] [--debug]
 ```
 
@@ -79,7 +79,17 @@ go install github.com/teemow/inboxfewer@latest
 Archive Gmail threads related to closed GitHub issues and pull requests.
 
 ```bash
-inboxfewer cleanup [--account ACCOUNT]
+inboxfewer cleanup [--account ACCOUNT] [--skip-personal]
+```
+
+With `--skip-personal`, threads that notified you personally are kept even when the
+issue or pull request is closed. A notification counts as personal when GitHub sets
+the `X-GitHub-Reason` header to `mention`, `assign` or `author`, that is: someone
+mentioned your handle, the issue is assigned to you, or you opened it. Notifications
+you received through a team mention or a review request are still archived.
+
+```bash
+inboxfewer cleanup --skip-personal
 ```
 
 ## serve
@@ -115,6 +125,7 @@ inboxfewer generate-docs -o FILE   # Output to file
 
 ```
 --account ACCOUNT      Google account name to use (default: "default")
+--skip-personal        Keep threads where GitHub notified you personally (cleanup only)
 --debug                Enable debug logging
 --transport TYPE       MCP transport: stdio, streamable-http (default: stdio)
 --http-addr ADDR       HTTP server address for http transport (default: :8080)
