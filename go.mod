@@ -1,6 +1,6 @@
 module github.com/teemow/inboxfewer
 
-go 1.25.8
+go 1.26.0
 
 require (
 	github.com/giantswarm/mcp-oauth v1.3.7
@@ -19,7 +19,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
 	golang.org/x/oauth2 v0.36.0
-	google.golang.org/api v0.296.0
+	google.golang.org/api v0.297.0
 )
 
 require (
