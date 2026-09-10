@@ -3,7 +3,7 @@ module github.com/teemow/inboxfewer
 go 1.26.0
 
 require (
-	github.com/giantswarm/mcp-oauth v1.3.19
+	github.com/giantswarm/mcp-oauth v1.3.22
 	github.com/mark3labs/mcp-go v1.0.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2
