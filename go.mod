@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/giantswarm/mcp-oauth v1.4.2
-	github.com/mark3labs/mcp-go v1.0.0
+	github.com/mark3labs/mcp-go v1.1.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
