@@ -875,7 +875,7 @@ func runStreamableHTTPServer(mcpSrv *mcpserver.MCPServer, oldServerContext *serv
 	fmt.Printf("Streamable HTTP server with Google OAuth authentication starting on %s\n", addr)
 	fmt.Printf("  HTTP endpoint: /mcp\n")
 	fmt.Printf("  Health endpoints: /healthz, /readyz\n")
-	fmt.Printf("  OAuth metadata: /.well-known/oauth-protected-resource\n")
+	fmt.Printf("  OAuth metadata: /.well-known/oauth-protected-resource and /.well-known/oauth-protected-resource/mcp\n")
 	fmt.Printf("  Authorization Server: %s\n", baseURL)
 	if metricsConfig.Enabled {
 		fmt.Printf("  Metrics endpoint: %s/metrics\n", metricsConfig.Addr)

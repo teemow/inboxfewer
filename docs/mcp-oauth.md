@@ -142,12 +142,12 @@ When you run the command above:
 
 The MCP server provides an endpoint that tells clients where to find the authorization server (inboxfewer):
 
-**Endpoint**: `/.well-known/oauth-protected-resource`
+**Endpoints**: `/.well-known/oauth-protected-resource` and, for the MCP endpoint `/mcp`, the path-aware `/.well-known/oauth-protected-resource/mcp` (RFC 9728 §3.1). Both name the MCP endpoint URL as the `resource`: it is the canonical server URI of the MCP authorization specification, the audience every access token is bound to, and the value RFC 9728 §3.3 requires in the metadata the endpoint's 401 points at. A client that derives the resource indicator from the endpoint URL instead of reading the metadata asks for the same audience.
 
 **Response**:
 ```json
 {
-  "resource": "https://inboxfewer.example.com",
+  "resource": "https://inboxfewer.example.com/mcp",
   "authorization_servers": [
     "https://inboxfewer.example.com"
   ],
