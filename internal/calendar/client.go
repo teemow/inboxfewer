@@ -52,15 +52,12 @@ func NewClientForAccountWithProvider(ctx context.Context, account string, tokenP
 		return nil, fmt.Errorf("token provider cannot be nil")
 	}
 
-	// Get token from the provided provider
-	token, err := tokenProvider.GetTokenForAccount(ctx, account)
+	// The token source follows the account's stored grant and refreshes through
+	// its refresh token instead of trusting a stored access token's expiry.
+	tokenSource, err := google.NewTokenSourceForAccount(ctx, account, tokenProvider)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get Google OAuth token for account %s: %w", account, err)
+		return nil, err
 	}
-
-	// Create OAuth2 config and token source
-	conf := google.GetOAuthConfig()
-	tokenSource := conf.TokenSource(ctx, token)
 
 	// Create HTTP client with the token
 	client := oauth2.NewClient(ctx, tokenSource)
