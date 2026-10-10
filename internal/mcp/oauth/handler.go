@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,24 @@ const (
 	// Burst = Rate * defaultBurstMultiplier
 	defaultBurstMultiplier = 2
 )
+
+// MCPEndpointPath is the path the MCP endpoint is served on, below the base
+// URL. It is also the path component of the resource identifier.
+const MCPEndpointPath = "/mcp"
+
+// ResourceIdentifier returns the RFC 8707 resource identifier of the MCP
+// server: the MCP endpoint URL (the base URL plus MCPEndpointPath), the
+// canonical server URI of the MCP authorization specification.
+//
+// It has to be the endpoint URL and not the base URL: the 401 of the MCP
+// endpoint points clients at the protected resource metadata, and RFC 9728
+// §3.3 requires the `resource` in that metadata to be identical to the URL
+// the client requested. A client that derives the resource indicator from
+// the endpoint URL (muster with a pinned authorization server does) then
+// asks for, and receives, a token bound to exactly this identifier.
+func ResourceIdentifier(baseURL string) string {
+	return strings.TrimSuffix(baseURL, "/") + MCPEndpointPath
+}
 
 // Config holds the OAuth library handler configuration
 // This maps our existing configuration to the mcp-oauth library configuration
@@ -427,7 +446,9 @@ func NewHandler(config *Config) (*Handler, error) {
 
 	// Create server configuration
 	serverConfig := &oauthserver.Config{
-		Issuer:                        config.BaseURL,
+		Issuer: config.BaseURL,
+		// Tokens are bound to the MCP endpoint URL, see ResourceIdentifier.
+		ResourceIdentifier:            ResourceIdentifier(config.BaseURL),
 		RefreshTokenTTL:               int64(refreshTokenTTL.Seconds()),
 		AllowRefreshTokenRotation:     true,  // OAuth 2.1 best practice
 		RequirePKCE:                   true,  // OAuth 2.1 requirement

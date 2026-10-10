@@ -289,8 +289,11 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 
 	// ========== OAuth 2.1 Endpoints ==========
 
-	// Protected Resource Metadata endpoint (RFC 9728)
-	mux.HandleFunc("/.well-known/oauth-protected-resource", libHandler.ServeProtectedResourceMetadata)
+	// Protected Resource Metadata (RFC 9728) at the root well-known path and
+	// at the path-aware one of the MCP endpoint
+	// (/.well-known/oauth-protected-resource/mcp), both naming the MCP
+	// endpoint URL as the resource (see oauth.ResourceIdentifier).
+	libHandler.RegisterProtectedResourceMetadataRoutes(mux, oauth.MCPEndpointPath)
 
 	// Authorization Server Metadata endpoint (RFC 8414)
 	mux.HandleFunc("/.well-known/oauth-authorization-server", libHandler.ServeAuthorizationServerMetadata)
@@ -326,13 +329,13 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 		var httpServer http.Handler
 		if s.disableStreaming {
 			httpServer = mcpserver.NewStreamableHTTPServer(s.mcpServer,
-				mcpserver.WithEndpointPath("/mcp"),
+				mcpserver.WithEndpointPath(oauth.MCPEndpointPath),
 				mcpserver.WithDisableStreaming(true),
 				mcpserver.WithHTTPContextFunc(httpContextFunc),
 			)
 		} else {
 			httpServer = mcpserver.NewStreamableHTTPServer(s.mcpServer,
-				mcpserver.WithEndpointPath("/mcp"),
+				mcpserver.WithEndpointPath(oauth.MCPEndpointPath),
 				mcpserver.WithHTTPContextFunc(httpContextFunc),
 			)
 		}
@@ -364,7 +367,7 @@ func (s *OAuthHTTPServer) Start(addr string) error {
 			ssoHandler = oauth.WrapWithSSOAccessToken(mcpHandler, s.oauthHandler.GetStore(), s.logger)
 		}
 		validatedHandler := libHandler.ValidateToken(ssoHandler)
-		mux.Handle("/mcp", s.oauthInstrumentationWrapper(validatedHandler))
+		mux.Handle(oauth.MCPEndpointPath, s.oauthInstrumentationWrapper(validatedHandler))
 
 	default:
 		return fmt.Errorf("unsupported server type: %s", s.serverType)
