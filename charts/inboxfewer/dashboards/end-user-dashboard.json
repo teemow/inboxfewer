@@ -336,9 +336,10 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(1, sum by (service) (increase(google_api_operations_total{namespace=~\"$namespace\"}[24h])))",
+          "expr": "topk(1, sum by (service) (label_replace(increase(mcp_tool_invocations_total{namespace=~\"$namespace\"}[24h]), \"service\", \"$1\", \"tool\", \"([a-z]+)_.*\"))) or label_replace(vector(0), \"service\", \"No activity yet\", \"\", \"\")",
           "legendFormat": "{{service}}",
-          "refId": "A"
+          "refId": "A",
+          "instant": true
         }
       ],
       "title": "Most Used Service",
@@ -412,7 +413,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"gmail\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"gmail_.*\"}[24h])) or vector(0))",
           "legendFormat": "Gmail",
           "refId": "A"
         }
@@ -475,7 +476,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"calendar\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"calendar_.*\"}[24h])) or vector(0))",
           "legendFormat": "Calendar",
           "refId": "A"
         }
@@ -538,7 +539,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"drive\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"drive_.*\"}[24h])) or vector(0))",
           "legendFormat": "Drive",
           "refId": "A"
         }
@@ -601,7 +602,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"docs\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"docs_.*\"}[24h])) or vector(0))",
           "legendFormat": "Docs",
           "refId": "A"
         }
@@ -664,7 +665,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"meet\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"meet_.*\"}[24h])) or vector(0))",
           "legendFormat": "Meet",
           "refId": "A"
         }
@@ -727,7 +728,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(google_api_operations_total{namespace=~\"$namespace\", service=\"tasks\"}[24h]))",
+          "expr": "floor(sum(increase(mcp_tool_invocations_total{namespace=~\"$namespace\", tool=~\"tasks_.*\"}[24h])) or vector(0))",
           "legendFormat": "Tasks",
           "refId": "A"
         }
@@ -1033,7 +1034,8 @@
         }
       ],
       "title": "Action Completion Times",
-      "type": "barchart"
+      "type": "barchart",
+      "description": "Average tool execution time per MCP tool. Bars represent mean duration; higher values warrant investigation."
     },
     {
       "collapsed": false,
@@ -1597,7 +1599,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\"}[$__rate_interval]))",
+          "expr": "sum by (service) (label_replace(rate(mcp_tool_invocations_total{namespace=~\"$namespace\"}[$__rate_interval]), \"service\", \"$1\", \"tool\", \"([a-z]+)_.*\"))",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -1828,6 +1830,6 @@
   "timezone": "browser",
   "title": "Inboxfewer - End User Dashboard",
   "uid": "inboxfewer-enduser",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

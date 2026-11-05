@@ -407,7 +407,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (service) (rate(google_api_operations_total{namespace=~\"$namespace\", service=~\"$service\"}[$__rate_interval]))",
+          "expr": "sum by (service) (label_replace(rate(mcp_tool_invocations_total{namespace=~\"$namespace\"}[$__rate_interval]), \"service\", \"$1\", \"tool\", \"([a-z]+)_.*\"))",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -828,7 +828,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-09
+          "le": 1e-9
         },
         "legend": {
           "show": true
@@ -1087,7 +1087,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (service, operation) (rate(google_api_operations_total{namespace=~\"$namespace\", service=~\"$service\"}[$__rate_interval]))",
+          "expr": "sum by (service, operation) (rate(google_api_operations_total{namespace=~\"$namespace\", service=~\"$service\", service!=\"\"}[$__rate_interval]))",
           "legendFormat": "{{service}}/{{operation}}",
           "refId": "A"
         }
@@ -1935,7 +1935,8 @@
           }
         }
       ],
-      "type": "table"
+      "type": "table",
+      "description": "Audit logs with trace IDs for correlation with distributed tracing. Requires tracing to be enabled (TRACING_EXPORTER=otlp). Shows no data when tracing is not configured."
     }
   ],
   "refresh": "1m",
@@ -2071,6 +2072,6 @@
   "timezone": "browser",
   "title": "Inboxfewer - Security Operations Dashboard",
   "uid": "inboxfewer-security",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
