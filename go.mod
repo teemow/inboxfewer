@@ -3,7 +3,7 @@ module github.com/teemow/inboxfewer
 go 1.26.0
 
 require (
-	github.com/giantswarm/mcp-oauth v1.11.2
+	github.com/giantswarm/mcp-oauth v1.12.0
 	github.com/mark3labs/mcp-go v1.5.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/spf13/cobra v1.10.2
@@ -26,6 +26,7 @@ require (
 	cloud.google.com/go/auth v0.24.1-0.20261001053825-dbc26066f70a // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.3.1 // indirect
 	cloud.google.com/go/compute/metadata v0.10.0 // indirect
+	code.dny.dev/ssrf v0.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
