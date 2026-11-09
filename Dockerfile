@@ -28,8 +28,7 @@ FROM alpine:3.24@sha256:3f4d6b32e26703c6082839234f43769d5046b3ac7c910033911d1e71
 # Upgrade base packages to pick up security patches (CVE-2026-22184: zlib)
 # and install ca-certificates for HTTPS in a single layer
 RUN apk upgrade --no-cache && \
-    apk add --no-cache ca-certificates && \
-    apk info zlib | head -1 | grep -q '^zlib-1\.3\.[2-9]'
+    apk add --no-cache ca-certificates 'zlib>=1.3.2'
 
 # Create non-root user
 RUN addgroup -g 1000 inboxfewer && \
