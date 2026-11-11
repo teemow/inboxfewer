@@ -19,8 +19,8 @@ github.com/felixge/httpsnoop v1.1.0 h1:3YtUj32ZZkqZtt3sZZsClsymw/QDuVfpNhoA31zeO
 github.com/felixge/httpsnoop v1.1.0/go.mod h1:Zqxgdd+1Rkcz8euOqdr7lqgCRJztwr5hp9vDSi5UZCE=
 github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
-github.com/giantswarm/mcp-oauth v1.13.4 h1:fqgXkb5T3c0wB0Ah//UTs6300VYWMMBbOrncx/72shE=
-github.com/giantswarm/mcp-oauth v1.13.4/go.mod h1:98Hybf6gapHQIxKynQQEzS4mvzzdRQOXuw6QwgehikE=
+github.com/giantswarm/mcp-oauth v1.13.5 h1:y2H5tCx/ZYUGTmsTXCDQI3wsXV10wE/vCsqTtYRIS7I=
+github.com/giantswarm/mcp-oauth v1.13.5/go.mod h1:W9XQfCHNKVcXNnHY0uEZVl5k4K72bgMxmt9JdTaR7PM=
 github.com/go-jose/go-jose/v4 v4.1.9 h1:pKfeQkig1NmgK4hJrZYXLEYURXfoJB61Larw0uIW4gY=
 github.com/go-jose/go-jose/v4 v4.1.9/go.mod h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
