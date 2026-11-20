@@ -712,6 +712,12 @@ prometheusRule:
   # Additional annotations
   annotations: {}
 
+  # Labels added to every alert rule, e.g. the ones an Alertmanager routing or
+  # inhibition tree keys on. A rule's own `labels` override them.
+  additionalRuleLabels: {}
+    # component: inboxfewer
+    # layer: application
+
   # Individual alert rules configuration
   rules:
     # HTTP Error Rate: Alert when 5xx errors exceed threshold

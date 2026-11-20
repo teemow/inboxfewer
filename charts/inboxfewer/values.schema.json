@@ -1436,6 +1436,14 @@
           },
           "default": {}
         },
+        "additionalRuleLabels": {
+          "type": "object",
+          "description": "Labels added to every alert rule; a rule's own labels override them",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
         "rules": {
           "type": "object",
           "description": "Individual alert rules configuration",
