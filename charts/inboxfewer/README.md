@@ -267,6 +267,7 @@ Gateway API is the successor to Ingress in Kubernetes, providing more powerful a
 | `prometheusRule.namespace` | Namespace for PrometheusRule (defaults to release namespace) | `""` |
 | `prometheusRule.labels` | Labels for Prometheus discovery | `{}` |
 | `prometheusRule.annotations` | Additional annotations | `{}` |
+| `prometheusRule.additionalRuleLabels` | Labels added to every alert rule (a rule's own `labels` win) | `{}` |
 | `prometheusRule.rules.httpErrorRate.enabled` | Enable HTTP error rate alert | `true` |
 | `prometheusRule.rules.httpErrorRate.threshold` | Error percentage threshold | `5` |
 | `prometheusRule.rules.httpErrorRate.for` | Duration before firing | `5m` |

@@ -1,0 +1,67 @@
+suite: PrometheusRule Tests
+templates:
+  - templates/prometheusrule.yaml
+tests:
+  - it: should not render the PrometheusRule by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should label every rule with its severity and service only by default
+    set:
+      prometheusRule:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].labels
+          value:
+            severity: warning
+            service: inboxfewer
+      - lengthEqual:
+          path: spec.groups[0].rules
+          count: 6
+
+  - it: should add additionalRuleLabels to every rule
+    set:
+      prometheusRule:
+        enabled: true
+        additionalRuleLabels:
+          component: inboxfewer
+          layer: application
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].labels
+          value:
+            component: inboxfewer
+            layer: application
+            severity: warning
+            service: inboxfewer
+      - equal:
+          path: spec.groups[0].rules[5].labels.layer
+          value: application
+
+  - it: should let a rule's own labels override additionalRuleLabels but not its severity
+    set:
+      prometheusRule:
+        enabled: true
+        additionalRuleLabels:
+          layer: application
+          severity: info
+        rules:
+          podRestarts:
+            severity: critical
+            labels:
+              layer: infrastructure
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[3].labels
+          value:
+            layer: infrastructure
+            severity: critical
+            service: inboxfewer
+      - equal:
+          path: spec.groups[0].rules[0].labels
+          value:
+            layer: application
+            severity: warning
+            service: inboxfewer

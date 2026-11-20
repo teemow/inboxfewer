@@ -70,3 +70,13 @@ Image name with tag
 {{- end }}
 
 
+
+{{/*
+Labels of one alert rule: prometheusRule.additionalRuleLabels, then the
+rule's own labels, then its severity and service (later ones win).
+Usage: include "inboxfewer.alertRuleLabels" (dict "root" . "rule" .Values.prometheusRule.rules.<name>)
+*/}}
+{{- define "inboxfewer.alertRuleLabels" -}}
+{{- $labels := mergeOverwrite (dict) (.root.Values.prometheusRule.additionalRuleLabels | default dict) (.rule.labels | default dict) (dict "severity" .rule.severity "service" "inboxfewer") -}}
+{{- toYaml $labels }}
+{{- end }}

@@ -463,6 +463,24 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
+// Flush sends buffered data to the client, writing the header first as
+// net/http does. mcp-go streams (SSE responses, subscriptions/listen) only
+// when the writer it is handed implements http.Flusher; without this method
+// the wrapper hides it, every subscriptions/listen is answered with HTTP 500
+// and notifications sent during a request are dropped (#401).
+func (rw *responseWriter) Flush() {
+	if !rw.headerWritten {
+		rw.WriteHeader(rw.statusCode)
+	}
+	_ = http.NewResponseController(rw.ResponseWriter).Flush()
+}
+
+// Unwrap returns the underlying writer, so http.ResponseController reaches
+// its deadlines and flushing through this wrapper.
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
 // instrumentationMiddleware records HTTP request metrics for all requests
 func (s *OAuthHTTPServer) instrumentationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
