@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -68,7 +69,7 @@ func (p *TokenProvider) SetMetrics(metrics MetricsRecorder) {
 // GetToken retrieves a Google OAuth token for the given user ID.
 // This implements the server.TokenProvider interface.
 func (p *TokenProvider) GetToken(ctx context.Context, userID string) (*oauth2.Token, error) {
-	token, err := p.store.GetToken(ctx, userID)
+	token, err := p.lookup(ctx, userID)
 
 	// Record metrics if configured
 	if p.metrics != nil {
@@ -96,9 +97,35 @@ func (p *TokenProvider) GetTokenForAccount(ctx context.Context, account string) 
 func (p *TokenProvider) HasTokenForAccount(account string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	// Use store directly to avoid recording metrics for existence checks
-	_, err := p.store.GetToken(ctx, account)
+	// Look up directly to avoid recording metrics for existence checks
+	_, err := p.lookup(ctx, account)
 	return err == nil
+}
+
+// lookup returns the stored Google grant of a user, who is named by email
+// (the account the tools act for).
+//
+// mcp-oauth's unified provider-token layout (storage.UserProviderTokenStore,
+// the Valkey store's) files a login's grant once per user, in a shared entry
+// under the provider's user ID, and keeps no email-keyed copy: an email
+// resolves to it through the user info stored under the email. That entry is
+// the one mcp-oauth refreshes and a re-login replaces, so it comes first. An
+// email-keyed token is the legacy layout -- a login from before it, or an
+// SSO-forwarded token -- and is used when the user has no shared entry.
+func (p *TokenProvider) lookup(ctx context.Context, account string) (*oauth2.Token, error) {
+	if shared, ok := p.store.(storage.UserProviderTokenStore); ok {
+		info, err := p.store.GetUserInfo(ctx, account)
+		if err == nil && info != nil && info.ID != "" {
+			token, err := shared.GetUserProviderToken(ctx, info.ID)
+			if err == nil {
+				return token, nil
+			}
+			if !errors.Is(err, storage.ErrTokenNotFound) && !errors.Is(err, storage.ErrTokenExpired) {
+				return nil, err
+			}
+		}
+	}
+	return p.store.GetToken(ctx, account)
 }
 
 // SaveToken saves a Google OAuth token for the given user ID.
