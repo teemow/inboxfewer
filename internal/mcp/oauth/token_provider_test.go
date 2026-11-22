@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
+	"github.com/giantswarm/mcp-oauth/storage"
 	"github.com/giantswarm/mcp-oauth/storage/memory"
 
 	"github.com/teemow/inboxfewer/internal/instrumentation"
@@ -95,6 +96,67 @@ func TestTokenProvider_HasTokenForAccount(t *testing.T) {
 
 	// Now should return true
 	assert.True(t, provider.HasTokenForAccount(userID))
+}
+
+// saveUnifiedLogin stores a login the way mcp-oauth's unified provider-token
+// layout does (server.saveUserInfoAndToken): the user info under the
+// provider's user ID and under the email, the Google grant once, in the
+// user's shared entry under the ID, and no email-keyed token.
+func saveUnifiedLogin(t *testing.T, store *memory.Store, id, email string, token *oauth2.Token) {
+	t.Helper()
+	ctx := context.Background()
+	info := &storage.UserInfo{ID: id, Email: email}
+	require.NoError(t, store.SaveUserInfo(ctx, id, info))
+	require.NoError(t, store.SaveUserInfo(ctx, email, info))
+	require.NoError(t, store.SaveUserProviderToken(ctx, id, token))
+}
+
+func TestTokenProvider_UnifiedLayoutLogin(t *testing.T) {
+	store := memory.New()
+	defer store.Stop()
+	provider := NewTokenProvider(store)
+
+	grant := &oauth2.Token{AccessToken: "work-access", RefreshToken: "work-refresh", Expiry: time.Now().Add(time.Hour)}
+	saveUnifiedLogin(t, store, "1177", "person@work.example", grant)
+
+	got, err := provider.GetTokenForAccount(context.Background(), "person@work.example")
+	require.NoError(t, err)
+	assert.Equal(t, "work-refresh", got.RefreshToken)
+	assert.True(t, provider.HasTokenForAccount("person@work.example"))
+}
+
+func TestTokenProvider_UnifiedEntryWinsOverLegacyCopy(t *testing.T) {
+	store := memory.New()
+	defer store.Stop()
+	provider := NewTokenProvider(store)
+	ctx := context.Background()
+
+	// An email-keyed copy from before the unified layout, then a re-login.
+	stale := &oauth2.Token{AccessToken: "old-access", RefreshToken: "old-refresh", Expiry: time.Now().Add(time.Hour)}
+	require.NoError(t, store.SaveToken(ctx, "person@example.com", stale))
+	fresh := &oauth2.Token{AccessToken: "new-access", RefreshToken: "new-refresh", Expiry: time.Now().Add(time.Hour)}
+	saveUnifiedLogin(t, store, "4242", "person@example.com", fresh)
+
+	got, err := provider.GetTokenForAccount(ctx, "person@example.com")
+	require.NoError(t, err)
+	assert.Equal(t, "new-refresh", got.RefreshToken)
+}
+
+func TestTokenProvider_LegacyCopyWithoutUnifiedEntry(t *testing.T) {
+	store := memory.New()
+	defer store.Stop()
+	provider := NewTokenProvider(store)
+	ctx := context.Background()
+
+	// A user info from a login whose grant is only in the email-keyed copy
+	// (an SSO-forwarded token, a login before the unified layout).
+	require.NoError(t, store.SaveUserInfo(ctx, "person@example.com", &storage.UserInfo{ID: "77", Email: "person@example.com"}))
+	legacy := &oauth2.Token{AccessToken: "legacy-access", RefreshToken: "legacy-refresh", Expiry: time.Now().Add(time.Hour)}
+	require.NoError(t, store.SaveToken(ctx, "person@example.com", legacy))
+
+	got, err := provider.GetTokenForAccount(ctx, "person@example.com")
+	require.NoError(t, err)
+	assert.Equal(t, "legacy-refresh", got.RefreshToken)
 }
 
 func TestGetUserFromContext(t *testing.T) {
