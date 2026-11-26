@@ -3,7 +3,7 @@ module github.com/teemow/inboxfewer
 go 1.26.0
 
 require (
-	github.com/giantswarm/mcp-oauth v1.13.10
+	github.com/giantswarm/mcp-oauth v1.24.0
 	github.com/mark3labs/mcp-go v1.6.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/spf13/cobra v1.10.2
@@ -49,14 +49,14 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/valkey-io/valkey-go v1.0.79 // indirect
+	github.com/valkey-io/valkey-go v1.0.80 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.47.0 // indirect
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/net v0.63.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
